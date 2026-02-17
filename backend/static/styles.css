@@ -1,0 +1,59 @@
+
+body {
+    /* "Inter" is the primary font, falling back to system sans-serifs */
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased; /* Makes fonts look crisper on Mac */
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* For a "classier" header look */
+.header h1 {
+    font-family: 'Inter', sans-serif;
+    letter-spacing: -0.02em; /* Tighter spacing for a modern look */
+    font-weight: 700;
+    font-size: 3rem;
+    color: var(--primary-color);
+    margin-bottom: var(--spacing-xs);
+}
+
+.btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    
+    /* Increase these two for size */
+    padding: 0.8rem 1.5rem;   /* Top/Bottom , Left/Right */
+    font-size: 1.1rem;       /* Larger text */
+    
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    border: none;
+    width: 100%;             /* Optional: makes buttons fill their container */
+    max-width: 300px;        /* Keeps them from getting TOO wide */
+}
+
+/* Adjusting the icons inside buttons */
+.btn-icon {
+    margin-right: 0.75rem;
+    font-size: 1.3rem;
+}
+
+#audioPlayerContainer {
+    margin: var(--spacing-md) 0;
+    padding: var(--spacing-md);
+    background: #f1f5f9; /* A light grey-blue to stand out from the card */
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+}
+
+#audioPlayer {
+    width: 100%;
+    height: 40px; /* Modern browser audio players look better with a defined height */
+    margin-bottom: var(--spacing-sm);
+}

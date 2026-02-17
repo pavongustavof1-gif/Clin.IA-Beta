@@ -1,0 +1,165 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ClinIA Medical Note Schema",
+  "description": "SOAP-compliant medical note structure for Spanish language consultations",
+  "type": "object",
+  "properties": {
+    "informacion_paciente": {
+      "type": "object",
+      "properties": {
+        "nombre_del_paciente": {
+          "type": "string",
+          "description": "Full name of the patient"
+        },
+        "fecha_de_nacimiento": {
+          "type": "string",
+          "description": "Patient's date of birth (DD/MM/YYYY format preferred)"
+        },
+        "edad": {
+          "type": "string",
+          "description": "Patient's age"
+        },
+        "genero": {
+          "type": "string",
+          "description": "Patient's gender"
+        },
+        "numero_de_expediente": {
+          "type": "string",
+          "description": "Medical record number if mentioned"
+        }
+      }
+    },
+    "subjetivo": {
+      "type": "object",
+      "description": "Subjective section - patient's complaints and symptoms",
+      "properties": {
+        "motivo_de_consulta": {
+          "type": "string",
+          "description": "Chief complaint - reason for visit"
+        },
+        "sintomas": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of symptoms described by patient"
+        },
+        "historia_de_enfermedad_actual": {
+          "type": "string",
+          "description": "History of present illness"
+        },
+        "duracion_sintomas": {
+          "type": "string",
+          "description": "How long symptoms have been present"
+        }
+      }
+    },
+    "objetivo": {
+      "type": "object",
+      "description": "Objective section - physical examination findings",
+      "properties": {
+        "signos_vitales": {
+          "type": "object",
+          "properties": {
+            "presion_arterial": {"type": "string"},
+            "frecuencia_cardiaca": {"type": "string"},
+            "temperatura": {"type": "string"},
+            "frecuencia_respiratoria": {"type": "string"},
+            "saturacion_oxigeno": {"type": "string"}
+          }
+        },
+        "examen_fisico": {
+          "type": "string",
+          "description": "Physical examination findings"
+        },
+        "hallazgos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Notable findings from examination"
+        }
+      }
+    },
+    "evaluacion": {
+      "type": "object",
+      "description": "Assessment section - diagnosis",
+      "properties": {
+        "diagnostico": {
+          "type": "string",
+          "description": "Primary diagnosis"
+        },
+        "diagnosticos_adicionales": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Additional or differential diagnoses"
+        },
+        "impresion_clinica": {
+          "type": "string",
+          "description": "Clinical impression"
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "description": "Plan section - treatment and follow-up",
+      "properties": {
+        "tratamiento": {
+          "type": "string",
+          "description": "Treatment plan"
+        },
+        "medicamentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nombre": {"type": "string"},
+              "dosis": {"type": "string"},
+              "frecuencia": {"type": "string"},
+              "duracion": {"type": "string"}
+            }
+          },
+          "description": "Prescribed medications"
+        },
+        "recomendaciones": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Medical recommendations and instructions"
+        },
+        "estudios_solicitados": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Requested tests or studies"
+        },
+        "seguimiento": {
+          "type": "string",
+          "description": "Follow-up instructions"
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "fecha_consulta": {
+          "type": "string",
+          "description": "Date of consultation"
+        },
+        "medico": {
+          "type": "string",
+          "description": "Attending physician name"
+        },
+        "duracion_consulta": {
+          "type": "string",
+          "description": "Duration of consultation"
+        }
+      }
+    }
+  },
+  "required": ["informacion_paciente"]
+}

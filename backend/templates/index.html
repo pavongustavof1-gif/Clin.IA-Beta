@@ -1,0 +1,174 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClinIA - Asistente de Notas Médicas</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1>🏥 Clin.IA</h1>
+            <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
+            <div class="version-badge">Alpha v0.1</div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            
+            <!-- Recording Section -->
+            <section class="card recording-section">
+                <h2>📝 Grabar Consulta</h2>
+                
+                <!-- Recording Controls -->
+                <div class="recording-controls">
+                    <button id="recordBtn" class="btn btn-primary">
+                        <span class="btn-icon">🎤</span>
+                        Iniciar Grabación
+                    </button>
+                    
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <span class="btn-icon">⏹️</span>
+                        Detener
+                    </button>
+                    
+                    <button id="uploadBtn" class="btn btn-secondary">
+                        <span class="btn-icon">📁</span>
+                        Cargar Audio
+                    </button>
+                    
+                    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+                </div>
+                
+                <!-- Recording Status -->
+                <div id="recordingStatus" class="status-message" style="display: none;">
+                    <div class="recording-indicator">
+                        <span class="pulse-dot"></span>
+                        <span id="recordingTime">00:00</span>
+                    </div>
+                    <p class="warning-text">Máximo 5 minutos para versión Alpha</p>
+                </div>
+                
+                <!-- Audio Player -->
+                <div id="audioPlayerContainer"> 
+                    <audio id="audioPlayer" controls></audio>
+                    <div class="audio-info">
+                        <span id="audioFileName"></span>
+                        <span id="audioDuration"></span>
+                    </div>
+                </div>
+                
+                <!-- Process Button -->
+                <button id="processBtn" class="btn btn-success btn-large" disabled>
+                    <span class="btn-icon">⚡</span>
+                    Procesar y Generar Nota
+                </button>
+            </section>
+            
+            <!-- Options Section -->
+            <section class="card options-section">
+                <h3>⚙️ Opciones</h3>
+                <div class="options-grid">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="printRawTranscript" checked>
+                        <span>Mostrar transcripción completa</span>
+                    </label>
+                    
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="createGoogleDoc" checked>
+                        <span>Crear documento en Google Docs</span>
+                    </label>
+                </div>
+            </section>
+            
+            <!-- Progress Section -->
+            <section id="progressSection" class="card progress-section" style="display: none;">
+                <h3>⏳ Procesando...</h3>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill"></div>
+                </div>
+                <p id="progressText" class="progress-text">Iniciando...</p>
+                
+                <div class="progress-steps">
+                    <div class="step" id="step1">
+                        <span class="step-number">1</span>
+                        <span class="step-label">Transcribiendo audio</span>
+                    </div>
+                    <div class="step" id="step2">
+                        <span class="step-number">2</span>
+                        <span class="step-label">Extrayendo información</span>
+                    </div>
+                    <div class="step" id="step3">
+                        <span class="step-number">3</span>
+                        <span class="step-label">Generando documento</span>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Results Section -->
+            <section id="resultsSection" class="card results-section" style="display: none;">
+                <h3>✅ Resultados</h3>
+                
+                <!-- Document Link -->
+                <div id="documentLink" class="result-card" style="display: none;">
+                    <h4>📄 Documento Generado</h4>
+                    <a id="docLink" href="#" target="_blank" class="doc-link">
+                        Abrir en Google Docs →
+                    </a>
+                </div>
+                
+                <!-- Transcript -->
+                <div id="transcriptResult" class="result-card">
+                    <h4>📝 Transcripción</h4>
+                    <div class="transcript-meta">
+                        <span id="transcriptConfidence"></span>
+                        <span id="transcriptDuration"></span>
+                        <span id="transcriptWords"></span>
+                    </div>
+                    <div id="transcriptText" class="transcript-text"></div>
+                </div>
+                
+                <!-- Structured Data -->
+                <div id="structuredDataResult" class="result-card">
+                    <h4>🔍 Datos Estructurados (SOAP)</h4>
+                    <div class="tabs">
+                        <button class="tab-btn active" data-tab="formatted">Vista Formateada</button>
+                        <button class="tab-btn" data-tab="json">JSON</button>
+                    </div>
+                    
+                    <div id="formattedView" class="tab-content active">
+                        <div id="formattedData"></div>
+                    </div>
+                    
+                    <div id="jsonView" class="tab-content">
+                        <pre id="jsonData"></pre>
+                    </div>
+                    
+                    <button id="downloadJsonBtn" class="btn btn-secondary btn-small">
+                        💾 Descargar JSON
+                    </button>
+                </div>
+            </section>
+            
+            <!-- Error Section -->
+            <section id="errorSection" class="card error-section" style="display: none;">
+                <h3>❌ Error</h3>
+                <p id="errorMessage" class="error-message"></p>
+                <button id="retryBtn" class="btn btn-secondary">Reintentar</button>
+            </section>
+            
+        </main>
+        
+        <!-- Footer -->
+        <footer class="footer">
+            <p>ClinIA Alpha v0.1 - Solo para usuarios de prueba</p>
+            <p class="disclaimer">⚠️ No usar con datos reales de pacientes en versión Alpha</p>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>
