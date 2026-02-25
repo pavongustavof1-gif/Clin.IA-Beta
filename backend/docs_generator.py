@@ -1,4 +1,5 @@
 # backend/docs_generator.py
+# latest changes: add tratamiento: line 180
 import os
 import json
 from typing import Dict, List
@@ -175,6 +176,13 @@ class GoogleDocsGenerator:
                     add_text(content, bold=False)
                 else:
                     add_text(f" • {m}", bold=False)
+
+#add "tratamiento"
+
+        add_text("Tratamiento: ", bold=True)
+        add_text(plan.get('tratamiento', ''), bold=False)
+
+# end adding        
         
         add_text("Recomendaciones:", bold=True)
         for r in plan.get('recomendaciones', []):
