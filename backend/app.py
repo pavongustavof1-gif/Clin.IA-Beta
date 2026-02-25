@@ -1,4 +1,5 @@
 # backend/app.py
+# fixed potential problem per Gemini
 from flask import Flask, request, jsonify, send_from_directory, render_template
 from flask_cors import CORS
 from config import Config
@@ -37,7 +38,7 @@ except ValueError as e:
 # Initialize services
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
-docs_generator = GoogleDocsGenerator()
+# docs_generator = GoogleDocsGenerator()  Gemini says no good
 
 # Temporary storage for Alpha version (in production, use database)
 session_storage = {}
@@ -81,6 +82,7 @@ def process_audio():
     Expected: multipart/form-data with 'audio' file
     Returns: Complete medical note with Google Docs link
     """
+    docs_generator = GoogleDocsGenerator()  # Pasted here according to Gemini
     try:
         # Step 1: Validate request
         if 'audio' not in request.files:
