@@ -1,4 +1,5 @@
 # backend/transcription.py
+# Added custom spelling section line 37
 import assemblyai as aai
 from config import Config
 import time
@@ -32,6 +33,13 @@ class TranscriptionService:
             punctuate=True,
             format_text=True,
             speaker_labels=True  # Identify doctor vs patient (helpful for SOAP)
+        )
+
+# Configure custom spelling
+        config.set_custom_spelling(
+          {
+            "esguince": ["esquinza"],
+          }
         )
         
         try:
