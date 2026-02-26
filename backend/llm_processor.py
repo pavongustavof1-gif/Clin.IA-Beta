@@ -16,7 +16,8 @@ class LLMProcessor:
         self.model = genai.GenerativeModel('gemini-flash-latest')
         
         # Load JSON schema
-        with open('/Users/gustavo/clinia-alpha/credentials.json', 'r', encoding='utf-8') as f:
+        # Look for the file in the current folder, wherever that may be
+        with open('credentials.json', 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
     def create_extraction_prompt(self, transcript: str) -> str:
