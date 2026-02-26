@@ -12,6 +12,16 @@ import json
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
+# --- THE TELEPORTER ---
+# This checks if we are in the cloud. If so, it creates the secret file from a variable.
+if os.environ.get("RENDER"):
+    # Create client_secrets.json
+    if "GOOGLE_SECRETS_JSON" in os.environ:
+        with open("client_secrets.json", "w") as f:
+            f.write(os.environ["GOOGLE_SECRETS_JSON"])
+# ----------------------
+
+
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
