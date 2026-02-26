@@ -22,6 +22,9 @@ class GoogleDocsGenerator:
     def __init__(self, owner_email: str = None):
         self.owner_email = owner_email or os.getenv('GOOGLE_DOCS_OWNER_EMAIL')
         SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
+
+
+        print("[STARTUP] Initializing Google Docs Service...") # <--   Test only
         
         creds = None
 
