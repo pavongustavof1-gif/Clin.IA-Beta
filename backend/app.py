@@ -14,11 +14,25 @@ from werkzeug.utils import secure_filename
 
 # --- THE TELEPORTER ---
 # This checks if we are in the cloud. If so, it creates the secret file from a variable.
-if os.environ.get("RENDER"):
-    # Create client_secrets.json
-    if "GOOGLE_SECRETS_JSON" in os.environ:
-        with open("client_secrets.json", "w") as f:
-            f.write(os.environ["GOOGLE_SECRETS_JSON"])
+# This recreates the physical JSON files from Render Environment Variables
+def teleport_secrets():
+    if os.environ.get("RENDER"):
+        print("[Teleporter] Running in Cloud mode...")
+        
+        # 1. Teleport the Client Secrets (OAuth Web)
+        if "GOOGLE_SECRETS_JSON" in os.environ:
+            with open("client_secrets.json", "w") as f:
+                f.write(os.environ["GOOGLE_SECRETS_JSON"])
+            print("[Teleporter] client_secrets.json created.")
+
+        # 2. Teleport the Service Account (if you use it)
+        if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
+            with open("credentials.json", "w") as f:
+                f.write(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+            print("[Teleporter] credentials.json created.")
+
+# Run the teleporter immediately
+teleport_secrets()
 # ----------------------
 
 
@@ -27,10 +41,23 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 
-# Enable CORS for frontend
+# Enable CORS for frontend  <-- replaced below
+# CORS(app, resources={
+#     r"/api/*": {
+#         "origins": ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:5000"],
+#         "methods": ["GET", "POST", "OPTIONS"],
+#         "allow_headers": ["Content-Type"]
+#     }
+# })
+
+# Enable CORS for both local testing and your new Render URL
 CORS(app, resources={
     r"/api/*": {
-        "origins": ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:5000"],
+        "origins": [
+            "http://localhost:3000", 
+            "http://localhost:5000", 
+            "https://clinia-beta.onrender.com"  # <--- Add your actual Render URL here
+        ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
     }
@@ -370,23 +397,35 @@ def internal_server_error(error):
         'details': str(error)
     }), 500
 
+# remove per Gemini
+# if __name__ == '__main__':
+#     print("\n" + "="*80)
+#     print("ClinIA Alpha - Medical Note Taker")
+#     print("="*80)
+#     print("Starting Flask server...")
+#     print("Frontend will be available at: http://localhost:5000")
+#     print("API endpoints:")
+#     print("  - POST /api/process-audio      (Full pipeline)")
+#     print("  - POST /api/transcribe-only    (Transcription only)"
+#     print("  - POST /api/process-transcript (LLM processing only)")
+#     print("  - GET  /api/health             (Health check)")
+#     print("="*80 + "\n")
 
 if __name__ == '__main__':
+    # This block only runs when you run 'python app.py' on your computer.
+    # It does NOT run on Render.
     print("\n" + "="*80)
-    print("ClinIA Alpha - Medical Note Taker")
+    print("ClinIA Beta - Medical Note Taker (Local Mode)")
     print("="*80)
-    print("Starting Flask server...")
-    print("Frontend will be available at: http://localhost:5000")
-    print("API endpoints:")
-    print("  - POST /api/process-audio      (Full pipeline)")
-    print("  - POST /api/transcribe-only    (Transcription only)")
-    print("  - POST /api/process-transcript (LLM processing only)")
-    print("  - GET  /api/health             (Health check)")
-    print("="*80 + "\n")
+    
+    # We use port 5000 locally, but Render will assign its own port via environment variables
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host='0.0.0.0', port=port, debug=True)
+
     
     # Run Flask development server
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=True
+#     app.run(
+#         host='0.0.0.0',
+#         port=5000,
+#         debug=True
     )
