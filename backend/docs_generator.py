@@ -51,11 +51,18 @@ class GoogleDocsGenerator:
 
         # FALLBACK: If NO creds exist (Only works on your local computer)
         if not creds:
-            print("[GoogleDocs] No valid credentials found. Starting login flow...")
-            # This line will fail on Render (correctly), but work on your laptop
-            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
-            creds = flow.run_local_server(port=0)
+ #            print("[GoogleDocs] No valid credentials found. Starting login flow...")
+ #            # This line will fail on Render (correctly), but work on your laptop
+ #            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
+ #            creds = flow.run_local_server(port=0)
             # Save it locally for next time
+            if os.getenv('RENDER'):
+                # In the cloud, we can't open a browser. We must fail fast.
+                raise Exception("Critical: No Google Credentials found in Environment Variables!")
+            
+            print("[GoogleDocs] No valid credentials found locally. Starting login flow...")
+            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
+            creds = flow.run_local_server(port=0) 
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
 
