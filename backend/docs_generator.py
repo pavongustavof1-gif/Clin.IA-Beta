@@ -1,5 +1,6 @@
 # backend/docs_generator.py
 # latest changes: add tratamiento: line 180
+# modify flow; add teleporter
 import os
 import json
 from typing import Dict, List
@@ -8,6 +9,27 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
+# --- THE TELEPORTER ---
+# This recreates the physical JSON files from Render Environment Variables
+def teleport_secrets():
+    if os.environ.get("RENDER"):
+        print("[Teleporter] Running in Cloud mode...")
+        
+        # 1. Teleport the Client Secrets (OAuth Web)
+        if "GOOGLE_SECRETS_JSON" in os.environ:
+            with open("client_secrets.json", "w") as f:
+                f.write(os.environ["GOOGLE_SECRETS_JSON"])
+            print("[Teleporter] client_secrets.json created.")
+
+        # 2. Teleport the Service Account (if you use it)
+        if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
+            with open("credentials.json", "w") as f:
+                f.write(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
+            print("[Teleporter] credentials.json created.")
+
+# Run the teleporter immediately
+teleport_secrets()
 
 # ID of your template (Must be a native Google Doc)
 TEMPLATE_ID = '1XVXnvw6JiAg1If3BUJtaAIrLdcpujAlovHVPyuUny1A'
@@ -27,7 +49,12 @@ class GoogleDocsGenerator:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
-                flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
+#                flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)  <-- Gemini
+                flow = Flow.from_client_secrets_file(
+                    'client_secrets.json', 
+                    scopes=SCOPES,
+                    redirect_uri='https://your-app-name.onrender.com/callback'
+                )
                 creds = flow.run_local_server(port=0)
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
