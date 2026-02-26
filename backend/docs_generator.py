@@ -11,57 +11,53 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
 # --- THE TELEPORTER ---
-# This recreates the physical JSON files from Render Environment Variables
-def teleport_secrets():
-    if os.environ.get("RENDER"):
-        print("[Teleporter] Running in Cloud mode...")
-        
-        # 1. Teleport the Client Secrets (OAuth Web)
-        if "GOOGLE_SECRETS_JSON" in os.environ:
-            with open("client_secrets.json", "w") as f:
-                f.write(os.environ["GOOGLE_SECRETS_JSON"])
-            print("[Teleporter] client_secrets.json created.")
 
-        # 2. Teleport the Service Account (if you use it)
-        if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
-            with open("credentials.json", "w") as f:
-                f.write(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-            print("[Teleporter] credentials.json created.")
 
-# Run the teleporter immediately
-teleport_secrets()
 
 # ID of your template (Must be a native Google Doc)
 TEMPLATE_ID = '1XVXnvw6JiAg1If3BUJtaAIrLdcpujAlovHVPyuUny1A'
 
 class GoogleDocsGenerator:
     """Generates Medical Notes with strict bolding control and range validation."""
-    
     def __init__(self, owner_email: str = None):
         self.owner_email = owner_email or os.getenv('GOOGLE_DOCS_OWNER_EMAIL')
         SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
         
         creds = None
-        if os.path.exists('token.json'):
+
+        # PRIORITY 1: Check Render Environment Variable (The Cloud Way)
+        token_env = os.environ.get('GOOGLE_TOKEN_JSON')
+        if token_env:
+            try:
+                # Load the token directly from the string variable
+                token_info = json.loads(token_env)
+                creds = Credentials.from_authorized_user_info(token_info, SCOPES)
+                print("[GoogleDocs] Using token from Environment Variable.")
+            except Exception as e:
+                print(f"[GoogleDocs] Error loading token from env: {e}")
+
+        # PRIORITY 2: Check for local file (Your Laptop Alpha Way)
+        if not creds and os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-            
-        if not creds or not creds.valid:
-            if creds and creds.expired and creds.refresh_token:
-                creds.refresh(Request())
-            else:
-#                flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)  <-- Gemini
-                flow = Flow.from_client_secrets_file(
-                    'client_secrets.json', 
-                    scopes=SCOPES,
-                    redirect_uri='https://your-app-name.onrender.com/callback'
-                )
-                creds = flow.run_local_server(port=0)
+            print("[GoogleDocs] Using local token.json file.")
+
+        # REFRESH logic: If the token is old, try to refresh it automatically
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+            print("[GoogleDocs] Token refreshed.")
+
+        # FALLBACK: If NO creds exist (Only works on your local computer)
+        if not creds:
+            print("[GoogleDocs] No valid credentials found. Starting login flow...")
+            # This line will fail on Render (correctly), but work on your laptop
+            flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
+            creds = flow.run_local_server(port=0)
+            # Save it locally for next time
             with open('token.json', 'w') as token:
                 token.write(creds.to_json())
 
         self.docs_service = build('docs', 'v1', credentials=creds)
         self.drive_service = build('drive', 'v3', credentials=creds)
-        print("[GoogleDocs] Service initialized.")
 
     def create_medical_note(self, structured_data: Dict, title: str = None) -> Dict:
         """Copies the template and applies the SOAP summary with selective bolding."""
