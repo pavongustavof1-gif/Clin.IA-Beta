@@ -32,7 +32,9 @@ def teleport_secrets():
             print("[Teleporter] credentials.json created.")
 
 # Run the teleporter immediately
+print("[STARTUP] Teleporter starting...") # <--  Test only
 teleport_secrets()
+print("[STARTUP] Teleporter finished.")   # <--  Test only
 # ----------------------
 
 
