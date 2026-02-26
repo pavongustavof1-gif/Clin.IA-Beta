@@ -56,7 +56,7 @@ CORS(app, resources={
         "origins": [
             "http://localhost:3000", 
             "http://localhost:5000", 
-            "https://clinia-beta.onrender.com"  # <--- Add your actual Render URL here
+            "https://clin-ia-beta.onrender.com"  # <--- Add your actual Render URL here
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
