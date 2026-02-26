@@ -5,7 +5,7 @@ from flask_cors import CORS
 from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
-from docs_generator import GoogleDocsGenerator
+#  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
 import json
@@ -38,7 +38,7 @@ except ValueError as e:
 # Initialize services
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
-# docs_generator = GoogleDocsGenerator()  Gemini says no good
+# docs_generator = GoogleDocsGenerator() <-- Gemini says no good
 
 # Temporary storage for Alpha version (in production, use database)
 session_storage = {}
@@ -82,7 +82,7 @@ def process_audio():
     Expected: multipart/form-data with 'audio' file
     Returns: Complete medical note with Google Docs link
     """
-    docs_generator = GoogleDocsGenerator()  # Pasted here according to Gemini
+    docs_generator = GoogleDocsGenerator()  # <--  Pasted here according to Gemini
     try:
         # Step 1: Validate request
         if 'audio' not in request.files:
