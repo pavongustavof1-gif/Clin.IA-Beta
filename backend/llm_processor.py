@@ -3,6 +3,7 @@
 import google.generativeai as genai
 from config import Config
 import json
+import os
 from typing import Dict, Optional
 
 class LLMProcessor:
