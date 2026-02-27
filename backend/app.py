@@ -85,14 +85,7 @@ session_storage = {}
 
 @app.route('/')
 def index():
-    """Serve the frontend"""
-    return send_from_directory('../frontend', 'index.html')
-
-# Aqui V
-@app.route('/')
-def home():
-    return render_template('index.html') 
-# Aqui ^
+    return send_from_directory('static', 'index.html')
 
 # Sospechoso V
 
