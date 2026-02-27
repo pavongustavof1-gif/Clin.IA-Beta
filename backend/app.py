@@ -85,15 +85,7 @@ session_storage = {}
 
 @app.route('/')
 def index():
-    return send_from_directory('static', 'index.html')
-
-# Sospechoso V
-
-@app.route('/<path:path>')
-def serve_static(path):
-    """Serve static files"""
-    return send_from_directory('../frontend', path)
-
+    return render_template('index.html')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -104,7 +96,6 @@ def health_check():
         'version': '0.1.0',
         'timestamp': datetime.now().isoformat()
     })
-# sospechoso ^
 
 @app.route('/api/process-audio', methods=['POST'])
 def process_audio():
