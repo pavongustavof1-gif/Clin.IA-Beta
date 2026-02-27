@@ -15,7 +15,13 @@ class Config:
 #    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
     # Google Docs
-    GOOGLE_CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), 'credentials.json')
+#    GOOGLE_CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), 'credentials.json')
+
+    # Try to load from an environment variable first, then fallback to a file
+    GOOGLE_CREDS_JSON = os.getenv('GOOGLE_CREDENTIALS_JSON') 
+    
+    # If you must keep a file path, make it flexible:
+    GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
     
     # Flask
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
