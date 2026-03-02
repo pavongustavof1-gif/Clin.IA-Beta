@@ -109,6 +109,7 @@ REGLAS IMPORTANTES:
 - Asegúrate de que el JSON sea válido y pueda ser parseado
 - Usa comillas dobles para strings, no comillas simples
 - Mantén los acentos y caracteres especiales del español
+- IMPORTANTE: Si incluyes comillas dentro de un texto (ej. apodos o citas), DEBES escaparlas con barra diagonal inversa (ej. \"así\") para no romper el formato JSON.
 
 Ahora extrae la información de la transcripción y genera el JSON:"""
         
@@ -139,6 +140,7 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                         top_p=0.95,
                         top_k=40,
                         max_output_tokens=2048,
+                        response_mime_type="application/json",
                     )
                 )
                 
@@ -201,7 +203,10 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         if first_brace != -1 and last_brace != -1:
             response = response[first_brace:last_brace + 1]
-        
+        else:
+            # If no braces found, return the original or an empty object
+            return "{}"
+            
         return response
     
     def validate_against_schema(self, data: Dict) -> tuple[bool, Optional[str]]:
