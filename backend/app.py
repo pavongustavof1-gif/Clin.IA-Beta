@@ -5,6 +5,7 @@ from flask_cors import CORS
 from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
+from docs_generator import GoogleDocsGenerator
 #  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
