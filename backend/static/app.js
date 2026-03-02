@@ -1,4 +1,4 @@
-﻿f// frontend/app.js
+﻿// frontend/app.js
 
 // Global state
 const state = {
@@ -658,5 +658,6 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
 
 
