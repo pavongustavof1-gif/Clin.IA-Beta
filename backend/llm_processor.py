@@ -103,13 +103,13 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
 }}
 
 REGLAS IMPORTANTES:
+- IMPORTANTE: Si necesitas citar al paciente o usar comillas dentro de un texto, usa SOLO comillas simples ('ejemplo'). NUNCA uses comillas dobles dentro de un valor de texto, ya que esto destruye el formato JSON.
 - Responde SOLO con el JSON, sin texto adicional antes o después
 - No incluyas ```json ni ningún otro formato de código
 - Si un campo no tiene información, omítelo del JSON
 - Asegúrate de que el JSON sea válido y pueda ser parseado
 - Usa comillas dobles para strings, no comillas simples
 - Mantén los acentos y caracteres especiales del español
-- IMPORTANTE: Si incluyes comillas dentro de un texto (ej. apodos o citas), DEBES escaparlas con barra diagonal inversa (ej. \"así\") para no romper el formato JSON.
 
 Ahora extrae la información de la transcripción y genera el JSON:"""
         
@@ -140,7 +140,6 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                         top_p=0.95,
                         top_k=40,
                         max_output_tokens=2048,
-                        response_mime_type="application/json",
                     )
                 )
                 
