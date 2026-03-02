@@ -1,4 +1,4 @@
-﻿// frontend/app.js
+﻿f// frontend/app.js
 
 // Global state
 const state = {
@@ -13,8 +13,7 @@ const state = {
 };
 
 // API Configuration
-const API_BASE_URL = window.location.origin;
-
+const API_BASE_URL = window.location.origin.replace(/\/$/, '');
 // DOM Elements
 const elements = {
     recordBtn: document.getElementById('recordBtn'),
@@ -659,4 +658,5 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
+
 
