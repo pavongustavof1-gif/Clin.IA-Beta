@@ -4,6 +4,7 @@ import google.generativeai as genai
 from config import Config
 import json
 import os
+import time
 from typing import Dict, Optional
 
 class LLMProcessor:
@@ -108,7 +109,8 @@ REGLAS IMPORTANTES:
 - No incluyas ```json ni ningún otro formato de código
 - Si un campo no tiene información, omítelo del JSON
 - Asegúrate de que el JSON sea válido y pueda ser parseado
-- Usa comillas dobles para strings, no comillas simples
+# - Usa comillas dobles para strings, no comillas simples
+- Usa comillas dobles estrictamente para las llaves y estructura general del JSON.
 - Mantén los acentos y caracteres especiales del español
 
 Ahora extrae la información de la transcripción y genera el JSON:"""
@@ -172,6 +174,10 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                     }
                 # Add instruction to be more careful with JSON format
                 prompt += "\n\nNOTA: El JSON anterior no era válido. Asegúrate de generar JSON perfectamente válido esta vez."
+
+                # ADD THESE TWO LINES TO PREVENT RATE LIMITING
+                print("[LLM] Waiting 2 seconds before retrying...")
+                time.sleep(2)
                 
             except Exception as e:
                 print(f"[LLM] Unexpected error: {str(e)}")
