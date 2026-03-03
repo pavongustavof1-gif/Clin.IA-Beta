@@ -142,7 +142,7 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                         top_p=0.95,
                         top_k=40,
                         max_output_tokens=2048,
-                    )
+                    ),
                     request_options={"timeout": 60} # <-- ADD THIS: Gives Google 60 seconds to reply
                 )
                 
