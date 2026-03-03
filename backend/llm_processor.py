@@ -15,7 +15,7 @@ class LLMProcessor:
         genai.configure(api_key=Config.GEMINI_API_KEY)
         
         # Use Gemini flash-latest for fast, cost-effective processing
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel('gemini-flash-latest')
         
         # Load JSON schema
         # Look for the file in the current folder, wherever that may be
