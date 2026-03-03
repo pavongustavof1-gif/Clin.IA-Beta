@@ -1,6 +1,8 @@
 # backend/llm_processor.py
 # added logic to prompt, line 41
-import google.generativeai as genai
+# import google.generativeai as genai
+from google import genai
+from google.genai import types # For configuration
 from config import Config
 import json
 import os
@@ -15,7 +17,10 @@ class LLMProcessor:
         genai.configure(api_key=Config.GEMINI_API_KEY)
         
         # Use Gemini flash-latest for fast, cost-effective processing
-        self.model = genai.GenerativeModel('gemini-3-flash')
+        # self.model = genai.GenerativeModel('gemini-3-flash')
+
+        self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
+        self.model_id = 'gemini-2.0-flash'
         
         # Load JSON schema
         # Look for the file in the current folder, wherever that may be
@@ -117,86 +122,36 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-    def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict:
-        """
-        Extract structured medical data from transcript using Gemini
-        
-        Args:
-            transcript: Raw transcript text
-            max_retries: Number of retry attempts if JSON parsing fails
-        
-        Returns:
-            Structured dictionary matching schema
-        """
-        print("[LLM] Processing transcript with Gemini Flash...")
-        
+def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict:
+        print(f"[LLM] Processing with {self.model_id}...")
         prompt = self.create_extraction_prompt(transcript)
         
         for attempt in range(max_retries):
             try:
-                # Generate response
-                response = self.model.generate_content(
-                    prompt,
-                    generation_config=genai.GenerationConfig(
-                        temperature=0.1,  # Low temperature for consistency
-                        top_p=0.95,
-                        top_k=40,
-                        max_output_tokens=2048,
-                    ),
-                    request_options={"timeout": 60} # <-- ADD THIS: Gives Google 60 seconds to reply
+                # NEW: The modern, paid-tier way to call Gemini
+                response = self.client.models.generate_content(
+                    model=self.model_id,
+                    contents=prompt,
+                    config=types.GenerateContentConfig(
+                        temperature=0.1,
+                        response_mime_type='application/json', # FORCES valid JSON
+                    )
                 )
                 
-                # Extract text response
-                response_text = response.text.strip()
-                
-                print(f"\n[LLM] Raw Response (Attempt {attempt + 1}):")
-                print("-" * 80)
-                print(response_text[:500] + "..." if len(response_text) > 500 else response_text)
-                print("-" * 80)
-                
-                # Clean response (remove markdown code blocks if present)
-                cleaned_response = self._clean_json_response(response_text)
-                
-                # Parse JSON
-                structured_data = json.loads(cleaned_response)
-                
-                print("[LLM] Successfully extracted and parsed structured data")
+                # The response is now guaranteed to be JSON
+                structured_data = json.loads(response.text)
+                print("[LLM] Success!")
                 return structured_data
                 
-            except json.JSONDecodeError as e:
-                print(f"[LLM] JSON parsing error on attempt {attempt + 1}: {str(e)}")
-                if attempt == max_retries - 1:
-                    # Last attempt failed, try to salvage what we can
-                    print("[LLM] All parsing attempts failed, returning error structure")
-                    return {
-                        "error": "Failed to parse LLM response",
-                        "raw_response": response_text,
-                        "informacion_paciente": {}
-                    }
-                # Add instruction to be more careful with JSON format
-                prompt += "\n\nNOTA: El JSON anterior no era válido. Asegúrate de generar JSON perfectamente válido esta vez."
-
-                # ADD THESE TWO LINES TO PREVENT RATE LIMITING
-                print("[LLM] Waiting 2 seconds before retrying...")
-                time.sleep(2)
-                
-#             except Exception as e:
-#                 print(f"[LLM] Unexpected error: {str(e)}")
-#                 raise
-
             except Exception as e:
-                error_msg = str(e).lower()
-                # Now we catch 429 (Rate Limit) AND 504 (Deadline/Timeout)
-                if "429" in error_msg or "quota" in error_msg or "504" in error_msg or "deadline" in error_msg:
-                    if attempt < max_retries - 1:
-                        wait_time = (attempt + 1) * 5 
-                        print(f"[LLM] Google API Busy ({e}). Waiting {wait_time} seconds...")
-                        time.sleep(wait_time)
-                    else:
-                        print("[LLM] Max retries reached for API errors.")
-                        raise e 
+                print(f"[LLM] Attempt {attempt + 1} failed: {e}")
+                if "429" in str(e) or "504" in str(e):
+                    time.sleep(5 * (attempt + 1))
                 else:
-                    raise e # Fail if it's a completely different error
+                    break
+        
+        # Fallback if everything fails
+        return {"error": "Processing failed", "raw_transcript_length": len(transcript)}
     
     def _clean_json_response(self, response: str) -> str:
         """
