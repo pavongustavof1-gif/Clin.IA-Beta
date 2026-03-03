@@ -15,7 +15,7 @@ class LLMProcessor:
         genai.configure(api_key=Config.GEMINI_API_KEY)
         
         # Use Gemini flash-latest for fast, cost-effective processing
-        self.model = genai.GenerativeModel('gemini-flash-latest')
+        self.model = genai.GenerativeModel('gemini-1.5-flash')
         
         # Load JSON schema
         # Look for the file in the current folder, wherever that may be
@@ -143,6 +143,7 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                         top_k=40,
                         max_output_tokens=2048,
                     )
+                    request_options={"timeout": 60} # <-- ADD THIS: Gives Google 60 seconds to reply
                 )
                 
                 # Extract text response
@@ -179,9 +180,23 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                 print("[LLM] Waiting 2 seconds before retrying...")
                 time.sleep(2)
                 
+#             except Exception as e:
+#                 print(f"[LLM] Unexpected error: {str(e)}")
+#                 raise
+
             except Exception as e:
-                print(f"[LLM] Unexpected error: {str(e)}")
-                raise
+                error_msg = str(e).lower()
+                # Now we catch 429 (Rate Limit) AND 504 (Deadline/Timeout)
+                if "429" in error_msg or "quota" in error_msg or "504" in error_msg or "deadline" in error_msg:
+                    if attempt < max_retries - 1:
+                        wait_time = (attempt + 1) * 5 
+                        print(f"[LLM] Google API Busy ({e}). Waiting {wait_time} seconds...")
+                        time.sleep(wait_time)
+                    else:
+                        print("[LLM] Max retries reached for API errors.")
+                        raise e 
+                else:
+                    raise e # Fail if it's a completely different error
     
     def _clean_json_response(self, response: str) -> str:
         """
