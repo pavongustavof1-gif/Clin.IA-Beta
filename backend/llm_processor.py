@@ -126,41 +126,65 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         """
         Extract structured medical data from transcript using Gemini
         """
-        print(f"[LLM] Processing with {self.model_id}...")
+        print(f"[LLM] Processing with {self.model_id}...", flush = true)
         prompt = self.create_extraction_prompt(transcript)
+        
+        last_error = "Unknown error"
         
         for attempt in range(max_retries):
             try:
-                # NEW: The modern, paid-tier way to call Gemini
                 response = self.client.models.generate_content(
                     model=self.model_id,
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.1,
-                        response_mime_type='application/json', # FORCES valid JSON
+                        response_mime_type='application/json',
                     )
                 )
                 
-                # The response is now guaranteed to be JSON
-                structured_data = json.loads(response.text)
-                print("[LLM] Success!")
+                if not response.text:
+                    raise ValueError("Empty response from Google API")
+                    
+                print(f"[LLM] Raw response received. Length: {len(response.text)}", flush=True)
+                
+                # Clean the text JUST IN CASE Gemini added markdown backticks
+                cleaned_text = self._clean_json_response(response.text)
+                
+                structured_data = json.loads(cleaned_text)
+                print("[LLM] Success!", flush=True)
                 return structured_data
                 
             except Exception as e:
+                last_error = str(e)
                 error_msg = str(e).lower()
-                print(f"[LLM] Attempt {attempt + 1} failed: {error_msg}")
+                print(f"[LLM] Attempt {attempt + 1} failed: {last_error}", flush=True)
                 
-                # Catch specific retryable errors
-                if any(x in error_msg for x in ["429", "504", "deadline", "cancelled"]):
+                # Catch rate limits and server timeouts
+                if any(x in error_msg for x in ["429", "504", "deadline", "cancelled", "quota", "503"]):
                     if attempt < max_retries - 1:
                         wait_time = 5 * (attempt + 1)
-                        print(f"[LLM] Retrying in {wait_time}s...")
+                        print(f"[LLM] Server busy. Retrying in {wait_time}s...", flush=True)
                         time.sleep(wait_time)
                         continue
+                
+                # Catch JSON formatting errors and tell the prompt to be more careful
+                if "json" in error_msg or "expecting value" in error_msg:
+                    if attempt < max_retries - 1:
+                         prompt += "\n\nNOTA: Asegúrate de devolver SOLO JSON válido, sin texto adicional."
+                         print("[LLM] JSON format error, retrying...", flush=True)
+                         time.sleep(2)
+                         continue
+                
+                # If it's a completely different error (like a 404), break immediately
                 break
         
-        # Fallback if everything fails
-        return {"error": "Processing failed", "raw_transcript_length": len(transcript)}
+        # Fallback: We now include "last_error" so you can see it in the UI/Logs!
+        print(f"[LLM] All attempts failed. Final error: {last_error}", flush=True)
+        return {
+            "error": "Processing failed",
+            "details": last_error, 
+            "raw_transcript_length": len(transcript)
+        }
 
     def _clean_json_response(self, response: str) -> str:
         """
