@@ -14,7 +14,7 @@ class LLMProcessor:
     
     def __init__(self):
         """Initialize Gemini API"""
-        genai.configure(api_key=Config.GEMINI_API_KEY)
+# No bueno        genai.configure(api_key=Config.GEMINI_API_KEY)
         
         # Use Gemini flash-latest for fast, cost-effective processing
         # self.model = genai.GenerativeModel('gemini-3-flash')
