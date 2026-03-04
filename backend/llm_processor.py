@@ -20,7 +20,7 @@ class LLMProcessor:
         # self.model = genai.GenerativeModel('gemini-3-flash')
 
         self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
-        self.model_id = 'gemini-2.0-flash'
+        self.model_id = 'gemini-2.5-flash'
         
         # Load JSON schema
         # Look for the file in the current folder, wherever that may be
