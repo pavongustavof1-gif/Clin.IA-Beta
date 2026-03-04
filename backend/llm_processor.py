@@ -126,7 +126,7 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         """
         Extract structured medical data from transcript using Gemini
         """
-        print(f"[LLM] Processing with {self.model_id}...", flush = true)
+        print(f"[LLM] Processing with {self.model_id}...", flush = True)
         prompt = self.create_extraction_prompt(transcript)
         
         last_error = "Unknown error"
