@@ -122,7 +122,10 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict:
+    def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict:
+        """
+        Extract structured medical data from transcript using Gemini
+        """
         print(f"[LLM] Processing with {self.model_id}...")
         prompt = self.create_extraction_prompt(transcript)
         
@@ -144,31 +147,25 @@ def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict
                 return structured_data
                 
             except Exception as e:
-                print(f"[LLM] Attempt {attempt + 1} failed: {e}")
-                if "429" in str(e) or "504" in str(e):
-                    time.sleep(5 * (attempt + 1))
-                else:
-                    break
+                error_msg = str(e).lower()
+                print(f"[LLM] Attempt {attempt + 1} failed: {error_msg}")
+                
+                # Catch specific retryable errors
+                if any(x in error_msg for x in ["429", "504", "deadline", "cancelled"]):
+                    if attempt < max_retries - 1:
+                        wait_time = 5 * (attempt + 1)
+                        print(f"[LLM] Retrying in {wait_time}s...")
+                        time.sleep(wait_time)
+                        continue
+                break
         
         # Fallback if everything fails
         return {"error": "Processing failed", "raw_transcript_length": len(transcript)}
-    
+
     def _clean_json_response(self, response: str) -> str:
         """
         Clean LLM response to extract pure JSON
-        
-        Args:
-            response: Raw LLM response
-        
-        Returns:
-            Cleaned JSON string
         """
-        # Remove markdown code blocks
-        if "```json" in response:
-            response = response.split("```json")[1].split("```")[0]
-        elif "```" in response:
-            response = response.split("```")[1].split("```")[0]
-        
         # Remove any leading/trailing whitespace
         response = response.strip()
         
@@ -178,10 +175,7 @@ def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict
         
         if first_brace != -1 and last_brace != -1:
             response = response[first_brace:last_brace + 1]
-        else:
-            # If no braces found, return the original or an empty object
-            return "{}"
-            
+        
         return response
     
     def validate_against_schema(self, data: Dict) -> tuple[bool, Optional[str]]:
