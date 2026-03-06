@@ -1,4 +1,4 @@
-﻿// frontend/app.js
+// frontend/app.js
 
 // Global state
 const state = {
@@ -357,7 +357,7 @@ function displayResults(result) {
     if (result.document && result.document.link) {
         elements.documentLink.style.display = 'block';
         elements.docLink.href = result.document.link;
-        elements.docLink.textContent = `Abrir "${result.document.title}" en Google Docs →`;
+        elements.docLink.innerHTML = `Abrir "${result.document.title}" en Google Docs <svg width="15" height="15" aria-hidden="true"><use href="#icon-external"/></svg>`;
     } else {
         elements.documentLink.style.display = 'none';
     }
