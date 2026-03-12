@@ -7,66 +7,44 @@
 
 /* ── Design Tokens ── */
 :root {
-    /* Palette */
-    --navy-950:   #060d1a;
-    --navy-900:   #0b1628;
-    --navy-800:   #122040;
-    --navy-700:   #1a2f5e;
-    --navy-600:   #1e3a7a;
+    /* Subdued Light Palette */
+    --bg-primary:    #f2f2f2; /* 5% Gray Background */
+    --bg-card:       #e5e5e5; /* Slightly darker gray boxes */
+    --bg-card-hover: #e0e0e0;
+    
+    /* Subtle Borders & Soft Blue Glow */
+    --border-color:  rgba(59, 130, 246, 0.15);
+    --border-hover:  rgba(59, 130, 246, 0.3);
+    --shadow-card:   0 4px 16px rgba(0, 0, 0, 0.05);
+    --shadow-glow:   0 0 24px rgba(59, 130, 246, 0.15); /* Blue glow */
+    --shadow-btn:    0 4px 12px rgba(0, 0, 0, 0.08);
 
-    --teal-400:   #7b9cef;
-    --teal-300:   #a0b8f5;
-    --teal-200:   #d0dcfb;
+    /* Text Colors for Light Theme */
+    --text-primary:  #1e293b;
+    --text-secondary: #475569;
+    --text-muted:    #64748b;
+    --white:         #1e293b; /* Re-mapped so headings turn dark */
+    
+    /* Accents */
+    --primary-color: #3b82f6;
+    --teal-400:      #3b82f6; /* Re-mapped for compatibility */
+    --teal-300:      #60a5fa;
+    --danger:        #ef4444;
+    --success:       #10b981;
+    --gold-400:      #f59e0b;
 
-    --gold-400:   #d4a843;
-    --gold-300:   #e8c46a;
-    --gold-200:   #f5e0a6;
-
-    --slate-100:  #f1f5f9;
-    --slate-200:  #e2e8f0;
-    --slate-300:  #cbd5e1;
-    --slate-500:  #64748b;
-    --slate-600:  #475569;
-
-    --white:      #ffffff;
-    --danger:     #e05252;
-    --danger-dim: #fde8e8;
-    --success:    #22c55e;
-    --success-dim:#dcfce7;
-
-    /* Semantic aliases */
-    --bg-primary:    var(--navy-900);
-    --bg-card:       #101e3a;
-    --bg-card-hover: #142444;
-    --border-color:  rgba(123, 156, 239, 0.15);
-    --border-hover:  rgba(123, 156, 239, 0.4);
-    --text-primary:  #e8eef7;
-    --text-secondary: var(--slate-300);
-    --text-muted:    var(--slate-500);
-    --primary-color: var(--teal-400);
-    --accent-color:  var(--gold-400);
-
-    /* Spacing */
+    /* Keep your existing spacing and radii below... */
     --spacing-xs:  0.5rem;
     --spacing-sm:  0.75rem;
     --spacing-md:  1.25rem;
     --spacing-lg:  2rem;
     --spacing-xl:  2.75rem;
-
-    /* Radii */
     --radius-sm:  6px;
     --radius-md:  12px;
     --radius-lg:  18px;
     --radius-xl:  24px;
-
-    /* Transitions */
     --transition-fast:   0.18s ease;
     --transition-medium: 0.32s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-
-    /* Shadows */
-    --shadow-card:  0 4px 32px rgba(0,0,0,0.45), 0 1px 4px rgba(0,0,0,0.3);
-    --shadow-glow:  0 0 28px rgba(123, 156, 239, 0.12);
-    --shadow-btn:   0 4px 16px rgba(123, 156, 239, 0.25);
 }
 
 /* ── Reset & Base ── */
