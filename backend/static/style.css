@@ -104,7 +104,7 @@ body {
     font-style: italic;
     font-size: clamp(2.8rem, 6vw, 4rem);
     letter-spacing: -0.01em;
-    color: var(--white);
+    color: #0f172a;
     margin-bottom: 0.4rem;
     line-height: 1.1;
 
@@ -771,4 +771,55 @@ body {
         flex-direction: row;
         gap: var(--spacing-lg);
     }
+}
+
+/* ── Enforce Specific Icon Colors ── */
+.btn-success .btn-icon, 
+.btn-success .btn-icon svg { 
+    color: #10b981 !important; /* Green for Iniciar */
+    fill: currentColor;
+}
+
+.btn-danger .btn-icon, 
+.btn-danger .btn-icon svg { 
+    color: #ef4444 !important; /* Red for Detener */
+    fill: currentColor;
+}
+
+.btn-secondary .btn-icon, 
+.btn-secondary .btn-icon svg { 
+    color: #3b82f6 !important; /* Blue for Cargar */
+    fill: currentColor;
+}
+
+.btn-primary .btn-icon, 
+.btn-primary .btn-icon svg { 
+    color: #f97316 !important; /* Orange for Procesar */
+    fill: currentColor;
+}
+
+/* ── Restore List & Bullet Indentation in Results ── */
+.result-card ul, 
+.result-card ol,
+.tab-content ul, 
+.tab-content ol {
+    padding-left: 1.5rem;     /* Pushes the bullets in */
+    margin-top: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.result-card li,
+.tab-content li {
+    margin-bottom: 0.4rem;    /* Adds breathing room between items */
+    padding-left: 0.2rem;
+    line-height: 1.6;
+}
+
+/* Ensure nested lists (sub-bullets) look clean */
+.result-card ul ul,
+.result-card ol ol,
+.tab-content ul ul,
+.tab-content ol ol {
+    margin-top: 0.4rem;
+    margin-bottom: 0;
 }
