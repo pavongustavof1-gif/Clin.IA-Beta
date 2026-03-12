@@ -7,31 +7,27 @@
 
 /* ── Design Tokens ── */
 :root {
-    /* Subdued Light Palette */
-    --bg-primary:    #f2f2f2; /* 5% Gray Background */
-    --bg-card:       #e5e5e5; /* Slightly darker gray boxes */
-    --bg-card-hover: #e0e0e0;
+    --bg-primary:    #f8fafc; /* Very soft off-white */
+    --bg-card:       #ffffff; /* Pure white cards */
+    --bg-card-hover: #f1f5f9;
     
-    /* Subtle Borders & Soft Blue Glow */
-    --border-color:  rgba(59, 130, 246, 0.15);
-    --border-hover:  rgba(59, 130, 246, 0.3);
-    --shadow-card:   0 4px 16px rgba(0, 0, 0, 0.05);
-    --shadow-glow:   0 0 24px rgba(59, 130, 246, 0.15); /* Blue glow */
-    --shadow-btn:    0 4px 12px rgba(0, 0, 0, 0.08);
+    --border-color:  rgba(148, 163, 184, 0.2);
+    --border-hover:  rgba(148, 163, 184, 0.4);
+    
+    /* Clean, soft shadows instead of neon glows */
+    --shadow-card:   0 1px 3px rgba(0,0,0,0.05), 0 10px 24px rgba(0,0,0,0.03);
+    --shadow-glow:   none; 
+    --shadow-btn:    0 2px 8px rgba(15, 23, 42, 0.05);
 
-    /* Text Colors for Light Theme */
-    --text-primary:  #1e293b;
-    --text-secondary: #475569;
-    --text-muted:    #64748b;
-    --white:         #1e293b; /* Re-mapped so headings turn dark */
+    --text-primary:  #334155;
+    --text-secondary: #64748b;
+    --text-muted:    #94a3b8;
+    --white:         #0f172a; 
     
-    /* Accents */
-    --primary-color: #3b82f6;
-    --teal-400:      #3b82f6; /* Re-mapped for compatibility */
-    --teal-300:      #60a5fa;
-    --danger:        #ef4444;
-    --success:       #10b981;
-    --gold-400:      #f59e0b;
+    /* Muted Sage Accents */
+    --primary-color: #64748b;
+    --teal-400:      #0ea5e9; 
+    --teal-300:      #38bdf8;
 
     /* Keep your existing spacing and radii below... */
     --spacing-xs:  0.5rem;
