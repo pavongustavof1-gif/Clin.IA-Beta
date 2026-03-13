@@ -111,7 +111,7 @@ body {
     /* Subtle gradient shimmer */
     background: linear-gradient(135deg, var(--white) 30%, var(--teal-300) 100%);
     -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
+/*     -webkit-text-fill-color: transparent; */
     background-clip: text;
 }
 
