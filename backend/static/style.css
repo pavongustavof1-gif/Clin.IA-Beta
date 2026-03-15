@@ -823,3 +823,36 @@ body {
     margin-top: 0.4rem;
     margin-bottom: 0;
 }
+
+/* ── Floating Feedback Button ── */
+.feedback-floating {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); /* Slightly stronger shadow to lift it off the page */
+    margin-top: 0; /* Overrides the default btn-small margin */
+}
+
+/* Mobile responsive behavior */
+@media (max-width: 600px) {
+    .feedback-floating {
+        top: 15px;
+        right: 15px;
+        padding: 0.6rem;       /* Shrinks padding to make it circular */
+        width: auto;           /* Overrides the 100% width rule */
+        border-radius: 50%;    /* Makes the button a perfect circle */
+    }
+    
+    /* Hide the text, keep the icon */
+    .feedback-floating .feedback-text {
+        display: none;
+    }
+    
+    /* Remove the margin pushing the icon away from the hidden text */
+    .feedback-floating .btn-icon {
+        margin-right: 0;
+        width: 20px;
+        height: 20px;
+    }
+}
