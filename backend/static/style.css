@@ -764,7 +764,7 @@ body {
 @media (min-width: 601px) {
     .recording-controls {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
     }
 
     .options-grid {
@@ -795,6 +795,20 @@ body {
 .btn-primary .btn-icon, 
 .btn-primary .btn-icon svg { 
     color: #f97316 !important; /* Orange for Procesar */
+    fill: currentColor;
+}
+
+/* Amber for Pausar */
+.btn-pause .btn-icon,
+.btn-pause .btn-icon svg {
+    color: #f59e0b !important;
+    fill: currentColor;
+}
+
+/* Teal for Reanudar */
+.btn-resume .btn-icon,
+.btn-resume .btn-icon svg {
+    color: #0d9488 !important;
     fill: currentColor;
 }
 

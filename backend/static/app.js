@@ -1,6 +1,14 @@
 // frontend/app.js
+// CHANGES FROM PREVIOUS VERSION:
+//   - Max recording duration: 5 min → 45 min
+//   - Added pause/resume recording functionality
+//   - Pause timer freezes and counts only active recording time
+//   - File upload size limit raised: 50MB → 200MB
+//   - Fixed error message text to say "45 minutos"
 
+// ─────────────────────────────────────────────
 // Global state
+// ─────────────────────────────────────────────
 const state = {
     mediaRecorder: null,
     audioChunks: [],
@@ -9,15 +17,22 @@ const state = {
     currentAudioBlob: null,
     sessionId: null,
     isRecording: false,
-    maxDurationSeconds: 300 // 5 minutes for Alpha
+    isPaused: false,
+    pausedAt: null,        // timestamp when the current pause started
+    totalPausedMs: 0,      // cumulative milliseconds spent paused this session
+    maxDurationSeconds: 2700 // 45 minutes
 };
 
 // API Configuration
 const API_BASE_URL = window.location.origin.replace(/\/$/, '');
+
+// ─────────────────────────────────────────────
 // DOM Elements
+// ─────────────────────────────────────────────
 const elements = {
     recordBtn: document.getElementById('recordBtn'),
-    stopBtn: document.getElementById('stopBtn'),
+    pauseBtn:  document.getElementById('pauseBtn'),
+    stopBtn:   document.getElementById('stopBtn'),
     uploadBtn: document.getElementById('uploadBtn'),
     audioFileInput: document.getElementById('audioFileInput'),
     processBtn: document.getElementById('processBtn'),
@@ -54,7 +69,9 @@ const elements = {
     retryBtn: document.getElementById('retryBtn')
 };
 
+// ─────────────────────────────────────────────
 // Initialize application
+// ─────────────────────────────────────────────
 function init() {
     console.log('[ClinIA] Initializing application...');
     
@@ -67,6 +84,7 @@ function init() {
     
     // Event listeners
     elements.recordBtn.addEventListener('click', startRecording);
+    elements.pauseBtn.addEventListener('click', togglePause);
     elements.stopBtn.addEventListener('click', stopRecording);
     elements.uploadBtn.addEventListener('click', () => elements.audioFileInput.click());
     elements.audioFileInput.addEventListener('change', handleFileUpload);
@@ -85,7 +103,9 @@ function init() {
     console.log('[ClinIA] Application initialized successfully');
 }
 
+// ─────────────────────────────────────────────
 // Recording functions
+// ─────────────────────────────────────────────
 async function startRecording() {
     try {
         console.log('[ClinIA] Requesting microphone access...');
@@ -121,6 +141,7 @@ async function startRecording() {
         
         // Update UI
         elements.recordBtn.disabled = true;
+        elements.pauseBtn.disabled = false;
         elements.stopBtn.disabled = false;
         elements.uploadBtn.disabled = true;
         elements.recordingStatus.style.display = 'block';
@@ -141,19 +162,22 @@ async function startRecording() {
 
 function updateRecordingTime() {
     if (!state.isRecording || !state.recordingStartTime) return;
-    
-    const elapsed = Math.floor((Date.now() - state.recordingStartTime) / 1000);
-    const minutes = Math.floor(elapsed / 60);
-    const seconds = elapsed % 60;
+    if (state.isPaused) return; // freeze display while paused
+
+    // Active recording time = wall clock elapsed minus all time spent paused
+    const activeMs = (Date.now() - state.recordingStartTime) - state.totalPausedMs;
+    const elapsed  = Math.floor(activeMs / 1000);
+    const minutes  = Math.floor(elapsed / 60);
+    const seconds  = elapsed % 60;
     
     elements.recordingTime.textContent = 
         `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
     
-    // Auto-stop at max duration
+    // Auto-stop at max duration (counts active audio time only)
     if (elapsed >= state.maxDurationSeconds) {
         console.log('[ClinIA] Maximum recording duration reached, stopping...');
         stopRecording();
-        showError('Se alcanzó el límite de 5 minutos. La grabación se detuvo automáticamente.');
+        showError('Se alcanzó el límite de 45 minutos. La grabación se detuvo automáticamente.');
     }
 }
 
@@ -162,6 +186,12 @@ function stopRecording() {
     
     console.log('[ClinIA] Stopping recording...');
     
+    // If paused when stopped, resume briefly so .stop() fires correctly
+    if (state.isPaused) {
+        state.mediaRecorder.resume();
+        state.isPaused = false;
+    }
+
     state.mediaRecorder.stop();
     state.isRecording = false;
     
@@ -174,13 +204,72 @@ function stopRecording() {
         state.recordingInterval = null;
     }
     
-    // Update UI
+    // Update UI — reset pause button to its default state
     elements.recordBtn.disabled = false;
+    elements.pauseBtn.disabled = true;
+    elements.pauseBtn.classList.remove('btn-resume');
+    elements.pauseBtn.classList.add('btn-pause');
+    elements.pauseBtn.innerHTML = `
+        <span class="btn-icon" aria-hidden="true">
+            <svg width="18" height="18"><use href="#icon-pause"/></svg>
+        </span>
+        Pausar`;
     elements.stopBtn.disabled = true;
     elements.uploadBtn.disabled = false;
     elements.recordingStatus.style.display = 'none';
+
+    // Reset pause tracking state
+    state.isPaused    = false;
+    state.pausedAt    = null;
+    state.totalPausedMs = 0;
     
     console.log('[ClinIA] Recording stopped');
+}
+
+function togglePause() {
+    if (!state.mediaRecorder || !state.isRecording) return;
+
+    if (!state.isPaused) {
+        // ── PAUSING ──────────────────────────────────
+        state.mediaRecorder.pause();
+        state.isPaused = true;
+        state.pausedAt = Date.now();
+
+        // Swap button to "Reanudar" (teal)
+        elements.pauseBtn.classList.remove('btn-pause');
+        elements.pauseBtn.classList.add('btn-resume');
+        elements.pauseBtn.innerHTML = `
+            <span class="btn-icon" aria-hidden="true">
+                <svg width="18" height="18"><use href="#icon-resume"/></svg>
+            </span>
+            Reanudar`;
+
+        // Append pause indicator to frozen timer display
+        const currentTime = elements.recordingTime.textContent.replace(' ⏸', '');
+        elements.recordingTime.textContent = currentTime + ' ⏸';
+
+        console.log('[ClinIA] Recording paused');
+
+    } else {
+        // ── RESUMING ─────────────────────────────────
+        state.mediaRecorder.resume();
+        state.isPaused = false;
+
+        // Accumulate the time spent in this pause
+        state.totalPausedMs += (Date.now() - state.pausedAt);
+        state.pausedAt = null;
+
+        // Swap button back to "Pausar" (amber)
+        elements.pauseBtn.classList.remove('btn-resume');
+        elements.pauseBtn.classList.add('btn-pause');
+        elements.pauseBtn.innerHTML = `
+            <span class="btn-icon" aria-hidden="true">
+                <svg width="18" height="18"><use href="#icon-pause"/></svg>
+            </span>
+            Pausar`;
+
+        console.log('[ClinIA] Recording resumed');
+    }
 }
 
 function handleRecordingStop() {
@@ -198,8 +287,9 @@ function handleRecordingStop() {
     elements.audioPlayer.src = audioUrl;
     elements.audioPlayerContainer.style.display = 'block';
     
-    // Calculate duration
-    const durationSeconds = (Date.now() - state.recordingStartTime) / 1000;
+    // Show active recording duration (wall clock minus paused time)
+    const activeMs = (Date.now() - state.recordingStartTime) - state.totalPausedMs;
+    const durationSeconds = activeMs / 1000;
     elements.audioFileName.textContent = 'Grabación de consulta';
     elements.audioDuration.textContent = `${Math.floor(durationSeconds / 60)}:${String(Math.floor(durationSeconds % 60)).padStart(2, '0')}`;
     
@@ -223,10 +313,10 @@ function handleFileUpload(event) {
         return;
     }
     
-    // Validate file size (50MB max)
-    const maxSize = 50 * 1024 * 1024;
+    // Validate file size (200MB max — raised to support long consultations)
+    const maxSize = 200 * 1024 * 1024;
     if (file.size > maxSize) {
-        showError('El archivo es demasiado grande. Máximo 50MB.');
+        showError('El archivo es demasiado grande. Máximo 200MB.');
         return;
     }
     
@@ -256,7 +346,9 @@ function handleFileUpload(event) {
     console.log('[ClinIA] File ready for processing');
 }
 
+// ─────────────────────────────────────────────
 // Processing functions
+// ─────────────────────────────────────────────
 async function processAudio() {
     if (!state.currentAudioBlob) {
         showError('No hay audio para procesar');
@@ -615,7 +707,9 @@ async function downloadJSON() {
     }
 }
 
+// ─────────────────────────────────────────────
 // Utility functions
+// ─────────────────────────────────────────────
 function showError(message) {
     console.error('[ClinIA] Error:', message);
     
@@ -632,6 +726,9 @@ function resetApplication() {
     state.currentAudioBlob = null;
     state.sessionId = null;
     state.audioChunks = [];
+    state.isPaused = false;
+    state.pausedAt = null;
+    state.totalPausedMs = 0;
     
     // Reset UI
     elements.audioPlayerContainer.style.display = 'none';
@@ -640,6 +737,16 @@ function resetApplication() {
     elements.resultsSection.style.display = 'none';
     elements.errorSection.style.display = 'none';
     elements.recordingStatus.style.display = 'none';
+    
+    // Reset pause button appearance in case it was left in "Reanudar" state
+    elements.pauseBtn.disabled = true;
+    elements.pauseBtn.classList.remove('btn-resume');
+    elements.pauseBtn.classList.add('btn-pause');
+    elements.pauseBtn.innerHTML = `
+        <span class="btn-icon" aria-hidden="true">
+            <svg width="18" height="18"><use href="#icon-pause"/></svg>
+        </span>
+        Pausar`;
     
     // Clear file input
     elements.audioFileInput.value = '';
@@ -652,12 +759,11 @@ function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ─────────────────────────────────────────────
 // Initialize on page load
+// ─────────────────────────────────────────────
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
 }
-
-
-

@@ -159,6 +159,17 @@
                 <line x1="10" y1="14" x2="21" y2="3"/>
             </symbol>
 
+            <!-- ── NEW: Pause icon (two vertical bars) ── -->
+            <symbol id="icon-pause" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6"  y="4" width="4" height="16" rx="1"/>
+                <rect x="14" y="4" width="4" height="16" rx="1"/>
+            </symbol>
+
+            <!-- ── NEW: Resume icon (play triangle) ── -->
+            <symbol id="icon-resume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+            </symbol>
+
         </defs>
     </svg>
 </head>
@@ -192,13 +203,20 @@
                     Grabar Consulta
                 </h2>
                 
-                <!-- Recording Controls -->
+                <!-- Recording Controls — 4 buttons -->
                 <div class="recording-controls">
-                    <button id="recordBtn" class="btn btn-primary">
+                    <button id="recordBtn" class="btn btn-success">
                         <span class="btn-icon" aria-hidden="true">
                             <svg width="18" height="18"><use href="#icon-mic"/></svg>
                         </span>
                         Iniciar Grabación
+                    </button>
+
+                    <button id="pauseBtn" class="btn btn-pause" disabled>
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-pause"/></svg>
+                        </span>
+                        Pausar
                     </button>
                     
                     <button id="stopBtn" class="btn btn-danger" disabled>
@@ -224,7 +242,7 @@
                         <span class="pulse-dot"></span>
                         <span id="recordingTime">00:00</span>
                     </div>
-                    <p class="warning-text">Máximo 5 minutos para versión Beta</p>
+                    <p class="warning-text">Máximo 45 minutos · Puedes pausar y reanudar</p>
                 </div>
                 
                 <!-- Audio Player -->
@@ -237,7 +255,7 @@
                 </div>
                 
                 <!-- Process Button -->
-                <button id="processBtn" class="btn btn-success btn-large" disabled>
+                <button id="processBtn" class="btn btn-primary btn-large" disabled>
                     <span class="btn-icon" aria-hidden="true">
                         <svg width="20" height="20"><use href="#icon-bolt"/></svg>
                     </span>
@@ -323,7 +341,6 @@
                         <span id="transcriptWords"></span>
                     </div>
                     <div id="transcriptText" class="transcript-text"></div>
-
                 </div>
                 
                 <!-- Structured Data -->
