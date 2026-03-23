@@ -1,4 +1,5 @@
 # backend/config.py
+from email import errors
 import os
 import json
 from dotenv import load_dotenv
@@ -42,8 +43,8 @@ class Config:
         if not cls.ASSEMBLYAI_API_KEY:
             errors.append("ASSEMBLYAI_API_KEY is required")
         
-        if not cls.GEMINI_API_KEY and not cls.OPENAI_API_KEY:
-            errors.append("Either GEMINI_API_KEY or OPENAI_API_KEY is required")
+        if not cls.GEMINI_API_KEY:
+            errors.append("GEMINI_API_KEY is required")
         
         if errors:
             raise ValueError(f"Configuration errors: {', '.join(errors)}")

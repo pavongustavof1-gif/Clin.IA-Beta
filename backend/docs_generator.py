@@ -162,8 +162,8 @@ class GoogleDocsGenerator:
         add_text("Historia de la Enfermedad: ", bold=True)
         add_text(subj.get('historia_de_enfermedad_actual', ''), bold=False)
         
-        if subj.get('duracion'):
-            add_text(f"Duración: {subj['duracion']}", bold=False)
+        if subj.get('duracion_sintomas'):
+            add_text(f"Duración de síntomas: {subj['duracion_sintomas']}", bold=False)
         
         add_text("")
 

@@ -327,6 +327,7 @@ def process_transcript():
         doc_info = None
         
         if create_doc:
+            docs_generator = GoogleDocsGenerator()
             doc_info = docs_generator.create_medical_note(structured_data)
         
         return jsonify({

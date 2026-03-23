@@ -26,9 +26,8 @@ class LLMProcessor:
         # Look for the file in the current folder, wherever that may be
         import os
         base_dir = os.path.dirname(__file__)
-        cred_path = os.path.join(base_dir, 'credentials.json')
-
-        with open(cred_path, 'r', encoding='utf-8') as f:
+        schema_path = os.path.join(base_dir, 'schema.json')
+        with open(schema_path, 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
     def create_extraction_prompt(self, transcript: str) -> str:
