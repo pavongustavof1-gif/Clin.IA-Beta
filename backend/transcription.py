@@ -2,9 +2,7 @@
 # Added custom spelling section line 37
 import assemblyai as aai
 from config import Config
-import time
-from typing import Optional, Dict
-import json
+from typing import Dict
 
 class TranscriptionService:
     """Handles audio transcription using AssemblyAI"""
@@ -32,10 +30,11 @@ class TranscriptionService:
             language_code="es",  # Spanish
             punctuate=True,
             format_text=True,
-            speaker_labels=True  # Identify doctor vs patient (helpful for SOAP)
+            speaker_labels=True,  # Identify doctor vs patient (helpful for SOAP)
+            domain="medical-v1"   # Medical Mode: improved accuracy for medications, dosages, diagnoses
         )
 
-# Configure custom spelling
+        # Configure custom spelling
         config.set_custom_spelling(
           {
             "esguince": ["esquinza"],
