@@ -465,7 +465,7 @@ function displayResults(result) {
         elements.transcriptWords.textContent = 
             `Palabras: ${t.word_count}`;
         
-        elements.transcriptText.textContent = t.text;
+        elements.transcriptText.textContent = t.labeled_text || t.text;
     }
     
     // 3. Structured data

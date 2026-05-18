@@ -231,13 +231,19 @@ def process_audio():
         
         # Step 6: Prepare response
         session_id = f"session_{datetime.now().timestamp()}"
-        
+
+        utterances = transcript_result.get('utterances', [])
+        labeled_text = "\n".join(
+            f"[Speaker {u['speaker']}]: {u['text']}" for u in utterances
+        ) if utterances else None
+
         response = {
             'session_id': session_id,
             'status': 'success',
             'timestamp': datetime.now().isoformat(),
             'transcript': {
                 'text': transcript_text,
+                'labeled_text': labeled_text,
                 'confidence': transcript_result.get('confidence'),
                 'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
                 'word_count': transcript_result.get('words', 0)
