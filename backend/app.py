@@ -233,7 +233,7 @@ def process_audio():
         session_id = f"session_{datetime.now().timestamp()}"
 
         utterances = transcript_result.get('utterances', [])
-        labeled_text = "\n\n".join(
+        labeled_text = "\n".join(
             f"[Speaker {u['speaker']}]: {u['text']}" for u in utterances
         ) if utterances else None
 
