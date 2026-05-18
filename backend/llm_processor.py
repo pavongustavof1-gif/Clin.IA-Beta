@@ -30,16 +30,31 @@ class LLMProcessor:
         with open(schema_path, 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
-    def create_extraction_prompt(self, transcript: str) -> str:
+    def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
         """
         Create detailed prompt for Gemini to extract medical information
-        
+
         Args:
             transcript: Raw Spanish transcript from AssemblyAI
-        
+            utterances: Optional speaker-labeled utterances from AssemblyAI
+
         Returns:
             Formatted prompt for LLM
         """
+        if utterances:
+            transcript_content = "\n".join(
+                f"[Speaker {u['speaker']}]: {u['text']}" for u in utterances
+            )
+            speaker_instruction = (
+                "\n6. La transcripción incluye etiquetas de hablante ([Speaker A], [Speaker B], etc.). "
+                "Usa estas etiquetas para distinguir las declaraciones del médico de las del paciente. "
+                "Generalmente, el médico hace preguntas, describe hallazgos y prescribe tratamiento; "
+                "el paciente describe síntomas y responde preguntas."
+            )
+        else:
+            transcript_content = transcript
+            speaker_instruction = ""
+
         prompt = f"""Eres un asistente médico especializado en crear notas clínicas siguiendo el formato SOAP (Subjetivo, Objetivo, Evaluación, Plan).
 
 Tu tarea es analizar la siguiente transcripción de una consulta médica en español y extraer toda la información relevante en un formato JSON estructurado.
@@ -49,10 +64,10 @@ INSTRUCCIONES CRÍTICAS:
 2. Si cierta información no está presente, omite ese campo (no inventes datos)
 3. Mantén los términos médicos exactamente como aparecen en la transcripción, asegurando la congruencia de genero entre artículos y artículos indefinidos con el sustantivo que le sigue
 4. Organiza la información según el formato SOAP
-5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
+5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento{speaker_instruction}
 
 TRANSCRIPCIÓN:
-{transcript}
+{transcript_content}
 
 FORMATO DE SALIDA:
 Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
@@ -121,12 +136,14 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-    def extract_structured_data(self, transcript: str, max_retries: int = 3) -> Dict:
+    def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
         """
         Extract structured medical data from transcript using Gemini
         """
-        print(f"[LLM] Processing with {self.model_id}...", flush = True)
-        prompt = self.create_extraction_prompt(transcript)
+        print(f"[LLM] Processing with {self.model_id}...", flush=True)
+        if utterances:
+            print(f"[LLM] Using {len(utterances)} speaker-labeled utterances", flush=True)
+        prompt = self.create_extraction_prompt(transcript, utterances)
         
         last_error = "Unknown error"
         

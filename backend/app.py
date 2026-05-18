@@ -177,7 +177,10 @@ def process_audio():
         print("-" * 80)
         
         try:
-            structured_data = llm_processor.extract_structured_data(transcript_text)
+            structured_data = llm_processor.extract_structured_data(
+                transcript_text,
+                utterances=transcript_result.get('utterances', [])
+            )
             
             # Validate extracted data
             is_valid, error_msg = llm_processor.validate_against_schema(structured_data)
