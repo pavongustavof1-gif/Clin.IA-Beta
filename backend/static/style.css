@@ -534,6 +534,7 @@ body {
     padding: var(--spacing-md);
     border-left: 3px solid var(--teal-400);
     font-style: italic;
+    white-space: pre-wrap;
 }
 
 /* ── Tabs ── */
