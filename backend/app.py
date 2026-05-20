@@ -121,6 +121,7 @@ def process_audio():
         print_raw = request.form.get('print_raw', 'true').lower() == 'true'
         create_doc = request.form.get('create_doc', 'true').lower() == 'true'
         speakers_expected = int(request.form.get('speakers_expected', 2))
+        local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
         
         print(f"\n{'='*80}")
         print(f"[Orchestrator] Starting new processing job")
@@ -213,8 +214,7 @@ def process_audio():
                 patient_name = structured_data.get('informacion_paciente', {}).get(
                     'nombre_del_paciente', 'Paciente'
                 )
-                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
-                doc_title = f"ClinIA - {patient_name} - {timestamp}"
+                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
                 
                 doc_info = docs_generator.create_medical_note(
                     structured_data,
@@ -236,7 +236,7 @@ def process_audio():
 
         utterances = transcript_result.get('utterances', [])
         labeled_text = "\n".join(
-            f"[Speaker {u['speaker']}]: {u['text']}" for u in utterances
+            f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
         ) if utterances else None
 
         response = {

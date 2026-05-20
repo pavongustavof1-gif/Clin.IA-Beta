@@ -96,7 +96,7 @@ class TranscriptionService:
                     print("\nSpeaker-Separated Transcript:")
                     print("-"*80)
                     for utt in result["utterances"]:
-                        print(f"[Speaker {utt['speaker']}]: {utt['text']}")
+                        print(f"[Persona {utt['speaker']}]: {utt['text']}")
                     print("-"*80)
                 print("="*80 + "\n")
             

@@ -43,10 +43,10 @@ class LLMProcessor:
         """
         if utterances:
             transcript_content = "\n".join(
-                f"[Speaker {u['speaker']}]: {u['text']}" for u in utterances
+                f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
             )
             speaker_instruction = (
-                "\n6. La transcripción incluye etiquetas de hablante ([Speaker A], [Speaker B], etc.). "
+                "\n6. La transcripción incluye etiquetas de hablante ([Persona A], [Persona B], etc.). "
                 "Usa estas etiquetas para distinguir las declaraciones del médico de las del paciente. "
                 "Generalmente, el médico hace preguntas, describe hallazgos y prescribe tratamiento; "
                 "el paciente describe síntomas y responde preguntas."

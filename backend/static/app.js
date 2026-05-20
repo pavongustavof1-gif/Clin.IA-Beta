@@ -373,6 +373,10 @@ async function processAudio() {
         formData.append('print_raw', elements.printRawTranscript.checked);
         formData.append('create_doc', elements.createGoogleDoc.checked);
         formData.append('speakers_expected', elements.speakersExpected.value);
+        const _now = new Date();
+        const _pad = n => String(n).padStart(2, '0');
+        const localTimestamp = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
+        formData.append('local_timestamp', localTimestamp);
         
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);
