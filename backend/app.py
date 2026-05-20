@@ -120,6 +120,7 @@ def process_audio():
         # Get optional parameters
         print_raw = request.form.get('print_raw', 'true').lower() == 'true'
         create_doc = request.form.get('create_doc', 'true').lower() == 'true'
+        speakers_expected = int(request.form.get('speakers_expected', 2))
         
         print(f"\n{'='*80}")
         print(f"[Orchestrator] Starting new processing job")
@@ -147,7 +148,8 @@ def process_audio():
         try:
             transcript_result = transcription_service.transcribe_audio(
                 temp_path,
-                print_raw=print_raw
+                print_raw=print_raw,
+                speakers_expected=speakers_expected
             )
             
             transcript_text = transcript_result['text']

@@ -54,6 +54,7 @@ const elements = {
     resultsSection: document.getElementById('resultsSection'),
     documentLink: document.getElementById('documentLink'),
     docLink: document.getElementById('docLink'),
+    speakersExpected: document.getElementById('speakersExpected'),
     transcriptResult: document.getElementById('transcriptResult'),
     transcriptConfidence: document.getElementById('transcriptConfidence'),
     transcriptDuration: document.getElementById('transcriptDuration'),
@@ -371,6 +372,7 @@ async function processAudio() {
         formData.append('audio', state.currentAudioBlob, 'recording.webm');
         formData.append('print_raw', elements.printRawTranscript.checked);
         formData.append('create_doc', elements.createGoogleDoc.checked);
+        formData.append('speakers_expected', elements.speakersExpected.value);
         
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);

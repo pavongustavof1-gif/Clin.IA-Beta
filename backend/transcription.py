@@ -12,26 +12,28 @@ class TranscriptionService:
         aai.settings.api_key = Config.ASSEMBLYAI_API_KEY
         self.transcriber = aai.Transcriber()
     
-    def transcribe_audio(self, audio_file_path: str, print_raw: bool = True) -> Dict:
+    def transcribe_audio(self, audio_file_path: str, print_raw: bool = True, speakers_expected: int = 0) -> Dict:
         """
         Transcribe audio file using AssemblyAI
-        
+
         Args:
             audio_file_path: Path to audio file or URL
             print_raw: Whether to print raw transcript (for Alpha verification)
-        
+            speakers_expected: Hint to AssemblyAI for number of speakers (0 = not set)
+
         Returns:
             Dictionary containing transcript and metadata
         """
         print(f"[AssemblyAI] Starting transcription for: {audio_file_path}")
-        
+
         # Configure transcription settings for Spanish medical context
         config = aai.TranscriptionConfig(
             language_code="es",  # Spanish
             punctuate=True,
             format_text=True,
             speaker_labels=True,  # Identify doctor vs patient (helpful for SOAP)
-            domain="medical-v1"   # Medical Mode: improved accuracy for medications, dosages, diagnoses
+            domain="medical-v1",  # Medical Mode: improved accuracy for medications, dosages, diagnoses
+            **({'speakers_expected': speakers_expected} if speakers_expected > 0 else {})
         )
 
         # Configure custom spelling
