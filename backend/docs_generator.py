@@ -193,7 +193,11 @@ class GoogleDocsGenerator:
         
         add_text("Impresión Clínica: ", bold=True, newline=False)
         add_text(ev.get('impresion_clinica', ''), bold=False)
-        
+
+        if ev.get('pronostico'):
+            add_text("Pronóstico: ", bold=True, newline=False)
+            add_text(ev.get('pronostico', ''), bold=False)
+
         add_text("")
 
         # --- 5. PLAN (P) ---

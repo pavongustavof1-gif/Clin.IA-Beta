@@ -99,7 +99,8 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
   "evaluacion": {{
     "diagnostico": "string - diagnóstico principal",
     "diagnosticos_adicionales": ["otros diagnósticos o diagnósticos diferenciales"],
-    "impresion_clinica": "string - impresión general del médico"
+    "impresion_clinica": "string - impresión general del médico",
+    "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)"
   }},
   "plan": {{
     "tratamiento": "string - plan de tratamiento general",
@@ -119,6 +120,10 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
     "fecha_consulta": "string (si se menciona)",
     "medico": "string (si se menciona)",
     "duracion_consulta": "string (si se puede determinar)"
+  }},
+  "actualizacion_antecedentes": {{
+    "detectado": "true o false - detecta si el paciente menciona antecedentes hereditarios, familiares o personales nuevos no capturados previamente (por ejemplo, un diagnóstico reciente de un familiar)",
+    "contenido": "string - descripción del antecedente nuevo mencionado (omitir si detectado es false)"
   }}
 }}
 

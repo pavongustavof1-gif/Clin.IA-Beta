@@ -20,7 +20,8 @@ const state = {
     isPaused: false,
     pausedAt: null,        // timestamp when the current pause started
     totalPausedMs: 0,      // cumulative milliseconds spent paused this session
-    maxDurationSeconds: 2700 // 45 minutes
+    maxDurationSeconds: 2700, // 45 minutes
+    consultationTimestamp: null
 };
 
 // API Configuration
@@ -139,6 +140,14 @@ async function startRecording() {
         state.mediaRecorder.start(1000); // Collect data every second
         state.isRecording = true;
         state.recordingStartTime = Date.now();
+
+        // Capture consultation timestamp at the exact moment recording begins
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        state.consultationTimestamp = new Date().toLocaleString('es-MX', {
+            timeZone: userTimezone,
+            dateStyle: 'short',
+            timeStyle: 'short'
+        });
         
         // Update UI
         elements.recordBtn.disabled = true;
@@ -377,6 +386,7 @@ async function processAudio() {
         const _pad = n => String(n).padStart(2, '0');
         const localTimestamp = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
         formData.append('local_timestamp', localTimestamp);
+        formData.append('consultation_timestamp', state.consultationTimestamp || localTimestamp);
         
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);

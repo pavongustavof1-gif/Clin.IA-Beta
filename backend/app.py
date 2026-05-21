@@ -122,6 +122,7 @@ def process_audio():
         create_doc = request.form.get('create_doc', 'true').lower() == 'true'
         speakers_expected = int(request.form.get('speakers_expected', 2))
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
+        consultation_timestamp = request.form.get('consultation_timestamp', local_timestamp)
         
         print(f"\n{'='*80}")
         print(f"[Orchestrator] Starting new processing job")
@@ -192,8 +193,13 @@ def process_audio():
                 print(f"[Orchestrator] Warning: Data validation failed: {error_msg}")
                 # Continue anyway for Alpha version
             
+            # Inject consultation timestamp (NOM-004 compliance)
+            if 'metadata' not in structured_data:
+                structured_data['metadata'] = {}
+            structured_data['metadata']['fecha_hora_consulta'] = consultation_timestamp
+
             print("[Orchestrator] Structured data extraction completed")
-            
+
         except Exception as e:
             print(f"[Orchestrator] LLM processing failed: {str(e)}")
             return jsonify({
