@@ -320,6 +320,161 @@
                 </div>
             </section>
             
+            <!-- Review Section -->
+            <section id="reviewSection" class="card review-section" style="display: none;">
+                <h3>
+                    <svg class="heading-icon" width="18" height="18" aria-hidden="true"><use href="#icon-note"/></svg>
+                    Revisión de Nota Clínica
+                </h3>
+
+                <div class="review-notice">
+                    <svg class="review-notice-icon" width="16" height="16" aria-hidden="true"><use href="#icon-warning"/></svg>
+                    Revise y corrija la información antes de generar el documento. Usted es responsable legal del contenido de la nota clínica.
+                </div>
+
+                <form id="reviewForm">
+
+                    <!-- Información del Paciente -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Información del Paciente</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_nombre_del_paciente">Nombre del Paciente</label>
+                            <input type="text" id="review_nombre_del_paciente" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_fecha_de_nacimiento">Fecha de Nacimiento</label>
+                            <input type="text" id="review_fecha_de_nacimiento" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_edad">Edad</label>
+                            <input type="text" id="review_edad" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_genero">Género</label>
+                            <input type="text" id="review_genero" class="review-input">
+                        </div>
+                    </div>
+
+                    <!-- Subjetivo -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Subjetivo (S)</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_motivo_de_consulta">Motivo de Consulta</label>
+                            <textarea id="review_motivo_de_consulta" class="review-textarea" rows="2"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_sintomas">Síntomas <span class="review-hint">(uno por línea)</span></label>
+                            <textarea id="review_sintomas" class="review-textarea" rows="3"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_historia_de_enfermedad_actual">Historia de la Enfermedad Actual</label>
+                            <textarea id="review_historia_de_enfermedad_actual" class="review-textarea" rows="3"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_duracion_sintomas">Duración de los Síntomas</label>
+                            <input type="text" id="review_duracion_sintomas" class="review-input">
+                        </div>
+                    </div>
+
+                    <!-- Objetivo -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Objetivo (O)</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_presion_arterial">Presión Arterial</label>
+                            <input type="text" id="review_presion_arterial" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_frecuencia_cardiaca">Frecuencia Cardíaca</label>
+                            <input type="text" id="review_frecuencia_cardiaca" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_temperatura">Temperatura</label>
+                            <input type="text" id="review_temperatura" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_frecuencia_respiratoria">Frecuencia Respiratoria</label>
+                            <input type="text" id="review_frecuencia_respiratoria" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_saturacion_oxigeno">Saturación de Oxígeno</label>
+                            <input type="text" id="review_saturacion_oxigeno" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_examen_fisico">Examen Físico</label>
+                            <textarea id="review_examen_fisico" class="review-textarea" rows="3"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Evaluación -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Evaluación (A)</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_diagnostico">Diagnóstico</label>
+                            <input type="text" id="review_diagnostico" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_impresion_clinica">Impresión Clínica</label>
+                            <textarea id="review_impresion_clinica" class="review-textarea" rows="2"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_pronostico">Pronóstico</label>
+                            <input type="text" id="review_pronostico" class="review-input">
+                        </div>
+                    </div>
+
+                    <!-- Plan -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Plan (P)</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_tratamiento">Tratamiento</label>
+                            <textarea id="review_tratamiento" class="review-textarea" rows="2"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_medicamentos">Medicamentos <span class="review-hint">(uno por línea: nombre - dosis - frecuencia - duración)</span></label>
+                            <textarea id="review_medicamentos" class="review-textarea" rows="3"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_recomendaciones">Recomendaciones <span class="review-hint">(una por línea)</span></label>
+                            <textarea id="review_recomendaciones" class="review-textarea" rows="3"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_estudios_solicitados">Estudios Solicitados <span class="review-hint">(uno por línea)</span></label>
+                            <textarea id="review_estudios_solicitados" class="review-textarea" rows="2"></textarea>
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_seguimiento">Seguimiento</label>
+                            <textarea id="review_seguimiento" class="review-textarea" rows="2"></textarea>
+                        </div>
+                    </div>
+
+                    <!-- Metadatos -->
+                    <div class="review-group">
+                        <h5 class="review-group-title">Metadatos</h5>
+                        <div class="review-field">
+                            <label class="review-label" for="review_medico">Médico</label>
+                            <input type="text" id="review_medico" class="review-input">
+                        </div>
+                        <div class="review-field">
+                            <label class="review-label" for="review_fecha_hora_consulta">Fecha y Hora de Consulta</label>
+                            <input type="text" id="review_fecha_hora_consulta" class="review-input">
+                        </div>
+                    </div>
+
+                </form>
+
+                <div class="review-actions">
+                    <button class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-document"/></svg>
+                        </span>
+                        Confirmar y Generar Documento
+                    </button>
+                    <button class="btn btn-danger" type="button" onclick="cancelReview()">
+                        Cancelar
+                    </button>
+                </div>
+            </section>
+
             <!-- Results Section -->
             <section id="resultsSection" class="card results-section" style="display: none;">
                 <h3>

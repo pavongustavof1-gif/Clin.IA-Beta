@@ -106,7 +106,6 @@ def process_audio():
     Expected: multipart/form-data with 'audio' file
     Returns: Complete medical note with Google Docs link
     """
-    docs_generator = GoogleDocsGenerator()  # <--  Pasted here according to Gemini
     try:
         # Step 1: Validate request
         if 'audio' not in request.files:
@@ -208,36 +207,7 @@ def process_audio():
                 'transcript': transcript_text
             }), 500
         
-        # Step 5: Create Google Doc (if requested)
-        doc_info = None
-        
-        if create_doc:
-            print("\n[Orchestrator] PHASE C: Google Docs Generation")
-            print("-" * 80)
-            
-            try:
-                # Generate document title
-                patient_name = structured_data.get('informacion_paciente', {}).get(
-                    'nombre_del_paciente', 'Paciente'
-                )
-                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
-                
-                doc_info = docs_generator.create_medical_note(
-                    structured_data,
-                    title=doc_title
-                )
-                
-                print(f"[Orchestrator] Google Doc created: {doc_info['link']}")
-                
-            except Exception as e:
-                print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
-                print("[Orchestrator] Continuing without document creation")
-                doc_info = {
-                    'error': 'Failed to create Google Doc',
-                    'details': str(e)
-                }
-        
-        # Step 6: Prepare response
+        # Step 5: Prepare pending_review response
         session_id = f"session_{datetime.now().timestamp()}"
 
         utterances = transcript_result.get('utterances', [])
@@ -245,42 +215,98 @@ def process_audio():
             f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
         ) if utterances else None
 
+        transcript_payload = {
+            'text': transcript_text,
+            'labeled_text': labeled_text,
+            'confidence': transcript_result.get('confidence'),
+            'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
+            'word_count': transcript_result.get('words', 0)
+        }
+
         response = {
             'session_id': session_id,
-            'status': 'success',
-            'timestamp': datetime.now().isoformat(),
-            'transcript': {
-                'text': transcript_text,
-                'labeled_text': labeled_text,
-                'confidence': transcript_result.get('confidence'),
-                'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
-                'word_count': transcript_result.get('words', 0)
-            },
-            'structured_data': structured_data,
-            'document': doc_info
+            'status': 'pending_review',
+            'transcript': transcript_payload,
+            'structured_data': structured_data
         }
-        
-        # Store in session storage (for Alpha - use DB in production)
-        session_storage[session_id] = response
-        
-        print(f"\n{'='*80}")
-        print(f"[Orchestrator] Processing completed successfully!")
-        print(f"[Orchestrator] Session ID: {session_id}")
-        if doc_info and 'link' in doc_info:
-            print(f"[Orchestrator] Document: {doc_info['link']}")
-        print(f"{'='*80}\n")
-        
+
+        # Store session data for the confirm step
+        session_storage[session_id] = {
+            'transcript': transcript_payload,
+            'structured_data': structured_data,
+            'local_timestamp': local_timestamp,
+            'create_doc': create_doc
+        }
+
+        print(f"[Orchestrator] Ready for review. Session: {session_id}")
         return jsonify(response), 200
-        
+
     except Exception as e:
         print(f"\n[Orchestrator] CRITICAL ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        
-        return jsonify({
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+
+@app.route('/api/confirm-and-generate', methods=['POST'])
+def confirm_and_generate():
+    """
+    Receives doctor-reviewed structured_data, creates Google Doc, returns final response.
+    Expected JSON: { "session_id": "...", "structured_data": {...}, "create_doc": true }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        session_id = data.get('session_id')
+        structured_data = data.get('structured_data', {})
+        create_doc = data.get('create_doc', True)
+
+        if not session_id or session_id not in session_storage:
+            return jsonify({'error': 'Session not found'}), 404
+
+        session = session_storage[session_id]
+        local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        doc_info = None
+        if create_doc:
+            print("\n[Orchestrator] PHASE C: Google Docs Generation")
+            print("-" * 80)
+            try:
+                docs_generator = GoogleDocsGenerator()
+                patient_name = structured_data.get('informacion_paciente', {}).get(
+                    'nombre_del_paciente', 'Paciente'
+                )
+                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
+                doc_info = docs_generator.create_medical_note(structured_data, title=doc_title)
+                print(f"[Orchestrator] Google Doc created: {doc_info['link']}")
+            except Exception as e:
+                print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
+                doc_info = {'error': 'Failed to create Google Doc', 'details': str(e)}
+
+        # Update session with confirmed data
+        session_storage[session_id]['structured_data'] = structured_data
+        session_storage[session_id]['document'] = doc_info
+        session_storage[session_id]['status'] = 'confirmed'
+
+        response = {
+            'session_id': session_id,
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'transcript': session.get('transcript'),
+            'structured_data': structured_data,
+            'document': doc_info
+        }
+
+        print(f"[Orchestrator] Confirmation complete. Session: {session_id}")
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"\n[Orchestrator] CRITICAL ERROR in confirm: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
 @app.route('/api/transcribe-only', methods=['POST'])
