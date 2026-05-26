@@ -102,7 +102,7 @@
         },
         "pronostico": {
           "type": "string",
-          "description": "Pronostico del medico sobre la evolucion esperada del paciente"
+          "description": "Pronóstico del médico sobre la evolución esperada del paciente"
         }
       }
     },
