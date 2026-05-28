@@ -377,6 +377,21 @@ body {
     border-color: var(--teal-400);
 }
 
+/* Patient consent — LFPDPPP */
+.consent-label {
+    font-size: 0.97rem;
+    color: var(--text-primary);
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.85rem;
+    margin-top: 0.25rem;
+    line-height: 1.45;
+}
+
+.consent-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
+
 .options-grid select {
     font-size: 0.92rem;
     color: var(--text-secondary);

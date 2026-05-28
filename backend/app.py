@@ -122,6 +122,8 @@ def process_audio():
         speakers_expected = int(request.form.get('speakers_expected', 2))
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
         consultation_timestamp = request.form.get('consultation_timestamp', local_timestamp)
+        consent_given = request.form.get('consent_given', 'false').lower() == 'true'
+        consent_timestamp = request.form.get('consent_timestamp', '')
         
         print(f"\n{'='*80}")
         print(f"[Orchestrator] Starting new processing job")
@@ -235,7 +237,9 @@ def process_audio():
             'transcript': transcript_payload,
             'structured_data': structured_data,
             'local_timestamp': local_timestamp,
-            'create_doc': create_doc
+            'create_doc': create_doc,
+            'consent_given': consent_given,
+            'consent_timestamp': consent_timestamp
         }
 
         print(f"[Orchestrator] Ready for review. Session: {session_id}")

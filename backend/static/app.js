@@ -22,7 +22,9 @@ const state = {
     totalPausedMs: 0,      // cumulative milliseconds spent paused this session
     maxDurationSeconds: 2700, // 45 minutes
     consultationTimestamp: null,
-    pendingResult: null
+    pendingResult: null,
+    consentGiven: false,
+    consentTimestamp: null
 };
 
 // API Configuration
@@ -67,6 +69,7 @@ const elements = {
     jsonData: document.getElementById('jsonData'),
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
     
+    consentCheckbox: document.getElementById('consentCheckbox'),
     reviewSection: document.getElementById('reviewSection'),
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
@@ -85,7 +88,19 @@ function init() {
         elements.recordBtn.disabled = true;
         return;
     }
-    
+
+    // Record button starts disabled until patient consent is given
+    elements.recordBtn.disabled = true;
+
+    // Consent checkbox: gate the Record button
+    elements.consentCheckbox.addEventListener('change', () => {
+        state.consentGiven = elements.consentCheckbox.checked;
+        state.consentTimestamp = state.consentGiven
+            ? new Date().toISOString()
+            : null;
+        elements.recordBtn.disabled = !state.consentGiven;
+    });
+
     // Event listeners
     elements.recordBtn.addEventListener('click', startRecording);
     elements.pauseBtn.addEventListener('click', togglePause);
@@ -389,6 +404,8 @@ async function processAudio() {
         const localTimestamp = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
         formData.append('local_timestamp', localTimestamp);
         formData.append('consultation_timestamp', state.consultationTimestamp || localTimestamp);
+        formData.append('consent_given', state.consentGiven);
+        formData.append('consent_timestamp', state.consentTimestamp || '');
         
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);
@@ -932,6 +949,8 @@ function resetApplication() {
     state.isPaused = false;
     state.pausedAt = null;
     state.totalPausedMs = 0;
+    state.consentGiven = false;
+    state.consentTimestamp = null;
     
     // Reset UI
     elements.audioPlayerContainer.style.display = 'none';
@@ -951,6 +970,10 @@ function resetApplication() {
         </span>
         Pausar`;
     
+    // Reset consent and re-disable Record button
+    elements.consentCheckbox.checked = false;
+    elements.recordBtn.disabled = true;
+
     // Clear file input
     elements.audioFileInput.value = '';
     
