@@ -654,6 +654,93 @@ body {
     animation: fadeUp 0.4s ease both;
 }
 
+/* ── Review two-panel layout ── */
+.review-layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-top: var(--spacing-md);
+}
+
+.review-panel {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    max-height: 80vh;
+}
+
+.review-transcript-panel {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.review-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-sm);
+}
+
+.review-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.review-readonly-badge {
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-muted);
+    border-radius: 99px;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.review-transcript-text {
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.review-speaker-label {
+    color: #7b9cef;
+    font-weight: 600;
+}
+
+.review-form-panel {
+    overflow-y: auto;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sticky confirm/cancel footer inside form panel */
+.review-form-panel .review-actions {
+    position: sticky;
+    bottom: 0;
+    background: #ffffff;
+    z-index: 2;
+    /* border-top and padding already set on .review-actions */
+}
+
+/* Toggle — hidden on desktop, shown on tablet/mobile */
+.review-transcript-toggle {
+    display: none;
+}
+
 .review-notice {
     display: flex;
     align-items: flex-start;
@@ -754,6 +841,78 @@ body {
     .review-actions .btn {
         max-width: 100%;
         width: 100%;
+    }
+}
+
+/* ── Review panel — tablet/mobile stacked layout ── */
+@media (max-width: 900px) {
+    .review-layout {
+        flex-direction: column;
+    }
+
+    .review-panel {
+        max-height: none;
+        overflow-y: visible;
+        width: 100%;
+    }
+
+    /* Transcript panel collapses; toggle button appears */
+    .review-transcript-panel {
+        max-height: 200px;
+        overflow-y: hidden;
+        position: relative;
+    }
+
+    .review-transcript-panel.is-expanded {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .review-transcript-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.82rem;
+        color: #7b9cef;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem 0 0.25rem;
+        margin-top: var(--spacing-xs);
+        font-family: 'Outfit', sans-serif;
+        font-weight: 500;
+    }
+
+    .review-transcript-toggle:hover {
+        opacity: 0.8;
+    }
+
+    .toggle-chevron {
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform 0.2s ease;
+        display: inline-block;
+    }
+
+    .toggle-chevron.rotated {
+        transform: rotate(180deg);
+    }
+
+    /* Form panel not independently scrollable on mobile — page scroll handles it */
+    .review-form-panel {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    /* Unstick the footer on mobile — let it scroll naturally */
+    .review-form-panel .review-actions {
+        position: static;
+    }
+}
+
+@media (max-width: 600px) {
+    .review-transcript-panel {
+        max-height: 150px;
     }
 }
 

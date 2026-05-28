@@ -119,6 +119,23 @@ function init() {
         });
     });
     
+    // Transcript toggle for tablet/mobile
+    const transcriptToggle = document.getElementById('reviewTranscriptToggle');
+    if (transcriptToggle) {
+        transcriptToggle.addEventListener('click', () => {
+            const panel = document.getElementById('reviewTranscriptPanel');
+            const expanded = panel.classList.toggle('is-expanded');
+            transcriptToggle.setAttribute('aria-expanded', String(expanded));
+            const chevron = transcriptToggle.querySelector('.toggle-chevron');
+            if (chevron) chevron.classList.toggle('rotated', expanded);
+            transcriptToggle.childNodes.forEach(n => {
+                if (n.nodeType === Node.TEXT_NODE) {
+                    n.textContent = expanded ? ' Ocultar transcripción' : ' Ver transcripción completa';
+                }
+            });
+        });
+    }
+
     console.log('[ClinIA] Application initialized successfully');
 }
 
@@ -574,6 +591,22 @@ function displayReviewScreen(result) {
     // Metadatos
     setVal('review_medico',             meta.medico);
     setVal('review_fecha_hora_consulta', meta.fecha_hora_consulta);
+
+    // Populate transcript panel
+    const t = result.transcript || {};
+    const transcriptEl = document.getElementById('reviewTranscriptText');
+    if (transcriptEl) {
+        const raw = t.labeled_text || t.text || '';
+        // Escape HTML, then bold [Persona X]: speaker labels in teal
+        const escaped = raw
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        transcriptEl.innerHTML = escaped.replace(
+            /\[([^\]]+)\]:/g,
+            '<strong class="review-speaker-label">[$1]:</strong>'
+        );
+    }
 
     elements.reviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
