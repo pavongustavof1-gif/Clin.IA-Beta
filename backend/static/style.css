@@ -1015,6 +1015,177 @@ body {
     justify-content: center;
 }
 
+/* ── Footer links ── */
+.footer-links {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.footer-sep {
+    margin: 0 0.25rem;
+    opacity: 0.5;
+}
+
+.footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.footer-link:hover {
+    color: #7b9cef;
+}
+
+/* Inline "Ver Aviso de Privacidad" link inside consent label */
+.aviso-inline-link {
+    color: #7b9cef;
+    text-decoration: none;
+    font-size: inherit;
+    white-space: nowrap;
+}
+
+.aviso-inline-link:hover {
+    text-decoration: underline;
+}
+
+/* ── Aviso de Privacidad Modal ── */
+.aviso-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.aviso-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    max-width: 680px;
+    width: 90%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.aviso-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.75rem 2rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.aviso-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.2rem;
+}
+
+.aviso-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.aviso-draft-badge {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: rgba(212, 168, 67, 0.12);
+    color: #7a4f04;
+    border: 1px solid rgba(212, 168, 67, 0.35);
+    border-radius: 99px;
+    padding: 0.2rem 0.65rem;
+    white-space: nowrap;
+    margin-top: 0.15rem;
+}
+
+.aviso-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 1.5rem 2rem;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.aviso-body p {
+    margin-bottom: 0.85rem;
+}
+
+.aviso-section-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7b9cef;
+    margin: 1.5rem 0 0.65rem;
+}
+
+.aviso-section-title:first-child {
+    margin-top: 0;
+}
+
+.aviso-email-link {
+    color: #7b9cef;
+    text-decoration: none;
+}
+
+.aviso-email-link:hover {
+    text-decoration: underline;
+}
+
+.aviso-legal-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.85rem;
+    margin-top: 1.25rem;
+}
+
+.aviso-footer {
+    padding: 1rem 2rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .aviso-card {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .aviso-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.25rem 1.25rem 1rem;
+    }
+
+    .aviso-body {
+        padding: 1rem 1.25rem;
+    }
+
+    .aviso-footer {
+        padding: 0.75rem 1.25rem 1.25rem;
+    }
+}
+
 /* ── Main Content ── */
 .main-content {
     display: flex;

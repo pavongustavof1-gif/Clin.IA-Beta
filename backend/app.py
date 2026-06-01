@@ -509,6 +509,33 @@ def get_session(session_id):
     return jsonify({'error': 'Session not found'}), 404
 
 
+@app.route('/api/session/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """
+    Delete a session record from SQLite.
+    Used when a patient exercises their derecho de cancelación under LFPDPPP.
+    The corresponding Google Doc must be deleted manually by the doctor from their Drive.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM sessions WHERE session_id = ?', (session_id,))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if affected:
+            print(f"[DB] Session {session_id} deleted — patient ARCO request.", flush=True)
+            return jsonify({
+                'status': 'deleted',
+                'session_id': session_id,
+                'note': 'El documento en Google Drive debe ser eliminado manualmente por el Responsable.'
+            }), 200
+        return jsonify({'error': 'Session not found'}), 404
+    except Exception as e:
+        print(f"[DB] Error deleting session {session_id}: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/api/export-json/<session_id>', methods=['GET'])
 def export_json(session_id):
     """Export structured data as downloadable JSON"""

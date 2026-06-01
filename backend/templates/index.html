@@ -273,7 +273,9 @@
                 <div class="options-grid">
                     <label class="checkbox-label consent-label">
                         <input type="checkbox" id="consentCheckbox">
-                        <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP</span>
+                        <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP.
+                            <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a>
+                        </span>
                     </label>
 
                     <label class="checkbox-label">
@@ -586,8 +588,74 @@
                 <svg class="disclaimer-icon" width="14" height="14" aria-hidden="true"><use href="#icon-warning"/></svg>
                 Obtener consentimiento de pacientes en versión Beta
             </p>
+            <p class="footer-links">
+                <a href="#" class="footer-link" onclick="showAvisoModal(); return false;">Aviso de Privacidad</a>
+                <span class="footer-sep"> · </span>
+                <span>clinianotes.com</span>
+            </p>
         </footer>
     </div>
+
+    <!-- Aviso de Privacidad Modal -->
+    <div id="avisoModal" class="aviso-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="avisoModalTitle">
+        <div class="aviso-card">
+
+            <div class="aviso-header">
+                <div>
+                    <h2 id="avisoModalTitle" class="aviso-title">Aviso de Privacidad</h2>
+                    <p class="aviso-subtitle">Clin.IA — Asistente Inteligente de Notas Médicas</p>
+                </div>
+                <span class="aviso-draft-badge">BORRADOR — Pendiente de revisión legal</span>
+            </div>
+
+            <div class="aviso-body">
+
+                <h3 class="aviso-section-title">1. Identidad y domicilio del Responsable</h3>
+                <p>El presente Aviso de Privacidad es emitido por el médico o institución de salud que utiliza la plataforma Clin.IA para la generación de notas clínicas ("el Responsable"). El Responsable es la persona física o moral que contrata el servicio de Clin.IA y en cuyo consultorio o clínica se lleva a cabo la consulta médica. Los datos de identificación del Responsable (nombre completo, cédula profesional, domicilio y correo electrónico de contacto) se encuentran disponibles en el perfil del médico registrado en la plataforma.</p>
+
+                <h3 class="aviso-section-title">2. Datos personales que se recaban</h3>
+                <p><strong>Datos de identificación:</strong> nombre completo, CURP, fecha de nacimiento, edad, sexo, domicilio, teléfono, número de expediente clínico.</p>
+                <p><strong>Datos de salud (datos personales sensibles):</strong> motivo de consulta, síntomas, signos vitales, hallazgos de exploración física, diagnóstico con código CIE-10, pronóstico, tratamiento, medicamentos prescritos, estudios solicitados, antecedentes heredofamiliares y personales patológicos, y cualquier otra información clínica mencionada durante la consulta.</p>
+                <p><strong>Datos de la consulta:</strong> grabación de audio, transcripción de texto, fecha y hora exacta de la consulta con zona horaria del dispositivo.</p>
+                <p><strong>Datos de consentimiento:</strong> registro del consentimiento otorgado por el paciente antes del inicio de la grabación, incluyendo fecha y hora.</p>
+
+                <h3 class="aviso-section-title">3. Finalidades del tratamiento</h3>
+                <p>Los datos personales recabados serán utilizados para: (1) Transcribir el audio de la consulta médica. (2) Extraer y estructurar la información clínica en formato SOAP conforme a NOM-004-SSA3-2012. (3) Generar la nota clínica de evolución y almacenarla en el servicio de almacenamiento en la nube del Responsable. (4) Exportar los datos estructurados en formato JSON para integración con otros sistemas del Responsable.</p>
+                <p>El paciente puede solicitar al Responsable que sus datos no sean tratados para alguna de estas finalidades; sin embargo, dicha oposición podría limitar o imposibilitar la generación automatizada de la nota clínica mediante Clin.IA.</p>
+
+                <h3 class="aviso-section-title">4. Transferencia de datos a terceros</h3>
+                <p><strong>AssemblyAI Inc. (Estados Unidos):</strong> transcripción de audio a texto. El audio y la transcripción son eliminados de sus servidores inmediatamente tras el procesamiento exitoso. AssemblyAI no utiliza los datos para entrenamiento de modelos (opt-out activo).</p>
+                <p><strong>Google LLC (Estados Unidos):</strong> almacenamiento y generación de documentos clínicos en Google Drive y Google Docs, y procesamiento de lenguaje natural mediante Gemini API. Google LLC opera bajo certificaciones ISO 27001 y SOC 2. Los documentos son almacenados en la cuenta de Google Drive del Responsable.</p>
+                <p>La transferencia de datos a proveedores en Estados Unidos se realiza al amparo del artículo 37 de la LFPDPPP, bajo acuerdos contractuales que obligan a dichos proveedores a mantener niveles de protección equivalentes a los establecidos por la ley mexicana.</p>
+
+                <h3 class="aviso-section-title">5. Datos personales sensibles</h3>
+                <p>Los datos de salud recabados constituyen datos personales sensibles en términos del artículo 3, fracción VI de la LFPDPPP. Su tratamiento se realiza con base en el consentimiento expreso del titular y es estrictamente necesario para la prestación del servicio médico.</p>
+
+                <h3 class="aviso-section-title">6. Consentimiento</h3>
+                <p>El consentimiento expreso del paciente es recabado de forma electrónica al inicio de cada consulta, mediante la confirmación del médico Responsable de que el paciente ha sido informado y ha otorgado su autorización verbal para la grabación y procesamiento de la consulta. La fecha y hora del consentimiento quedan registradas automáticamente en el sistema.</p>
+
+                <h3 class="aviso-section-title">7. Derechos ARCO</h3>
+                <p>El titular tiene derecho a Acceder, Rectificar, Cancelar u Oponerse al tratamiento de sus datos personales. Para ejercer estos derechos, el titular deberá presentar una solicitud por escrito al médico Responsable que lo atiende, incluyendo nombre completo y número de expediente. El Responsable tendrá un plazo de 20 días hábiles para dar respuesta.</p>
+                <p>En caso de que el titular ejerza su derecho de cancelación u oposición respecto de una consulta ya procesada, el Responsable procederá a eliminar la nota clínica generada de su sistema de almacenamiento en un plazo no mayor a 20 días hábiles, conservando únicamente el registro del ejercicio del derecho para fines de auditoría conforme a la LFPDPPP.</p>
+
+                <h3 class="aviso-section-title">8. Medidas de seguridad</h3>
+                <p>Transmisión de datos mediante cifrado TLS en tránsito. Acceso a documentos clínicos restringido a la cuenta de Google Drive del Responsable. Eliminación automática del audio y transcripción tras procesamiento. Autenticación de usuario requerida para acceso a la plataforma. Registro de consentimiento con marca de tiempo para auditoría.</p>
+
+                <h3 class="aviso-section-title">9. Cambios al Aviso de Privacidad</h3>
+                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA. <strong>Fecha de última actualización: Mayo 2026.</strong></p>
+
+                <h3 class="aviso-section-title">10. Contacto</h3>
+                <p>Para dudas relacionadas con la plataforma Clin.IA: <a href="mailto:privacidad@clinianotes.com" class="aviso-email-link">privacidad@clinianotes.com</a></p>
+                <p class="aviso-legal-note">Este Aviso de Privacidad ha sido elaborado de conformidad con la Ley Federal de Protección de Datos Personales en Posesión de Particulares (LFPDPPP), su Reglamento, y los Lineamientos del Aviso de Privacidad emitidos por el INAI.</p>
+
+            </div><!-- /aviso-body -->
+
+            <div class="aviso-footer">
+                <button class="btn btn-secondary" type="button" onclick="closeAvisoModal()">Cerrar</button>
+            </div>
+
+        </div><!-- /aviso-card -->
+    </div><!-- /avisoModal -->
     
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

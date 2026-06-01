@@ -1019,6 +1019,29 @@ function sleep(ms) {
 }
 
 // ─────────────────────────────────────────────
+// Aviso de Privacidad modal
+// ─────────────────────────────────────────────
+function showAvisoModal() {
+    document.getElementById('avisoModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAvisoModal() {
+    document.getElementById('avisoModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+// Close on overlay click (but not on card click)
+document.addEventListener('DOMContentLoaded', () => {
+    const overlay = document.getElementById('avisoModal');
+    if (overlay) {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) closeAvisoModal();
+        });
+    }
+});
+
+// ─────────────────────────────────────────────
 // Initialize on page load
 // ─────────────────────────────────────────────
 if (document.readyState === 'loading') {
