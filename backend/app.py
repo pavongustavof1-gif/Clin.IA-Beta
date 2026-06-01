@@ -164,6 +164,7 @@ def process_audio():
                 }), 400
             
             print(f"[Orchestrator] Transcription completed: {len(transcript_text)} characters")
+            print(f"[Orchestrator] Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.", flush=True)
             
         except Exception as e:
             print(f"[Orchestrator] Transcription failed: {str(e)}")
