@@ -377,6 +377,21 @@ body {
     border-color: var(--teal-400);
 }
 
+/* Patient consent — LFPDPPP */
+.consent-label {
+    font-size: 0.97rem;
+    color: var(--text-primary);
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.85rem;
+    margin-top: 0.25rem;
+    line-height: 1.45;
+}
+
+.consent-label input[type="checkbox"] {
+    width: 20px;
+    height: 20px;
+}
+
 .options-grid select {
     font-size: 0.92rem;
     color: var(--text-secondary);
@@ -634,6 +649,273 @@ body {
     font-family: 'DM Mono', monospace;
 }
 
+/* ── Review Section ── */
+.review-section {
+    animation: fadeUp 0.4s ease both;
+}
+
+/* ── Review two-panel layout ── */
+.review-layout {
+    display: flex;
+    gap: 1.5rem;
+    align-items: flex-start;
+    margin-top: var(--spacing-md);
+}
+
+.review-panel {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    max-height: 80vh;
+}
+
+.review-transcript-panel {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+}
+
+.review-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: var(--spacing-sm);
+}
+
+.review-panel-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.85rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.review-readonly-badge {
+    font-size: 0.72rem;
+    font-weight: 500;
+    background: rgba(148, 163, 184, 0.15);
+    color: var(--text-muted);
+    border-radius: 99px;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.review-transcript-text {
+    font-size: 0.88rem;
+    line-height: 1.7;
+    color: var(--text-secondary);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.review-speaker-label {
+    color: #7b9cef;
+    font-weight: 600;
+}
+
+.review-form-panel {
+    overflow-y: auto;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Sticky confirm/cancel footer inside form panel */
+.review-form-panel .review-actions {
+    position: sticky;
+    bottom: 0;
+    background: #ffffff;
+    z-index: 2;
+    /* border-top and padding already set on .review-actions */
+}
+
+/* Toggle — hidden on desktop, shown on tablet/mobile */
+.review-transcript-toggle {
+    display: none;
+}
+
+.review-notice {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    background: rgba(212, 168, 67, 0.1);
+    border: 1px solid rgba(212, 168, 67, 0.35);
+    border-radius: var(--radius-md);
+    padding: var(--spacing-md);
+    margin-bottom: var(--spacing-lg);
+    color: #7a4f04;
+    font-size: 0.9rem;
+    font-weight: 500;
+    line-height: 1.55;
+}
+
+.review-notice-icon {
+    flex-shrink: 0;
+    margin-top: 2px;
+    color: #d4a843;
+}
+
+.review-group {
+    margin-bottom: var(--spacing-lg);
+    padding-bottom: var(--spacing-md);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.review-group:last-of-type {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.review-group-title {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 600;
+    font-size: 0.8rem;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-md);
+}
+
+.review-field {
+    margin-bottom: var(--spacing-sm);
+}
+
+.review-label {
+    display: block;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.review-hint {
+    font-weight: 400;
+    color: var(--text-muted);
+    font-size: 0.8rem;
+}
+
+.review-input,
+.review-textarea {
+    width: 100%;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.92rem;
+    padding: 0.55rem 0.85rem;
+    line-height: 1.5;
+    transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+    box-shadow: inset 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.review-textarea {
+    resize: vertical;
+    min-height: 72px;
+}
+
+.review-input:focus,
+.review-textarea:focus {
+    outline: none;
+    border-color: #7b9cef;
+    box-shadow: 0 0 0 3px rgba(123,156,239,0.15), inset 0 1px 2px rgba(0,0,0,0.03);
+}
+
+.review-actions {
+    display: flex;
+    gap: var(--spacing-sm);
+    flex-wrap: wrap;
+    margin-top: var(--spacing-lg);
+    padding-top: var(--spacing-md);
+    border-top: 1px solid var(--border-color);
+}
+
+@media (max-width: 600px) {
+    .review-actions .btn {
+        max-width: 100%;
+        width: 100%;
+    }
+}
+
+/* ── Review panel — tablet/mobile stacked layout ── */
+@media (max-width: 900px) {
+    .review-layout {
+        flex-direction: column;
+    }
+
+    .review-panel {
+        max-height: none;
+        overflow-y: visible;
+        width: 100%;
+    }
+
+    /* Transcript panel collapses; toggle button appears */
+    .review-transcript-panel {
+        max-height: 200px;
+        overflow-y: hidden;
+        position: relative;
+    }
+
+    .review-transcript-panel.is-expanded {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    .review-transcript-toggle {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.82rem;
+        color: #7b9cef;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 0.5rem 0 0.25rem;
+        margin-top: var(--spacing-xs);
+        font-family: 'Outfit', sans-serif;
+        font-weight: 500;
+    }
+
+    .review-transcript-toggle:hover {
+        opacity: 0.8;
+    }
+
+    .toggle-chevron {
+        font-size: 1rem;
+        line-height: 1;
+        transition: transform 0.2s ease;
+        display: inline-block;
+    }
+
+    .toggle-chevron.rotated {
+        transform: rotate(180deg);
+    }
+
+    /* Form panel not independently scrollable on mobile — page scroll handles it */
+    .review-form-panel {
+        max-height: none;
+        overflow-y: visible;
+    }
+
+    /* Unstick the footer on mobile — let it scroll naturally */
+    .review-form-panel .review-actions {
+        position: static;
+    }
+}
+
+@media (max-width: 600px) {
+    .review-transcript-panel {
+        max-height: 150px;
+    }
+}
+
 /* ── Footer ── */
 .footer {
     text-align: center;
@@ -731,6 +1013,177 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+}
+
+/* ── Footer links ── */
+.footer-links {
+    margin-top: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--text-muted);
+}
+
+.footer-sep {
+    margin: 0 0.25rem;
+    opacity: 0.5;
+}
+
+.footer-link {
+    color: var(--text-muted);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.footer-link:hover {
+    color: #7b9cef;
+}
+
+/* Inline "Ver Aviso de Privacidad" link inside consent label */
+.aviso-inline-link {
+    color: #7b9cef;
+    text-decoration: none;
+    font-size: inherit;
+    white-space: nowrap;
+}
+
+.aviso-inline-link:hover {
+    text-decoration: underline;
+}
+
+/* ── Aviso de Privacidad Modal ── */
+.aviso-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 1rem;
+}
+
+.aviso-card {
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    max-width: 680px;
+    width: 90%;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+}
+
+.aviso-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 1.75rem 2rem 1.25rem;
+    border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0;
+}
+
+.aviso-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 0.2rem;
+}
+
+.aviso-subtitle {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.aviso-draft-badge {
+    flex-shrink: 0;
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    background: rgba(212, 168, 67, 0.12);
+    color: #7a4f04;
+    border: 1px solid rgba(212, 168, 67, 0.35);
+    border-radius: 99px;
+    padding: 0.2rem 0.65rem;
+    white-space: nowrap;
+    margin-top: 0.15rem;
+}
+
+.aviso-body {
+    overflow-y: auto;
+    flex: 1;
+    padding: 1.5rem 2rem;
+    line-height: 1.65;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.aviso-body p {
+    margin-bottom: 0.85rem;
+}
+
+.aviso-section-title {
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.82rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #7b9cef;
+    margin: 1.5rem 0 0.65rem;
+}
+
+.aviso-section-title:first-child {
+    margin-top: 0;
+}
+
+.aviso-email-link {
+    color: #7b9cef;
+    text-decoration: none;
+}
+
+.aviso-email-link:hover {
+    text-decoration: underline;
+}
+
+.aviso-legal-note {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    font-style: italic;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.85rem;
+    margin-top: 1.25rem;
+}
+
+.aviso-footer {
+    padding: 1rem 2rem 1.5rem;
+    border-top: 1px solid var(--border-color);
+    flex-shrink: 0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+/* Mobile adjustments */
+@media (max-width: 600px) {
+    .aviso-card {
+        width: 95%;
+        max-height: 90vh;
+    }
+
+    .aviso-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        padding: 1.25rem 1.25rem 1rem;
+    }
+
+    .aviso-body {
+        padding: 1rem 1.25rem;
+    }
+
+    .aviso-footer {
+        padding: 0.75rem 1.25rem 1.25rem;
+    }
 }
 
 /* ── Main Content ── */

@@ -99,6 +99,10 @@
         "impresion_clinica": {
           "type": "string",
           "description": "Clinical impression"
+        },
+        "pronostico": {
+          "type": "string",
+          "description": "Pronóstico del médico sobre la evolución esperada del paciente"
         }
       }
     },
@@ -157,6 +161,24 @@
         "duracion_consulta": {
           "type": "string",
           "description": "Duration of consultation"
+        },
+        "fecha_hora_consulta": {
+          "type": "string",
+          "description": "Exact date and time the consultation was recorded, injected from client device"
+        }
+      }
+    },
+    "actualizacion_antecedentes": {
+      "type": "object",
+      "description": "Detects new hereditary, family, or personal medical history mentioned during the consultation",
+      "properties": {
+        "detectado": {
+          "type": "boolean",
+          "description": "True if new background information was mentioned"
+        },
+        "contenido": {
+          "type": "string",
+          "description": "Description of the new antecedent mentioned, if detected"
         }
       }
     }

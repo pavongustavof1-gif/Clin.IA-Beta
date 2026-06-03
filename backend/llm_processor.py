@@ -62,7 +62,7 @@ Tu tarea es analizar la siguiente transcripción de una consulta médica en espa
 INSTRUCCIONES CRÍTICAS:
 1. Debes extraer ÚNICAMENTE información que esté explícitamente mencionada en la transcripción
 2. Si cierta información no está presente, omite ese campo (no inventes datos)
-3. Mantén los términos médicos exactamente como aparecen en la transcripción, asegurando la congruencia de genero entre artículos y artículos indefinidos con el sustantivo que le sigue
+3. Mantén los términos médicos exactamente como aparecen en la transcripción, asegurando la congruencia de género entre artículos y artículos indefinidos con el sustantivo que le sigue
 4. Organiza la información según el formato SOAP
 5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento{speaker_instruction}
 
@@ -99,7 +99,8 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
   "evaluacion": {{
     "diagnostico": "string - diagnóstico principal",
     "diagnosticos_adicionales": ["otros diagnósticos o diagnósticos diferenciales"],
-    "impresion_clinica": "string - impresión general del médico"
+    "impresion_clinica": "string - impresión general del médico",
+    "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)"
   }},
   "plan": {{
     "tratamiento": "string - plan de tratamiento general",
@@ -119,6 +120,10 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
     "fecha_consulta": "string (si se menciona)",
     "medico": "string (si se menciona)",
     "duracion_consulta": "string (si se puede determinar)"
+  }},
+  "actualizacion_antecedentes": {{
+    "detectado": "true o false - detecta si el paciente menciona antecedentes hereditarios, familiares o personales nuevos no capturados previamente (por ejemplo, un diagnóstico reciente de un familiar)",
+    "contenido": "string - descripción del antecedente nuevo mencionado (omitir si detectado es false)"
   }}
 }}
 

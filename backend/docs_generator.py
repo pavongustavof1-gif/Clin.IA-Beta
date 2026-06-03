@@ -173,7 +173,17 @@ class GoogleDocsGenerator:
         
         add_text("Signos Vitales: ", bold=True, newline=False)
         v = obj.get('signos_vitales', {})
-        vitales_str = ", ".join([f"{k.replace('_',' ').title()}: {val}" for k, val in v.items()])
+        _vitales_labels = {
+            'presion_arterial':      'Presión Arterial',
+            'frecuencia_cardiaca':   'Frecuencia Cardíaca',
+            'temperatura':           'Temperatura',
+            'frecuencia_respiratoria': 'Frecuencia Respiratoria',
+            'saturacion_oxigeno':    'Saturación de Oxígeno',
+        }
+        vitales_str = ", ".join([
+            f"{_vitales_labels.get(k, k.replace('_', ' ').title())}: {val}"
+            for k, val in v.items()
+        ])
         add_text(vitales_str if vitales_str else "No registrados", bold=False)
 
         add_text("Examen Físico: ", bold=True)
@@ -193,7 +203,11 @@ class GoogleDocsGenerator:
         
         add_text("Impresión Clínica: ", bold=True, newline=False)
         add_text(ev.get('impresion_clinica', ''), bold=False)
-        
+
+        if ev.get('pronostico'):
+            add_text("Pronóstico: ", bold=True, newline=False)
+            add_text(ev.get('pronostico', ''), bold=False)
+
         add_text("")
 
         # --- 5. PLAN (P) ---

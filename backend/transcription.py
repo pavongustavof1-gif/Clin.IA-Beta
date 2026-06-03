@@ -63,7 +63,8 @@ class TranscriptionService:
                 "confidence": transcript.confidence,
                 "audio_duration": transcript.audio_duration,
                 "words": len(transcript.words) if transcript.words else 0,
-                "utterances": []
+                "utterances": [],
+                "transcript_id": transcript.id
             }
             
             # Add speaker-separated utterances if available
@@ -100,8 +101,20 @@ class TranscriptionService:
                     print("-"*80)
                 print("="*80 + "\n")
             
+            # LFPDPPP compliance: delete transcript from AssemblyAI servers immediately.
+            # Patient audio data must not be retained on third-party servers beyond
+            # what is strictly necessary for processing.
+            # Note: transcribe_from_bytes() calls this method, so deletion is
+            # covered for all callers — no separate handling needed there.
+            try:
+                aai.Transcript.delete_by_id(transcript.id)
+                print(f"[AssemblyAI] Transcript {transcript.id} deleted from servers.", flush=True)
+            except Exception as del_err:
+                print(f"[AssemblyAI] Warning: Could not delete transcript {transcript.id}: {str(del_err)}", flush=True)
+                # Do NOT raise — deletion failure must never block the pipeline
+
             return result
-            
+
         except Exception as e:
             print(f"[AssemblyAI] Error during transcription: {str(e)}")
             raise

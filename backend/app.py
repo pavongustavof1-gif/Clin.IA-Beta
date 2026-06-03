@@ -10,6 +10,7 @@ from docs_generator import GoogleDocsGenerator
 import os
 import tempfile
 import json
+import sqlite3
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
@@ -80,8 +81,108 @@ transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
 # docs_generator = GoogleDocsGenerator() <-- Gemini says no good
 
-# Temporary storage for Alpha version (in production, use database)
-session_storage = {}
+# ── SQLite session persistence ──────────────────────────────────────────────
+
+DB_PATH = 'clinia_sessions.db'
+
+def init_db():
+    """Initialize SQLite database and create sessions table if not exists."""
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute('''
+        CREATE TABLE IF NOT EXISTS sessions (
+            session_id         TEXT PRIMARY KEY,
+            timestamp          TEXT NOT NULL,
+            transcript_text    TEXT,
+            transcript_confidence REAL,
+            transcript_duration   REAL,
+            transcript_words      INTEGER,
+            structured_data_json  TEXT,
+            doc_link           TEXT,
+            doc_title          TEXT,
+            consent_given      INTEGER DEFAULT 0,
+            consent_timestamp  TEXT,
+            full_response_json TEXT NOT NULL
+        )
+    ''')
+    conn.commit()
+    conn.close()
+    print("[DB] SQLite session database initialized.", flush=True)
+
+
+def save_session(session_id: str, data: dict):
+    """Persist a session to SQLite. Silently logs on failure — never raises."""
+    try:
+        transcript = data.get('transcript') or {}
+        doc        = data.get('document')  or {}
+        conn   = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT OR REPLACE INTO sessions
+            (session_id, timestamp, transcript_text, transcript_confidence,
+             transcript_duration, transcript_words, structured_data_json,
+             doc_link, doc_title, consent_given, consent_timestamp,
+             full_response_json)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            session_id,
+            data.get('timestamp', datetime.now().isoformat()),
+            transcript.get('text', ''),
+            transcript.get('confidence'),
+            transcript.get('duration_seconds'),
+            transcript.get('word_count'),
+            json.dumps(data.get('structured_data', {}), ensure_ascii=False),
+            doc.get('link'),
+            doc.get('title'),
+            1 if data.get('consent_given') else 0,
+            data.get('consent_timestamp'),
+            json.dumps(data, ensure_ascii=False)
+        ))
+        conn.commit()
+        conn.close()
+        print(f"[DB] Session {session_id} saved.", flush=True)
+    except Exception as e:
+        print(f"[DB] Warning: Could not save session {session_id}: {str(e)}", flush=True)
+
+
+def load_session(session_id: str) -> dict | None:
+    """Retrieve a full session from SQLite. Returns None if not found."""
+    try:
+        conn   = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT full_response_json FROM sessions WHERE session_id = ?',
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return json.loads(row[0]) if row else None
+    except Exception as e:
+        print(f"[DB] Warning: Could not load session {session_id}: {str(e)}", flush=True)
+        return None
+
+
+def load_structured_data(session_id: str) -> dict | None:
+    """Retrieve only structured_data for a session — used by the export endpoint."""
+    try:
+        conn   = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT structured_data_json FROM sessions WHERE session_id = ?',
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        return json.loads(row[0]) if row else None
+    except Exception as e:
+        print(f"[DB] Warning: Could not load structured data for {session_id}: {str(e)}", flush=True)
+        return None
+
+
+# Initialize on startup
+init_db()
+
+# ────────────────────────────────────────────────────────────────────────────
 
 
 @app.route('/')
@@ -106,7 +207,6 @@ def process_audio():
     Expected: multipart/form-data with 'audio' file
     Returns: Complete medical note with Google Docs link
     """
-    docs_generator = GoogleDocsGenerator()  # <--  Pasted here according to Gemini
     try:
         # Step 1: Validate request
         if 'audio' not in request.files:
@@ -122,6 +222,9 @@ def process_audio():
         create_doc = request.form.get('create_doc', 'true').lower() == 'true'
         speakers_expected = int(request.form.get('speakers_expected', 2))
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
+        consultation_timestamp = request.form.get('consultation_timestamp', local_timestamp)
+        consent_given = request.form.get('consent_given', 'false').lower() == 'true'
+        consent_timestamp = request.form.get('consent_timestamp', '')
         
         print(f"\n{'='*80}")
         print(f"[Orchestrator] Starting new processing job")
@@ -162,6 +265,7 @@ def process_audio():
                 }), 400
             
             print(f"[Orchestrator] Transcription completed: {len(transcript_text)} characters")
+            print(f"[Orchestrator] Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.", flush=True)
             
         except Exception as e:
             print(f"[Orchestrator] Transcription failed: {str(e)}")
@@ -192,8 +296,13 @@ def process_audio():
                 print(f"[Orchestrator] Warning: Data validation failed: {error_msg}")
                 # Continue anyway for Alpha version
             
+            # Inject consultation timestamp (NOM-004 compliance)
+            if 'metadata' not in structured_data:
+                structured_data['metadata'] = {}
+            structured_data['metadata']['fecha_hora_consulta'] = consultation_timestamp
+
             print("[Orchestrator] Structured data extraction completed")
-            
+
         except Exception as e:
             print(f"[Orchestrator] LLM processing failed: {str(e)}")
             return jsonify({
@@ -202,36 +311,7 @@ def process_audio():
                 'transcript': transcript_text
             }), 500
         
-        # Step 5: Create Google Doc (if requested)
-        doc_info = None
-        
-        if create_doc:
-            print("\n[Orchestrator] PHASE C: Google Docs Generation")
-            print("-" * 80)
-            
-            try:
-                # Generate document title
-                patient_name = structured_data.get('informacion_paciente', {}).get(
-                    'nombre_del_paciente', 'Paciente'
-                )
-                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
-                
-                doc_info = docs_generator.create_medical_note(
-                    structured_data,
-                    title=doc_title
-                )
-                
-                print(f"[Orchestrator] Google Doc created: {doc_info['link']}")
-                
-            except Exception as e:
-                print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
-                print("[Orchestrator] Continuing without document creation")
-                doc_info = {
-                    'error': 'Failed to create Google Doc',
-                    'details': str(e)
-                }
-        
-        # Step 6: Prepare response
+        # Step 5: Prepare pending_review response
         session_id = f"session_{datetime.now().timestamp()}"
 
         utterances = transcript_result.get('utterances', [])
@@ -239,42 +319,107 @@ def process_audio():
             f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
         ) if utterances else None
 
+        transcript_payload = {
+            'text': transcript_text,
+            'labeled_text': labeled_text,
+            'confidence': transcript_result.get('confidence'),
+            'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
+            'word_count': transcript_result.get('words', 0)
+        }
+
         response = {
             'session_id': session_id,
-            'status': 'success',
-            'timestamp': datetime.now().isoformat(),
-            'transcript': {
-                'text': transcript_text,
-                'labeled_text': labeled_text,
-                'confidence': transcript_result.get('confidence'),
-                'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
-                'word_count': transcript_result.get('words', 0)
-            },
-            'structured_data': structured_data,
-            'document': doc_info
+            'status': 'pending_review',
+            'transcript': transcript_payload,
+            'structured_data': structured_data
         }
-        
-        # Store in session storage (for Alpha - use DB in production)
-        session_storage[session_id] = response
-        
-        print(f"\n{'='*80}")
-        print(f"[Orchestrator] Processing completed successfully!")
-        print(f"[Orchestrator] Session ID: {session_id}")
-        if doc_info and 'link' in doc_info:
-            print(f"[Orchestrator] Document: {doc_info['link']}")
-        print(f"{'='*80}\n")
-        
+
+        # Persist session — store extra fields (local_timestamp, create_doc,
+        # consent) alongside the response so confirm_and_generate can read them.
+        save_session(session_id, {
+            **response,
+            'local_timestamp': local_timestamp,
+            'create_doc': create_doc,
+            'consent_given': consent_given,
+            'consent_timestamp': consent_timestamp
+        })
+
+        print(f"[Orchestrator] Ready for review. Session: {session_id}")
         return jsonify(response), 200
-        
+
     except Exception as e:
         print(f"\n[Orchestrator] CRITICAL ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
-        
-        return jsonify({
-            'error': 'Internal server error',
-            'details': str(e)
-        }), 500
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+
+
+@app.route('/api/confirm-and-generate', methods=['POST'])
+def confirm_and_generate():
+    """
+    Receives doctor-reviewed structured_data, creates Google Doc, returns final response.
+    Expected JSON: { "session_id": "...", "structured_data": {...}, "create_doc": true }
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        session_id = data.get('session_id')
+        structured_data = data.get('structured_data', {})
+        create_doc = data.get('create_doc', True)
+
+        if not session_id:
+            return jsonify({'error': 'Session not found'}), 404
+
+        session = load_session(session_id)
+        if not session:
+            return jsonify({'error': 'Session not found'}), 404
+
+        local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
+
+        doc_info = None
+        if create_doc:
+            print("\n[Orchestrator] PHASE C: Google Docs Generation")
+            print("-" * 80)
+            try:
+                docs_generator = GoogleDocsGenerator()
+                patient_name = structured_data.get('informacion_paciente', {}).get(
+                    'nombre_del_paciente', 'Paciente'
+                )
+                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
+                doc_info = docs_generator.create_medical_note(structured_data, title=doc_title)
+                print(f"[Orchestrator] Google Doc created: {doc_info['link']}")
+            except Exception as e:
+                print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
+                doc_info = {'error': 'Failed to create Google Doc', 'details': str(e)}
+
+        response = {
+            'session_id': session_id,
+            'status': 'success',
+            'timestamp': datetime.now().isoformat(),
+            'transcript': session.get('transcript'),
+            'structured_data': structured_data,
+            'document': doc_info
+        }
+
+        # Persist confirmed session — merge updated fields into stored session data
+        save_session(session_id, {
+            **session,
+            'structured_data': structured_data,
+            'document': doc_info,
+            'status': 'confirmed',
+            'timestamp': response['timestamp']
+        })
+
+        print(f"[Orchestrator] Confirmation complete. Session: {session_id}")
+        return jsonify(response), 200
+
+    except Exception as e:
+        print(f"\n[Orchestrator] CRITICAL ERROR in confirm: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
 
 
 @app.route('/api/transcribe-only', methods=['POST'])
@@ -318,9 +463,10 @@ def transcribe_only():
 @app.route('/api/process-transcript', methods=['POST'])
 def process_transcript():
     """
-    Process a raw transcript (for testing LLM without audio)
-    
+    Process a raw transcript (for testing LLM without audio).
     Expected JSON: {"transcript": "text here"}
+    Note: this endpoint does not create a persistent session — it is a
+    one-shot testing utility and has never written to session storage.
     """
     try:
         data = request.get_json()
@@ -357,20 +503,46 @@ def process_transcript():
 @app.route('/api/session/<session_id>', methods=['GET'])
 def get_session(session_id):
     """Retrieve session data by ID"""
-    if session_id in session_storage:
-        return jsonify(session_storage[session_id]), 200
-    else:
+    session = load_session(session_id)
+    if session:
+        return jsonify(session), 200
+    return jsonify({'error': 'Session not found'}), 404
+
+
+@app.route('/api/session/<session_id>', methods=['DELETE'])
+def delete_session(session_id):
+    """
+    Delete a session record from SQLite.
+    Used when a patient exercises their derecho de cancelación under LFPDPPP.
+    The corresponding Google Doc must be deleted manually by the doctor from their Drive.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM sessions WHERE session_id = ?', (session_id,))
+        affected = cursor.rowcount
+        conn.commit()
+        conn.close()
+        if affected:
+            print(f"[DB] Session {session_id} deleted — patient ARCO request.", flush=True)
+            return jsonify({
+                'status': 'deleted',
+                'session_id': session_id,
+                'note': 'El documento en Google Drive debe ser eliminado manualmente por el Responsable.'
+            }), 200
         return jsonify({'error': 'Session not found'}), 404
+    except Exception as e:
+        print(f"[DB] Error deleting session {session_id}: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/export-json/<session_id>', methods=['GET'])
 def export_json(session_id):
     """Export structured data as downloadable JSON"""
-    if session_id not in session_storage:
+    data = load_structured_data(session_id)
+    if not data:
         return jsonify({'error': 'Session not found'}), 404
-    
-    data = session_storage[session_id]['structured_data']
-    
+
     response = app.response_class(
         response=json.dumps(data, indent=2, ensure_ascii=False),
         mimetype='application/json'

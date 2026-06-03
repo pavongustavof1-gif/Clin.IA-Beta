@@ -20,7 +20,11 @@ const state = {
     isPaused: false,
     pausedAt: null,        // timestamp when the current pause started
     totalPausedMs: 0,      // cumulative milliseconds spent paused this session
-    maxDurationSeconds: 2700 // 45 minutes
+    maxDurationSeconds: 2700, // 45 minutes
+    consultationTimestamp: null,
+    pendingResult: null,
+    consentGiven: false,
+    consentTimestamp: null
 };
 
 // API Configuration
@@ -65,6 +69,8 @@ const elements = {
     jsonData: document.getElementById('jsonData'),
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
     
+    consentCheckbox: document.getElementById('consentCheckbox'),
+    reviewSection: document.getElementById('reviewSection'),
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
     retryBtn: document.getElementById('retryBtn')
@@ -82,7 +88,19 @@ function init() {
         elements.recordBtn.disabled = true;
         return;
     }
-    
+
+    // Record button starts disabled until patient consent is given
+    elements.recordBtn.disabled = true;
+
+    // Consent checkbox: gate the Record button
+    elements.consentCheckbox.addEventListener('change', () => {
+        state.consentGiven = elements.consentCheckbox.checked;
+        state.consentTimestamp = state.consentGiven
+            ? new Date().toISOString()
+            : null;
+        elements.recordBtn.disabled = !state.consentGiven;
+    });
+
     // Event listeners
     elements.recordBtn.addEventListener('click', startRecording);
     elements.pauseBtn.addEventListener('click', togglePause);
@@ -101,6 +119,23 @@ function init() {
         });
     });
     
+    // Transcript toggle for tablet/mobile
+    const transcriptToggle = document.getElementById('reviewTranscriptToggle');
+    if (transcriptToggle) {
+        transcriptToggle.addEventListener('click', () => {
+            const panel = document.getElementById('reviewTranscriptPanel');
+            const expanded = panel.classList.toggle('is-expanded');
+            transcriptToggle.setAttribute('aria-expanded', String(expanded));
+            const chevron = transcriptToggle.querySelector('.toggle-chevron');
+            if (chevron) chevron.classList.toggle('rotated', expanded);
+            transcriptToggle.childNodes.forEach(n => {
+                if (n.nodeType === Node.TEXT_NODE) {
+                    n.textContent = expanded ? ' Ocultar transcripción' : ' Ver transcripción completa';
+                }
+            });
+        });
+    }
+
     console.log('[ClinIA] Application initialized successfully');
 }
 
@@ -139,6 +174,14 @@ async function startRecording() {
         state.mediaRecorder.start(1000); // Collect data every second
         state.isRecording = true;
         state.recordingStartTime = Date.now();
+
+        // Capture consultation timestamp at the exact moment recording begins
+        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        state.consultationTimestamp = new Date().toLocaleString('es-MX', {
+            timeZone: userTimezone,
+            dateStyle: 'short',
+            timeStyle: 'short'
+        });
         
         // Update UI
         elements.recordBtn.disabled = true;
@@ -377,43 +420,41 @@ async function processAudio() {
         const _pad = n => String(n).padStart(2, '0');
         const localTimestamp = `${_now.getFullYear()}-${_pad(_now.getMonth()+1)}-${_pad(_now.getDate())} ${_pad(_now.getHours())}:${_pad(_now.getMinutes())}`;
         formData.append('local_timestamp', localTimestamp);
+        formData.append('consultation_timestamp', state.consultationTimestamp || localTimestamp);
+        formData.append('consent_given', state.consentGiven);
+        formData.append('consent_timestamp', state.consentTimestamp || '');
         
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);
-        
+
         const response = await fetch(`${API_BASE_URL}/api/process-audio`, {
             method: 'POST',
             body: formData
         });
-        
+
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Error en el servidor');
         }
-        
+
         updateProgress(30, 'Transcribiendo audio...', 1);
-        
-        // Wait a bit for visual feedback
         await sleep(1000);
-        
-        updateProgress(60, 'Extrayendo información médica...', 2);
+
+        updateProgress(70, 'Extrayendo información médica...', 2);
         await sleep(1000);
-        
-        updateProgress(90, 'Generando documento...', 3);
-        
+
+        updateProgress(100, 'Listo para revisión.', 2);
+
         // Get results
         const result = await response.json();
-        
         console.log('[ClinIA] Processing completed:', result);
-        
-        updateProgress(100, '¡Completado!', 3);
-        
+
         // Store session
         state.sessionId = result.session_id;
-        
-        // Display results
-        await sleep(500);
-        displayResults(result);
+
+        // Route to review screen
+        await sleep(400);
+        displayReviewScreen(result);
         
     } catch (error) {
         console.error('[ClinIA] Processing error:', error);
@@ -481,6 +522,212 @@ function displayResults(result) {
     
     // Scroll to results
     elements.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ─────────────────────────────────────────────
+// Review screen
+// ─────────────────────────────────────────────
+function displayReviewScreen(result) {
+    state.pendingResult = result;
+
+    elements.progressSection.style.display = 'none';
+    elements.reviewSection.style.display = 'block';
+
+    const sd  = result.structured_data || {};
+    const info    = sd.informacion_paciente || {};
+    const subj    = sd.subjetivo || {};
+    const obj     = sd.objetivo || {};
+    const vitales = obj.signos_vitales || {};
+    const ev      = sd.evaluacion || {};
+    const plan    = sd.plan || {};
+    const meta    = sd.metadata || {};
+
+    function setVal(id, val) {
+        const el = document.getElementById(id);
+        if (el) el.value = (val != null) ? val : '';
+    }
+
+    // Información del paciente
+    setVal('review_nombre_del_paciente', info.nombre_del_paciente);
+    setVal('review_fecha_de_nacimiento', info.fecha_de_nacimiento);
+    setVal('review_edad',               info.edad);
+    setVal('review_genero',             info.genero);
+
+    // Subjetivo
+    setVal('review_motivo_de_consulta',          subj.motivo_de_consulta);
+    setVal('review_sintomas', Array.isArray(subj.sintomas) ? subj.sintomas.join('\n') : (subj.sintomas || ''));
+    setVal('review_historia_de_enfermedad_actual', subj.historia_de_enfermedad_actual);
+    setVal('review_duracion_sintomas',             subj.duracion_sintomas);
+
+    // Objetivo — vitales
+    setVal('review_presion_arterial',       vitales.presion_arterial);
+    setVal('review_frecuencia_cardiaca',    vitales.frecuencia_cardiaca);
+    setVal('review_temperatura',            vitales.temperatura);
+    setVal('review_frecuencia_respiratoria',vitales.frecuencia_respiratoria);
+    setVal('review_saturacion_oxigeno',     vitales.saturacion_oxigeno);
+    setVal('review_examen_fisico',          obj.examen_fisico);
+
+    // Evaluación
+    setVal('review_diagnostico',      ev.diagnostico);
+    setVal('review_impresion_clinica', ev.impresion_clinica);
+    setVal('review_pronostico',        ev.pronostico);
+
+    // Plan
+    setVal('review_tratamiento', plan.tratamiento);
+
+    const meds = Array.isArray(plan.medicamentos) ? plan.medicamentos : [];
+    setVal('review_medicamentos', meds.map(m =>
+        typeof m === 'object'
+            ? [m.nombre, m.dosis, m.frecuencia, m.duracion].filter(Boolean).join(' - ')
+            : String(m)
+    ).join('\n'));
+
+    setVal('review_recomendaciones',
+        Array.isArray(plan.recomendaciones) ? plan.recomendaciones.join('\n') : (plan.recomendaciones || ''));
+    setVal('review_estudios_solicitados',
+        Array.isArray(plan.estudios_solicitados) ? plan.estudios_solicitados.join('\n') : (plan.estudios_solicitados || ''));
+    setVal('review_seguimiento', plan.seguimiento);
+
+    // Metadatos
+    setVal('review_medico',             meta.medico);
+    setVal('review_fecha_hora_consulta', meta.fecha_hora_consulta);
+
+    // Populate transcript panel
+    const t = result.transcript || {};
+    const transcriptEl = document.getElementById('reviewTranscriptText');
+    if (transcriptEl) {
+        const raw = t.labeled_text || t.text || '';
+        // Escape HTML, then bold [Persona X]: speaker labels in teal
+        const escaped = raw
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+        transcriptEl.innerHTML = escaped.replace(
+            /\[([^\]]+)\]:/g,
+            '<strong class="review-speaker-label">[$1]:</strong>'
+        );
+    }
+
+    elements.reviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function buildStructuredDataFromForm() {
+    function getVal(id) {
+        const el = document.getElementById(id);
+        return el ? el.value.trim() : '';
+    }
+    function parseLines(id) {
+        return getVal(id).split('\n').map(s => s.trim()).filter(Boolean);
+    }
+
+    const sd = {};
+
+    // informacion_paciente
+    const info = {};
+    if (getVal('review_nombre_del_paciente'))  info.nombre_del_paciente  = getVal('review_nombre_del_paciente');
+    if (getVal('review_fecha_de_nacimiento'))  info.fecha_de_nacimiento  = getVal('review_fecha_de_nacimiento');
+    if (getVal('review_edad'))                 info.edad                 = getVal('review_edad');
+    if (getVal('review_genero'))               info.genero               = getVal('review_genero');
+    if (Object.keys(info).length) sd.informacion_paciente = info;
+
+    // subjetivo
+    const subj = {};
+    if (getVal('review_motivo_de_consulta'))           subj.motivo_de_consulta           = getVal('review_motivo_de_consulta');
+    const sintomas = getVal('review_sintomas').split(/[\n,]/).map(s => s.trim()).filter(Boolean);
+    if (sintomas.length)                               subj.sintomas                     = sintomas;
+    if (getVal('review_historia_de_enfermedad_actual')) subj.historia_de_enfermedad_actual = getVal('review_historia_de_enfermedad_actual');
+    if (getVal('review_duracion_sintomas'))             subj.duracion_sintomas             = getVal('review_duracion_sintomas');
+    if (Object.keys(subj).length) sd.subjetivo = subj;
+
+    // objetivo
+    const obj = {};
+    const vitales = {};
+    if (getVal('review_presion_arterial'))        vitales.presion_arterial        = getVal('review_presion_arterial');
+    if (getVal('review_frecuencia_cardiaca'))     vitales.frecuencia_cardiaca     = getVal('review_frecuencia_cardiaca');
+    if (getVal('review_temperatura'))             vitales.temperatura             = getVal('review_temperatura');
+    if (getVal('review_frecuencia_respiratoria')) vitales.frecuencia_respiratoria = getVal('review_frecuencia_respiratoria');
+    if (getVal('review_saturacion_oxigeno'))      vitales.saturacion_oxigeno      = getVal('review_saturacion_oxigeno');
+    if (Object.keys(vitales).length) obj.signos_vitales = vitales;
+    if (getVal('review_examen_fisico')) obj.examen_fisico = getVal('review_examen_fisico');
+    if (Object.keys(obj).length) sd.objetivo = obj;
+
+    // evaluacion
+    const ev = {};
+    if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
+    if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
+    if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
+    if (Object.keys(ev).length) sd.evaluacion = ev;
+
+    // plan
+    const plan = {};
+    if (getVal('review_tratamiento')) plan.tratamiento = getVal('review_tratamiento');
+    const meds = parseLines('review_medicamentos').map(line => {
+        const parts = line.split('-').map(s => s.trim());
+        return { nombre: parts[0] || '', dosis: parts[1] || '', frecuencia: parts[2] || '', duracion: parts[3] || '' };
+    }).filter(m => m.nombre);
+    if (meds.length) plan.medicamentos = meds;
+    const recomendaciones = parseLines('review_recomendaciones');
+    if (recomendaciones.length) plan.recomendaciones = recomendaciones;
+    const estudios = parseLines('review_estudios_solicitados');
+    if (estudios.length) plan.estudios_solicitados = estudios;
+    if (getVal('review_seguimiento')) plan.seguimiento = getVal('review_seguimiento');
+    if (Object.keys(plan).length) sd.plan = plan;
+
+    // metadata
+    const meta = {};
+    if (getVal('review_medico'))              meta.medico              = getVal('review_medico');
+    if (getVal('review_fecha_hora_consulta')) meta.fecha_hora_consulta = getVal('review_fecha_hora_consulta');
+    if (Object.keys(meta).length) sd.metadata = meta;
+
+    return sd;
+}
+
+async function confirmAndGenerate() {
+    const sd = buildStructuredDataFromForm();
+
+    // Preserve actualizacion_antecedentes (background field — no form input)
+    const antecedentes = state.pendingResult?.structured_data?.actualizacion_antecedentes;
+    if (antecedentes) sd.actualizacion_antecedentes = antecedentes;
+
+    elements.reviewSection.style.display = 'none';
+    elements.progressSection.style.display = 'block';
+    updateProgress(10, 'Generando documento...', 3);
+
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/confirm-and-generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: state.pendingResult.session_id,
+                structured_data: sd,
+                create_doc: elements.createGoogleDoc.checked
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Error al generar el documento');
+        }
+
+        updateProgress(100, '¡Completado!', 3);
+        const result = await response.json();
+
+        await sleep(500);
+        displayResults(result);
+
+    } catch (error) {
+        console.error('[ClinIA] Confirm error:', error);
+        showError(`Error al generar el documento: ${error.message}`);
+        elements.progressSection.style.display = 'none';
+        elements.reviewSection.style.display = 'block';
+    }
+}
+
+function cancelReview() {
+    state.pendingResult = null;
+    elements.reviewSection.style.display = 'none';
+    elements.processBtn.disabled = false;
+    window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
 function displayStructuredData(data) {
@@ -735,6 +982,8 @@ function resetApplication() {
     state.isPaused = false;
     state.pausedAt = null;
     state.totalPausedMs = 0;
+    state.consentGiven = false;
+    state.consentTimestamp = null;
     
     // Reset UI
     elements.audioPlayerContainer.style.display = 'none';
@@ -754,6 +1003,10 @@ function resetApplication() {
         </span>
         Pausar`;
     
+    // Reset consent and re-disable Record button
+    elements.consentCheckbox.checked = false;
+    elements.recordBtn.disabled = true;
+
     // Clear file input
     elements.audioFileInput.value = '';
     
@@ -764,6 +1017,29 @@ function resetApplication() {
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// ─────────────────────────────────────────────
+// Aviso de Privacidad modal
+// ─────────────────────────────────────────────
+function showAvisoModal() {
+    document.getElementById('avisoModal').style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+}
+
+function closeAvisoModal() {
+    document.getElementById('avisoModal').style.display = 'none';
+    document.body.style.overflow = '';
+}
+
+// Close on overlay click (but not on card click)
+document.addEventListener('DOMContentLoaded', () => {
+    const overlay = document.getElementById('avisoModal');
+    if (overlay) {
+        overlay.addEventListener('click', function(e) {
+            if (e.target === this) closeAvisoModal();
+        });
+    }
+});
 
 // ─────────────────────────────────────────────
 // Initialize on page load
