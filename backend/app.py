@@ -6,6 +6,7 @@ from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
 from docs_generator import GoogleDocsGenerator
+from pdf_generator import PDFGenerator
 #  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
@@ -79,6 +80,7 @@ except ValueError as e:
 # Initialize services
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
+pdf_generator = PDFGenerator()
 # docs_generator = GoogleDocsGenerator() <-- Gemini says no good
 
 # ── SQLite session persistence ──────────────────────────────────────────────
@@ -177,6 +179,27 @@ def load_structured_data(session_id: str) -> dict | None:
     except Exception as e:
         print(f"[DB] Warning: Could not load structured data for {session_id}: {str(e)}", flush=True)
         return None
+
+
+def save_pdf_to_session(session_id: str, pdf_bytes: bytes):
+    """Store PDF bytes in the sessions table (adds the column if not yet present)."""
+    try:
+        conn   = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        # Migrate existing databases gracefully — ignore if column already exists
+        try:
+            cursor.execute('ALTER TABLE sessions ADD COLUMN pdf_data BLOB')
+        except sqlite3.OperationalError:
+            pass
+        cursor.execute(
+            'UPDATE sessions SET pdf_data = ? WHERE session_id = ?',
+            (pdf_bytes, session_id)
+        )
+        conn.commit()
+        conn.close()
+        print(f"[PDF] Stored in session {session_id}", flush=True)
+    except Exception as e:
+        print(f"[PDF] Warning: could not store PDF: {str(e)}", flush=True)
 
 
 # Initialize on startup
@@ -368,6 +391,7 @@ def confirm_and_generate():
         session_id = data.get('session_id')
         structured_data = data.get('structured_data', {})
         create_doc = data.get('create_doc', True)
+        create_pdf = data.get('create_pdf', False)
 
         if not session_id:
             return jsonify({'error': 'Session not found'}), 404
@@ -394,13 +418,29 @@ def confirm_and_generate():
                 print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
                 doc_info = {'error': 'Failed to create Google Doc', 'details': str(e)}
 
+        # PDF generation (if requested) — runs independently of Google Docs
+        pdf_bytes = None
+        if create_pdf:
+            print("\n[Orchestrator] PHASE C2: PDF Generation")
+            print("-" * 80)
+            try:
+                pdf_bytes = pdf_generator.generate_pdf(structured_data)
+                print(f"[PDF] Generated successfully — {len(pdf_bytes)} bytes", flush=True)
+            except Exception as e:
+                print(f"[PDF] Warning: generation failed: {str(e)}", flush=True)
+                # Never raise — PDF failure must not block the pipeline
+
+        if pdf_bytes:
+            save_pdf_to_session(session_id, pdf_bytes)
+
         response = {
             'session_id': session_id,
             'status': 'success',
             'timestamp': datetime.now().isoformat(),
             'transcript': session.get('transcript'),
             'structured_data': structured_data,
-            'document': doc_info
+            'document': doc_info,
+            'pdf_available': pdf_bytes is not None
         }
 
         # Persist confirmed session — merge updated fields into stored session data
@@ -550,6 +590,54 @@ def export_json(session_id):
     response.headers['Content-Disposition'] = f'attachment; filename=clinia_{session_id}.json'
     
     return response
+
+
+@app.route('/api/download-pdf/<session_id>', methods=['GET'])
+def download_pdf(session_id):
+    """
+    Returns the generated PDF as a downloadable file attachment.
+    Used when a doctor clicks 'Descargar PDF' in the results screen.
+    """
+    try:
+        conn   = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT pdf_data FROM sessions WHERE session_id = ?',
+            (session_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+
+        if not row or not row[0]:
+            return jsonify({'error': 'PDF no disponible para esta sesión'}), 404
+
+        pdf_bytes = row[0]
+
+        # Build filename from patient name + date
+        session = load_session(session_id)
+        patient_name = 'Paciente'
+        if session:
+            patient_name = (session
+                .get('structured_data', {})
+                .get('informacion_paciente', {})
+                .get('nombre_del_paciente', 'Paciente'))
+        safe_name = ''.join(
+            c for c in patient_name if c.isalnum() or c in (' ', '-')
+        ).strip().replace(' ', '_')[:30]
+        date_str  = datetime.now().strftime('%Y%m%d')
+        filename  = f"ClinIA_{safe_name}_{date_str}.pdf"
+
+        response = app.response_class(
+            response=pdf_bytes,
+            mimetype='application/pdf'
+        )
+        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        response.headers['Content-Length'] = len(pdf_bytes)
+        return response
+
+    except Exception as e:
+        print(f"[PDF] Download error: {str(e)}", flush=True)
+        return jsonify({'error': str(e)}), 500
 
 
 # Error handlers
