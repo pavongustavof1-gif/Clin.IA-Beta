@@ -430,9 +430,6 @@ def confirm_and_generate():
                 print(f"[PDF] Warning: generation failed: {str(e)}", flush=True)
                 # Never raise — PDF failure must not block the pipeline
 
-        if pdf_bytes:
-            save_pdf_to_session(session_id, pdf_bytes)
-
         response = {
             'session_id': session_id,
             'status': 'success',
@@ -443,7 +440,8 @@ def confirm_and_generate():
             'pdf_available': pdf_bytes is not None
         }
 
-        # Persist confirmed session — merge updated fields into stored session data
+        # Persist confirmed session first — uses INSERT OR REPLACE which
+        # rewrites the full row, so pdf_data must be written afterwards
         save_session(session_id, {
             **session,
             'structured_data': structured_data,
@@ -451,6 +449,11 @@ def confirm_and_generate():
             'status': 'confirmed',
             'timestamp': response['timestamp']
         })
+
+        # Store PDF bytes AFTER save_session to prevent the INSERT OR REPLACE
+        # from wiping the pdf_data column
+        if pdf_bytes:
+            save_pdf_to_session(session_id, pdf_bytes)
 
         print(f"[Orchestrator] Confirmation complete. Session: {session_id}")
         return jsonify(response), 200

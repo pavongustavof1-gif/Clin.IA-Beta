@@ -402,6 +402,36 @@ body {
     cursor: pointer;
 }
 
+.speakers-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 0.5rem 0.75rem;
+}
+
+.speakers-label {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.speakers-select {
+    font-size: 0.92rem;
+    color: var(--text-secondary);
+    background: transparent;
+    border: 1px solid var(--border-hover);
+    border-radius: var(--radius-sm);
+    padding: 0.15rem 0.4rem;
+    cursor: pointer;
+    flex: 1;
+    max-width: 260px;
+}
+
+.speakers-select:focus {
+    outline: none;
+    border-color: #7b9cef;
+}
+
 .checkbox-label input[type="checkbox"]:checked::after {
     content: '✓';
     position: absolute;
