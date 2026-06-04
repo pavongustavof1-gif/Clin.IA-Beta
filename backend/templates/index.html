@@ -271,36 +271,47 @@
                     Opciones
                 </h3>
                 <div class="options-grid">
-                    <label class="checkbox-label consent-label">
-                        <input type="checkbox" id="consentCheckbox">
-                        <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP.
-                            <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a>
-                        </span>
-                    </label>
 
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="printRawTranscript" checked>
-                        <span>Mostrar transcripción completa</span>
-                    </label>
+                    <!-- Row 1: 3 columns -->
+                    <div class="options-row-3">
 
-                    <div class="checkbox-label" style="cursor:default;">
-                        <span style="flex-shrink:0;">Personas en la consulta:</span>
-                        <select id="speakersExpected" style="font-size:0.92rem; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:2px 6px; cursor:pointer; margin-left:auto; width:48px;">
-                            <option value="2" selected>2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                        </select>
+                        <label class="checkbox-label consent-label">
+                            <input type="checkbox" id="consentCheckbox">
+                            <span>Consentimiento del paciente
+                                <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso</a>
+                            </span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="printRawTranscript" checked>
+                            <span>Mostrar transcripción completa</span>
+                        </label>
+
+                        <div class="checkbox-label" style="cursor:default; gap:0.5rem;">
+                            <span style="flex-shrink:0; white-space:nowrap;">Personas en consulta:</span>
+                            <select id="speakersExpected" style="font-size:0.88rem; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:2px 4px; cursor:pointer; width:44px;">
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                            </select>
+                        </div>
+
                     </div>
 
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="createGoogleDoc" checked>
-                        <span>Crear documento en Google Docs</span>
-                    </label>
+                    <!-- Row 2: 2 columns, centered -->
+                    <div class="options-row-2">
 
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="createPDF" checked>
-                        <span>Generar nota en PDF</span>
-                    </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="createGoogleDoc" checked>
+                            <span>Crear documento en Google Docs</span>
+                        </label>
+
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="createPDF" checked>
+                            <span>Generar nota en PDF</span>
+                        </label>
+
+                    </div>
 
                 </div>
             </section>

@@ -342,6 +342,31 @@ body {
     gap: var(--spacing-sm);
 }
 
+.options-row-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 0;
+    border-bottom: 1px solid var(--border-color);
+    padding-bottom: var(--spacing-sm);
+}
+
+.options-row-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    padding-left: 25%;
+    padding-right: 25%;
+}
+
+@media (max-width: 600px) {
+    .options-row-3,
+    .options-row-2 {
+        grid-template-columns: 1fr;
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
+
 .checkbox-label {
     display: flex;
     align-items: center;
