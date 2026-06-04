@@ -113,7 +113,12 @@ function init() {
     elements.retryBtn.addEventListener('click', resetApplication);
     elements.downloadJsonBtn.addEventListener('click', downloadJSON);
     elements.downloadPdfBtn.addEventListener('click', () => {
+        if (!state.sessionId) {
+            console.error('[ClinIA] No session ID available for PDF download');
+            return;
+        }
         const url = `${API_BASE_URL}/api/download-pdf/${state.sessionId}`;
+        console.log('[ClinIA] Downloading PDF for session:', state.sessionId);
         const a = document.createElement('a');
         a.href = url;
         a.download = '';
@@ -730,6 +735,11 @@ async function confirmAndGenerate() {
 
         updateProgress(100, '¡Completado!', 3);
         const result = await response.json();
+
+        // Ensure state.sessionId is current before displayResults() shows the PDF button
+        if (result.session_id) {
+            state.sessionId = result.session_id;
+        }
 
         await sleep(500);
         displayResults(result);

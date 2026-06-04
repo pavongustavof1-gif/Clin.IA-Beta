@@ -601,6 +601,15 @@ def download_pdf(session_id):
     try:
         conn   = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
+
+        # Debug logging — reveals session_id mismatches in Render logs
+        print(f"[PDF] Download requested for session: {session_id}", flush=True)
+        cursor.execute(
+            'SELECT session_id, pdf_data IS NOT NULL as has_pdf FROM sessions ORDER BY rowid DESC LIMIT 5'
+        )
+        recent = cursor.fetchall()
+        print(f"[PDF] Recent sessions in DB: {recent}", flush=True)
+
         cursor.execute(
             'SELECT pdf_data FROM sessions WHERE session_id = ?',
             (session_id,)
