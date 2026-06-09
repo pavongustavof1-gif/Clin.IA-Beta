@@ -174,15 +174,17 @@ class GoogleDocsGenerator:
         add_text("Signos Vitales: ", bold=True, newline=False)
         v = obj.get('signos_vitales', {})
         _vitales_labels = {
-            'presion_arterial':      'Presión Arterial',
-            'frecuencia_cardiaca':   'Frecuencia Cardíaca',
-            'temperatura':           'Temperatura',
-            'frecuencia_respiratoria': 'Frecuencia Respiratoria',
-            'saturacion_oxigeno':    'Saturación de Oxígeno',
+            'presion_arterial':        'T/A',
+            'frecuencia_cardiaca':     'FC',
+            'temperatura':             'Temp',
+            'frecuencia_respiratoria': 'FR',
+            'saturacion_oxigeno':      'SpO₂',
+            'peso':                    'Peso',
+            'talla':                   'Talla',
         }
         vitales_str = ", ".join([
             f"{_vitales_labels.get(k, k.replace('_', ' ').title())}: {val}"
-            for k, val in v.items()
+            for k, val in v.items() if val
         ])
         add_text(vitales_str if vitales_str else "No registrados", bold=False)
 
@@ -191,7 +193,11 @@ class GoogleDocsGenerator:
         
         add_text("Hallazgos: ", bold=True)
         add_text(obj.get('hallazgos', ''), bold=False)
-        
+
+        if obj.get('habitus_exterior'):
+            add_text("Habitus Exterior: ", bold=True, newline=False)
+            add_text(obj.get('habitus_exterior', ''), bold=False)
+
         add_text("")
 
         # --- 4. EVALUACIÓN (A) -- Assessment ---

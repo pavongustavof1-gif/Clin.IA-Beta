@@ -1397,3 +1397,13 @@ body {
         height: 20px;
     }
 }
+
+/* ── Consent 2 — NOM-004 treatment consent block on review screen ── */
+.consent-treatment-block {
+    background: #FAEEDA;
+    border: 0.5px solid #F0DCB0;
+    border-left: 3px solid #BA7517;
+    border-radius: 0 var(--radius-md) var(--radius-md) 0;
+    padding: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
