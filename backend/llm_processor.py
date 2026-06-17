@@ -4,6 +4,7 @@
 from google import genai
 from google.genai import types # For configuration
 from config import Config
+from logger import logger
 import json
 import os
 import time
@@ -160,9 +161,9 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         """
         Extract structured medical data from transcript using Gemini
         """
-        print(f"[LLM] Processing with {self.model_id}...", flush=True)
+        logger.info(f"LLM: Processing with {self.model_id}...")
         if utterances:
-            print(f"[LLM] Using {len(utterances)} speaker-labeled utterances", flush=True)
+            logger.info(f"LLM: Using {len(utterances)} speaker-labeled utterances")
         prompt = self.create_extraction_prompt(transcript, utterances, role_map)
         
         last_error = "Unknown error"
@@ -181,41 +182,41 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                 if not response.text:
                     raise ValueError("Empty response from Google API")
                     
-                print(f"[LLM] Raw response received. Length: {len(response.text)}", flush=True)
-                
+                logger.debug(f"LLM: Raw response received. Length: {len(response.text)}")
+
                 # Clean the text JUST IN CASE Gemini added markdown backticks
                 cleaned_text = self._clean_json_response(response.text)
-                
+
                 structured_data = json.loads(cleaned_text)
-                print("[LLM] Success!", flush=True)
+                logger.info("LLM: Extraction successful.")
                 return structured_data
-                
+
             except Exception as e:
                 last_error = str(e)
                 error_msg = str(e).lower()
-                print(f"[LLM] Attempt {attempt + 1} failed: {last_error}", flush=True)
-                
+                logger.error(f"LLM: Attempt {attempt + 1} failed: {last_error}")
+
                 # Catch rate limits and server timeouts
                 if any(x in error_msg for x in ["429", "504", "deadline", "cancelled", "quota", "503"]):
                     if attempt < max_retries - 1:
                         wait_time = 5 * (attempt + 1)
-                        print(f"[LLM] Server busy. Retrying in {wait_time}s...", flush=True)
+                        logger.warning(f"LLM: Server busy. Retrying in {wait_time}s...")
                         time.sleep(wait_time)
                         continue
-                
+
                 # Catch JSON formatting errors and tell the prompt to be more careful
                 if "json" in error_msg or "expecting value" in error_msg:
                     if attempt < max_retries - 1:
                          prompt += "\n\nNOTA: Asegúrate de devolver SOLO JSON válido, sin texto adicional."
-                         print("[LLM] JSON format error, retrying...", flush=True)
+                         logger.warning("LLM: JSON format error, retrying...")
                          time.sleep(2)
                          continue
-                
+
                 # If it's a completely different error (like a 404), break immediately
                 break
-        
+
         # Fallback: We now include "last_error" so you can see it in the UI/Logs!
-        print(f"[LLM] All attempts failed. Final error: {last_error}", flush=True)
+        logger.error(f"LLM: All attempts failed. Final error: {last_error}")
         return {
             "error": "Processing failed",
             "details": last_error, 
@@ -290,8 +291,4 @@ if __name__ == "__main__":
     processor = LLMProcessor()
     result = processor.extract_structured_data(sample_transcript)
     
-    print("\n" + "="*80)
-    print("EXTRACTED STRUCTURED DATA")
-    print("="*80)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    print("="*80)
+    logger.info("EXTRACTED STRUCTURED DATA:\n" + json.dumps(result, indent=2, ensure_ascii=False))
