@@ -340,9 +340,11 @@ def process_audio():
 
         utterances = transcript_result.get('utterances', [])
         role_map = transcript_result.get('speaker_role_map', {})
+        def _role(u):
+            spk = u['speaker']
+            return role_map.get(spk, 'Hablante ' + spk)
         labeled_text = "\n".join(
-            f"[{role_map.get(u['speaker'], f'Hablante {u[\"speaker\"]}')}]: {u['text']}"
-            for u in utterances
+            f"[{_role(u)}]: {u['text']}" for u in utterances
         ) if utterances else None
 
         transcript_payload = {

@@ -44,9 +44,11 @@ class LLMProcessor:
         """
         if utterances:
             role_map = role_map or {}
+            def _role(u):
+                spk = u['speaker']
+                return role_map.get(spk, 'Hablante ' + spk)
             transcript_content = "\n".join(
-                f"[{role_map.get(u['speaker'], f'Hablante {u[\"speaker\"]}')}]: {u['text']}"
-                for u in utterances
+                f"[{_role(u)}]: {u['text']}" for u in utterances
             )
             speaker_instruction = (
                 "\n6. El transcript está etiquetado con roles clínicos:\n"
