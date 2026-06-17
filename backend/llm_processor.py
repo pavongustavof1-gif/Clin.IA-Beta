@@ -78,7 +78,8 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
     "nombre_del_paciente": "string (si se menciona)",
     "fecha_de_nacimiento": "string en formato DD/MM/YYYY (si se menciona)",
     "edad": "string (si se menciona)",
-    "genero": "string (si se menciona)"
+    "genero": "string (si se menciona)",
+    "numero_expediente": "string - número de expediente si se menciona explícitamente; omitir si no se menciona"
   }},
   "subjetivo": {{
     "motivo_de_consulta": "string - razón principal de la visita",

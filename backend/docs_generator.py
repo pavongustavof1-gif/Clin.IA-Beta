@@ -137,6 +137,10 @@ class GoogleDocsGenerator:
 
         # --- 1. PATIENT SUB-HEADER (Normal weight) ---
         add_text("\n", bold=False)
+        num_exp = info.get('numero_expediente', '')
+        if num_exp:
+            add_text("Expediente: ", bold=True, newline=False)
+            add_text(num_exp, bold=False)
         add_text(f"FECHA: {meta.get('fecha_consulta', '__________')}\t\tEDAD: {info.get('edad', '____')}", bold=False)
         add_text(f"NOMBRE: {info.get('nombre_del_paciente', '____________________')}\t\tFECHA DE NACIMIENTO: {info.get('fecha_de_nacimiento', '__________')}", bold=False)
         add_text(f"ESTADO CIVIL: {info.get('estado_civil', '__________')}\t\tSEXO: {info.get('genero', '__________')}", bold=False)
