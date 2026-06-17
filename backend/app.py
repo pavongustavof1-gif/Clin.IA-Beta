@@ -309,7 +309,8 @@ def process_audio():
         try:
             structured_data = llm_processor.extract_structured_data(
                 transcript_text,
-                utterances=transcript_result.get('utterances', [])
+                utterances=transcript_result.get('utterances', []),
+                role_map=transcript_result.get('speaker_role_map', {})
             )
             
             # Validate extracted data
@@ -338,8 +339,10 @@ def process_audio():
         session_id = f"session_{datetime.now().timestamp()}"
 
         utterances = transcript_result.get('utterances', [])
+        role_map = transcript_result.get('speaker_role_map', {})
         labeled_text = "\n".join(
-            f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
+            f"[{role_map.get(u['speaker'], f'Hablante {u[\"speaker\"]}')}]: {u['text']}"
+            for u in utterances
         ) if utterances else None
 
         transcript_payload = {
@@ -347,7 +350,8 @@ def process_audio():
             'labeled_text': labeled_text,
             'confidence': transcript_result.get('confidence'),
             'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
-            'word_count': transcript_result.get('words', 0)
+            'word_count': transcript_result.get('words', 0),
+            'speaker_role_map': role_map
         }
 
         response = {

@@ -30,26 +30,34 @@ class LLMProcessor:
         with open(schema_path, 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
-    def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
+    def create_extraction_prompt(self, transcript: str, utterances: list = None, role_map: dict = None) -> str:
         """
         Create detailed prompt for Gemini to extract medical information
 
         Args:
             transcript: Raw Spanish transcript from AssemblyAI
             utterances: Optional speaker-labeled utterances from AssemblyAI
+            role_map: Optional dict mapping speaker labels to clinical role names
 
         Returns:
             Formatted prompt for LLM
         """
         if utterances:
+            role_map = role_map or {}
             transcript_content = "\n".join(
-                f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
+                f"[{role_map.get(u['speaker'], f'Hablante {u[\"speaker\"]}')}]: {u['text']}"
+                for u in utterances
             )
             speaker_instruction = (
-                "\n6. La transcripción incluye etiquetas de hablante ([Persona A], [Persona B], etc.). "
-                "Usa estas etiquetas para distinguir las declaraciones del médico de las del paciente. "
-                "Generalmente, el médico hace preguntas, describe hallazgos y prescribe tratamiento; "
-                "el paciente describe síntomas y responde preguntas."
+                "\n6. El transcript está etiquetado con roles clínicos:\n"
+                "[Doctor]: intervenciones del médico — diagnósticos, indicaciones, preguntas clínicas\n"
+                "[Paciente]: lo que dice el paciente — síntomas, respuestas, historia\n"
+                "[Familiar]: comentarios del familiar o acompañante, si está presente\n"
+                "[Enfermera]: intervenciones de enfermería, si está presente\n\n"
+                "Extrae la información SOAP basándote en estos roles:\n"
+                "- Subjetivo: principalmente de [Paciente] y [Familiar]\n"
+                "- Objetivo: de [Doctor] al describir hallazgos de exploración\n"
+                "- Evaluación y Plan: de [Doctor]"
             )
         else:
             transcript_content = transcript
@@ -146,14 +154,14 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-    def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
+    def extract_structured_data(self, transcript: str, utterances: list = None, role_map: dict = None, max_retries: int = 3) -> Dict:
         """
         Extract structured medical data from transcript using Gemini
         """
         print(f"[LLM] Processing with {self.model_id}...", flush=True)
         if utterances:
             print(f"[LLM] Using {len(utterances)} speaker-labeled utterances", flush=True)
-        prompt = self.create_extraction_prompt(transcript, utterances)
+        prompt = self.create_extraction_prompt(transcript, utterances, role_map)
         
         last_error = "Unknown error"
         
