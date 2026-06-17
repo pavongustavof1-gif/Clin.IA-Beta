@@ -360,6 +360,8 @@ class PDFGenerator:
             ('temperatura',             'Temp'),
             ('frecuencia_respiratoria', 'FR'),
             ('saturacion_oxigeno',      'SpO₂'),
+            ('peso',                    'Peso'),
+            ('talla',                   'Talla'),
         ]
         present = [
             (label, self._safe(vitales.get(key)))
@@ -390,6 +392,11 @@ class PDFGenerator:
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
             ]))
             rows.append(vt)
+            rows.append(Spacer(1, 2 * mm))
+
+        habitus = self._safe(obj_.get('habitus_exterior'))
+        if habitus:
+            rows.append(self._label_para('Habitus exterior:', habitus))
             rows.append(Spacer(1, 2 * mm))
 
         examen = self._safe(obj_.get('examen_fisico'))

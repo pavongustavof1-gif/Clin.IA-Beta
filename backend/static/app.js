@@ -72,6 +72,8 @@ const elements = {
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
     
     consentCheckbox: document.getElementById('consentCheckbox'),
+    consentTratamiento: document.getElementById('consentTratamiento'),
+    confirmAndGenerateBtn: document.getElementById('confirmAndGenerateBtn'),
     reviewSection: document.getElementById('reviewSection'),
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
@@ -135,6 +137,15 @@ function init() {
         });
     });
     
+    // Consent 2 (NOM-004): gates the Confirmar button on the review screen
+    if (elements.consentTratamiento) {
+        elements.consentTratamiento.addEventListener('change', () => {
+            if (elements.confirmAndGenerateBtn) {
+                elements.confirmAndGenerateBtn.disabled = !elements.consentTratamiento.checked;
+            }
+        });
+    }
+
     // Transcript toggle for tablet/mobile
     const transcriptToggle = document.getElementById('reviewTranscriptToggle');
     if (transcriptToggle) {
@@ -556,6 +567,10 @@ function displayReviewScreen(result) {
     elements.progressSection.style.display = 'none';
     elements.reviewSection.style.display = 'block';
 
+    // Consent 2: reset and disable Confirmar on every new review
+    if (elements.consentTratamiento) elements.consentTratamiento.checked = false;
+    if (elements.confirmAndGenerateBtn) elements.confirmAndGenerateBtn.disabled = true;
+
     const sd  = result.structured_data || {};
     const info    = sd.informacion_paciente || {};
     const subj    = sd.subjetivo || {};
@@ -588,6 +603,9 @@ function displayReviewScreen(result) {
     setVal('review_temperatura',            vitales.temperatura);
     setVal('review_frecuencia_respiratoria',vitales.frecuencia_respiratoria);
     setVal('review_saturacion_oxigeno',     vitales.saturacion_oxigeno);
+    setVal('review_peso',                   vitales.peso);
+    setVal('review_talla',                  vitales.talla);
+    setVal('review_habitus',                obj.habitus_exterior);
     setVal('review_examen_fisico',          obj.examen_fisico);
 
     // Evaluación
@@ -670,7 +688,10 @@ function buildStructuredDataFromForm() {
     if (getVal('review_temperatura'))             vitales.temperatura             = getVal('review_temperatura');
     if (getVal('review_frecuencia_respiratoria')) vitales.frecuencia_respiratoria = getVal('review_frecuencia_respiratoria');
     if (getVal('review_saturacion_oxigeno'))      vitales.saturacion_oxigeno      = getVal('review_saturacion_oxigeno');
+    if (getVal('review_peso'))                    vitales.peso                    = getVal('review_peso');
+    if (getVal('review_talla'))                   vitales.talla                   = getVal('review_talla');
     if (Object.keys(vitales).length) obj.signos_vitales = vitales;
+    if (getVal('review_habitus'))   obj.habitus_exterior = getVal('review_habitus');
     if (getVal('review_examen_fisico')) obj.examen_fisico = getVal('review_examen_fisico');
     if (Object.keys(obj).length) sd.objetivo = obj;
 
@@ -724,7 +745,9 @@ async function confirmAndGenerate() {
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
                 create_doc: elements.createGoogleDoc.checked,
-                create_pdf: elements.createPDF ? elements.createPDF.checked : true
+                create_pdf: elements.createPDF ? elements.createPDF.checked : true,
+                consent_tratamiento_given: elements.consentTratamiento ? elements.consentTratamiento.checked : false,
+                consent_tratamiento_timestamp: new Date().toISOString()
             })
         });
 

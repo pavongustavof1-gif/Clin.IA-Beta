@@ -392,6 +392,10 @@ def confirm_and_generate():
         structured_data = data.get('structured_data', {})
         create_doc = data.get('create_doc', True)
         create_pdf = data.get('create_pdf', False)
+        consent_tratamiento = {
+            'given': data.get('consent_tratamiento_given', False),
+            'timestamp': data.get('consent_tratamiento_timestamp', '')
+        }
 
         if not session_id:
             return jsonify({'error': 'Session not found'}), 404
@@ -437,7 +441,9 @@ def confirm_and_generate():
             'transcript': session.get('transcript'),
             'structured_data': structured_data,
             'document': doc_info,
-            'pdf_available': pdf_bytes is not None
+            'pdf_available': pdf_bytes is not None,
+            'consent_grabacion': session.get('consent', {}),
+            'consent_tratamiento': consent_tratamiento
         }
 
         # Persist confirmed session first — uses INSERT OR REPLACE which
@@ -447,7 +453,8 @@ def confirm_and_generate():
             'structured_data': structured_data,
             'document': doc_info,
             'status': 'confirmed',
-            'timestamp': response['timestamp']
+            'timestamp': response['timestamp'],
+            'consent_tratamiento': consent_tratamiento
         })
 
         # Store PDF bytes AFTER save_session to prevent the INSERT OR REPLACE

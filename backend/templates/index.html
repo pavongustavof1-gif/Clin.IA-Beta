@@ -276,9 +276,10 @@
                     <div class="options-col options-col-consent">
                         <label class="checkbox-label consent-label">
                             <input type="checkbox" id="consentCheckbox">
-                            <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP.
-                                <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a>
-                            </span>
+                            <span>El paciente ha sido informado y otorga su consentimiento para la
+                            <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
+                            mediante ClinIA, de conformidad con la LFPDPPP.
+                            <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
                         </label>
                     </div>
 
@@ -368,6 +369,16 @@
                     <!-- RIGHT: Form panel -->
                     <div id="reviewFormPanel" class="review-panel review-form-panel">
 
+                        <div id="consentTratamientoBlock" class="consent-treatment-block">
+                            <label class="checkbox-label consent-label">
+                                <input type="checkbox" id="consentTratamiento">
+                                <span>El médico declara haber obtenido el
+                                <strong>consentimiento informado del paciente para el acto médico</strong>
+                                realizado en esta consulta, conforme a la NOM-004-SSA3-2012. La carta de
+                                consentimiento informado firmada forma parte del expediente físico del paciente.</span>
+                            </label>
+                        </div>
+
                         <div class="review-notice">
                             <svg class="review-notice-icon" width="16" height="16" aria-hidden="true"><use href="#icon-warning"/></svg>
                             Revise y corrija la información antes de generar el documento. Usted es responsable legal del contenido de la nota clínica.
@@ -441,6 +452,18 @@
                                     <input type="text" id="review_saturacion_oxigeno" class="review-input">
                                 </div>
                                 <div class="review-field">
+                                    <label class="review-label" for="review_peso">Peso (kg)</label>
+                                    <input type="text" id="review_peso" class="review-input" placeholder="ej. 72 kg">
+                                </div>
+                                <div class="review-field">
+                                    <label class="review-label" for="review_talla">Talla (cm)</label>
+                                    <input type="text" id="review_talla" class="review-input" placeholder="ej. 168 cm">
+                                </div>
+                                <div class="review-field">
+                                    <label class="review-label" for="review_habitus">Habitus exterior</label>
+                                    <textarea id="review_habitus" class="review-textarea" rows="2" placeholder="ej. Paciente masculino, adulto, consciente y orientado en tiempo y espacio, estado nutricional adecuado"></textarea>
+                                </div>
+                                <div class="review-field">
                                     <label class="review-label" for="review_examen_fisico">Examen Físico</label>
                                     <textarea id="review_examen_fisico" class="review-textarea" rows="3"></textarea>
                                 </div>
@@ -504,7 +527,7 @@
                         </form>
 
                         <div class="review-actions">
-                            <button class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
+                            <button id="confirmAndGenerateBtn" class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
                                 <span class="btn-icon" aria-hidden="true">
                                     <svg width="18" height="18"><use href="#icon-document"/></svg>
                                 </span>

@@ -65,8 +65,20 @@
             "frecuencia_cardiaca": {"type": "string"},
             "temperatura": {"type": "string"},
             "frecuencia_respiratoria": {"type": "string"},
-            "saturacion_oxigeno": {"type": "string"}
+            "saturacion_oxigeno": {"type": "string"},
+            "peso": {
+              "type": "string",
+              "description": "Peso del paciente en kilogramos"
+            },
+            "talla": {
+              "type": "string",
+              "description": "Talla del paciente en metros o centímetros"
+            }
           }
+        },
+        "habitus_exterior": {
+          "type": "string",
+          "description": "Descripción general del aspecto del paciente: edad aparente, estado de consciencia, orientación, estado nutricional, marcha, actitud"
         },
         "examen_fisico": {
           "type": "string",

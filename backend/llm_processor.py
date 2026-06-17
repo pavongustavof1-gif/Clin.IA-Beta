@@ -64,7 +64,8 @@ INSTRUCCIONES CRÍTICAS:
 2. Si cierta información no está presente, omite ese campo (no inventes datos)
 3. Mantén los términos médicos exactamente como aparecen en la transcripción, asegurando la congruencia de género entre artículos y artículos indefinidos con el sustantivo que le sigue
 4. Organiza la información según el formato SOAP
-5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento{speaker_instruction}
+5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
+6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'{speaker_instruction}
 
 TRANSCRIPCIÓN:
 {transcript_content}
@@ -91,8 +92,11 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
       "frecuencia_cardiaca": "string (si se menciona)",
       "temperatura": "string (si se menciona)",
       "frecuencia_respiratoria": "string (si se menciona)",
-      "saturacion_oxigeno": "string (si se menciona)"
+      "saturacion_oxigeno": "string (si se menciona)",
+      "peso": "string en kg (si se menciona)",
+      "talla": "string en cm o metros (si se menciona)"
     }},
+    "habitus_exterior": "string - descripción general del paciente: edad aparente, estado de consciencia, orientación, estado nutricional (si se menciona)",
     "examen_fisico": "string - hallazgos del examen físico",
     "hallazgos": ["lista de hallazgos objetivos"]
   }},
