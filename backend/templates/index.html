@@ -271,32 +271,45 @@
                     Opciones
                 </h3>
                 <div class="options-grid">
-                    <label class="checkbox-label consent-label">
-                        <input type="checkbox" id="consentCheckbox">
-                        <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP.
-                            <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a>
-                        </span>
-                    </label>
 
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="printRawTranscript" checked>
-                        <span>Mostrar transcripción completa</span>
-                    </label>
+                    <!-- Column 1: Consent — spans full height -->
+                    <div class="options-col options-col-consent">
+                        <label class="checkbox-label consent-label">
+                            <input type="checkbox" id="consentCheckbox">
+                            <span>El paciente ha sido informado y otorga su consentimiento para la grabación y procesamiento de esta consulta de conformidad con la LFPDPPP.
+                                <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a>
+                            </span>
+                        </label>
+                    </div>
 
-                    <label class="checkbox-label">
-                        <input type="checkbox" id="createGoogleDoc" checked>
-                        <span>Crear documento en Google Docs</span>
-                    </label>
+                    <!-- Column 2: Mostrar transcripción (top) + Google Docs (bottom) -->
+                    <div class="options-col">
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="printRawTranscript" checked>
+                            <span>Mostrar transcripción completa</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="createGoogleDoc" checked>
+                            <span>Crear documento en Google Docs</span>
+                        </label>
+                    </div>
 
-                    <label class="checkbox-label" style="justify-content: space-between;">
-                        <span>Personas en la consulta</span>
-                        <select id="speakersExpected">
-                            <option value="2" selected>2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                            <option value="5">5+</option>
-                        </select>
-                    </label>
+                    <!-- Column 3: Personas selector (top) + PDF (bottom) -->
+                    <div class="options-col">
+                        <div class="checkbox-label" style="cursor:default;">
+                            <span style="flex-shrink:0; white-space:nowrap;">Personas en consulta:</span>
+                            <select id="speakersExpected" style="font-size:0.88rem; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:2px 4px; cursor:pointer; width:44px; margin-left:0.5rem;">
+                                <option value="2" selected>2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                            </select>
+                        </div>
+                        <label class="checkbox-label">
+                            <input type="checkbox" id="createPDF" checked>
+                            <span>Generar nota en PDF</span>
+                        </label>
+                    </div>
+
                 </div>
             </section>
             
@@ -564,6 +577,13 @@
                             <svg width="15" height="15"><use href="#icon-save"/></svg>
                         </span>
                         Descargar JSON
+                    </button>
+
+                    <button id="downloadPdfBtn" class="btn btn-success btn-small" style="display:none">
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="15" height="15"><use href="#icon-document"/></svg>
+                        </span>
+                        Descargar PDF
                     </button>
                 
                 </div>

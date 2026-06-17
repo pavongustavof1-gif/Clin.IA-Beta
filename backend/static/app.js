@@ -50,6 +50,8 @@ const elements = {
     
     printRawTranscript: document.getElementById('printRawTranscript'),
     createGoogleDoc: document.getElementById('createGoogleDoc'),
+    createPDF: document.getElementById('createPDF'),
+    downloadPdfBtn: document.getElementById('downloadPdfBtn'),
     
     progressSection: document.getElementById('progressSection'),
     progressFill: document.getElementById('progressFill'),
@@ -110,6 +112,20 @@ function init() {
     elements.processBtn.addEventListener('click', processAudio);
     elements.retryBtn.addEventListener('click', resetApplication);
     elements.downloadJsonBtn.addEventListener('click', downloadJSON);
+    elements.downloadPdfBtn.addEventListener('click', () => {
+        if (!state.sessionId) {
+            console.error('[ClinIA] No session ID available for PDF download');
+            return;
+        }
+        const url = `${API_BASE_URL}/api/download-pdf/${state.sessionId}`;
+        console.log('[ClinIA] Downloading PDF for session:', state.sessionId);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = '';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    });
     
     // Tab switching
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -519,7 +535,14 @@ function displayResults(result) {
     if (result.structured_data) {
         displayStructuredData(result.structured_data);
     }
-    
+
+    // 4. PDF download button
+    if (result.pdf_available && state.sessionId) {
+        elements.downloadPdfBtn.style.display = 'inline-flex';
+    } else {
+        elements.downloadPdfBtn.style.display = 'none';
+    }
+
     // Scroll to results
     elements.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -700,7 +723,8 @@ async function confirmAndGenerate() {
             body: JSON.stringify({
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
-                create_doc: elements.createGoogleDoc.checked
+                create_doc: elements.createGoogleDoc.checked,
+                create_pdf: elements.createPDF ? elements.createPDF.checked : true
             })
         });
 
@@ -711,6 +735,11 @@ async function confirmAndGenerate() {
 
         updateProgress(100, '¡Completado!', 3);
         const result = await response.json();
+
+        // Ensure state.sessionId is current before displayResults() shows the PDF button
+        if (result.session_id) {
+            state.sessionId = result.session_id;
+        }
 
         await sleep(500);
         displayResults(result);
@@ -1006,6 +1035,10 @@ function resetApplication() {
     // Reset consent and re-disable Record button
     elements.consentCheckbox.checked = false;
     elements.recordBtn.disabled = true;
+
+    // Reset PDF button and checkbox
+    elements.downloadPdfBtn.style.display = 'none';
+    if (elements.createPDF) elements.createPDF.checked = true;
 
     // Clear file input
     elements.audioFileInput.value = '';
