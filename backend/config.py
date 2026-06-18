@@ -25,6 +25,10 @@ class Config:
     # If you must keep a file path, make it flexible:
     GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
     
+    # Resend email delivery
+    RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
+    RESEND_SENDER  = 'admin@clinianotes.com'
+
     # Flask
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
     

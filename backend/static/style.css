@@ -1398,6 +1398,53 @@ body {
     }
 }
 
+/* ── Email delivery row — options section ── */
+.email-delivery-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 4px 0;
+    flex-wrap: wrap;
+    margin-top: 0.5rem;
+}
+
+.email-delivery-label {
+    font-size: var(--font-size-sm, 13px);
+    color: var(--text-secondary);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.email-delivery-input {
+    font-size: var(--font-size-sm, 13px);
+    color: var(--text-primary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default, #cbd5e1);
+    border-radius: var(--radius-sm, 4px);
+    padding: 3px 8px;
+    flex: 1;
+    min-width: 180px;
+    max-width: 260px;
+}
+
+.email-delivery-input:focus {
+    outline: none;
+    border-color: var(--teal-400, #0F6E56);
+}
+
+.email-save-indicator {
+    font-size: 11px;
+    color: var(--teal-400, #0F6E56);
+    font-weight: 500;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.email-save-indicator.visible {
+    opacity: 1;
+    display: inline !important;
+}
+
 /* ── Consent 2 — NOM-004 treatment consent block on review screen ── */
 .consent-treatment-block {
     background: #FAEEDA;

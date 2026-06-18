@@ -8,6 +8,7 @@ from llm_processor import LLMProcessor
 from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
+from email_service import send_pdf_email
 #  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
@@ -56,13 +57,14 @@ app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
 #     }
 # })
 
-# Enable CORS for both local testing and your new Render URL
+# Enable CORS for both local testing and production domains
 CORS(app, resources={
     r"/api/*": {
         "origins": [
-            "http://localhost:3000", 
-            "http://localhost:5000", 
-            "https://clin-ia-beta.onrender.com"  # <--- Add your actual Render URL here
+            "http://localhost:5000",
+            "https://clin-ia-beta.onrender.com",
+            "https://clinianotes.com",
+            "https://www.clinianotes.com",
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
@@ -395,6 +397,7 @@ def confirm_and_generate():
         structured_data = data.get('structured_data', {})
         create_doc = data.get('create_doc', True)
         create_pdf = data.get('create_pdf', False)
+        doctor_email = data.get('doctor_email', '').strip()
         consent_tratamiento = {
             'given': data.get('consent_tratamiento_given', False),
             'timestamp': data.get('consent_tratamiento_timestamp', '')
@@ -462,6 +465,27 @@ def confirm_and_generate():
         # from wiping the pdf_data column
         if pdf_bytes:
             save_pdf_to_session(session_id, pdf_bytes)
+
+        # Send PDF to doctor's email if provided
+        if pdf_bytes and doctor_email:
+            patient_name = (structured_data
+                .get('informacion_paciente', {})
+                .get('nombre_del_paciente', 'Paciente'))
+            consultation_date = (structured_data
+                .get('metadata', {})
+                .get('fecha_hora_consulta', '')[:10])
+            email_sent = send_pdf_email(
+                doctor_email=doctor_email,
+                pdf_bytes=pdf_bytes,
+                patient_name=patient_name,
+                consultation_date=consultation_date,
+                session_id=session_id,
+            )
+            response['email_sent'] = email_sent
+            response['email_address'] = doctor_email if email_sent else ''
+        else:
+            response['email_sent'] = False
+            response['email_address'] = ''
 
         logger.info(f"Orchestrator: Confirmation complete. Session: {session_id}")
         return jsonify(response), 200
