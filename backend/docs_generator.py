@@ -4,6 +4,7 @@
 import os
 import json
 from typing import Dict, List
+from logger import logger
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -24,7 +25,7 @@ class GoogleDocsGenerator:
         SCOPES = ['https://www.googleapis.com/auth/documents', 'https://www.googleapis.com/auth/drive']
 
 
-        print("[STARTUP] Initializing Google Docs Service...") # <--   Test only
+        logger.info("GoogleDocs: Initializing Google Docs Service...")
         
         creds = None
 
@@ -35,19 +36,19 @@ class GoogleDocsGenerator:
                 # Load the token directly from the string variable
                 token_info = json.loads(token_env)
                 creds = Credentials.from_authorized_user_info(token_info, SCOPES)
-                print("[GoogleDocs] Using token from Environment Variable.")
+                logger.info("GoogleDocs: Using token from Environment Variable.")
             except Exception as e:
-                print(f"[GoogleDocs] Error loading token from env: {e}")
+                logger.error(f"GoogleDocs: Error loading token from env: {e}")
 
         # PRIORITY 2: Check for local file (Your Laptop Alpha Way)
         if not creds and os.path.exists('token.json'):
             creds = Credentials.from_authorized_user_file('token.json', SCOPES)
-            print("[GoogleDocs] Using local token.json file.")
+            logger.info("GoogleDocs: Using local token.json file.")
 
         # REFRESH logic: If the token is old, try to refresh it automatically
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-            print("[GoogleDocs] Token refreshed.")
+            logger.info("GoogleDocs: Token refreshed.")
 
         # FALLBACK: If NO creds exist (Only works on your local computer)
         if not creds:
@@ -60,7 +61,7 @@ class GoogleDocsGenerator:
                 # In the cloud, we can't open a browser. We must fail fast.
                 raise Exception("Critical: No Google Credentials found in Environment Variables!")
             
-            print("[GoogleDocs] No valid credentials found locally. Starting login flow...")
+            logger.info("GoogleDocs: No valid credentials found locally. Starting login flow...")
             flow = InstalledAppFlow.from_client_secrets_file('client_secrets.json', SCOPES)
             creds = flow.run_local_server(port=0) 
             with open('token.json', 'w') as token:
@@ -96,11 +97,11 @@ class GoogleDocsGenerator:
                 ).execute()
             
             link = f"https://docs.google.com/document/d/{doc_id}/edit"
-            print(f"[GoogleDocs] Document created successfully: {link}")
+            logger.info(f"GoogleDocs: Document created successfully: {link}")
             return {'document_id': doc_id, 'link': link, 'title': title}
-            
+
         except HttpError as error:
-            print(f"[GoogleDocs] API Error: {error}")
+            logger.error(f"GoogleDocs: API Error: {error}")
             raise
 
     def _build_document_requests(self, data: Dict, start_index: int = 1) -> List[Dict]:
@@ -137,6 +138,10 @@ class GoogleDocsGenerator:
 
         # --- 1. PATIENT SUB-HEADER (Normal weight) ---
         add_text("\n", bold=False)
+        num_exp = info.get('numero_expediente', '')
+        if num_exp:
+            add_text("Expediente: ", bold=True, newline=False)
+            add_text(num_exp, bold=False)
         add_text(f"FECHA: {meta.get('fecha_consulta', '__________')}\t\tEDAD: {info.get('edad', '____')}", bold=False)
         add_text(f"NOMBRE: {info.get('nombre_del_paciente', '____________________')}\t\tFECHA DE NACIMIENTO: {info.get('fecha_de_nacimiento', '__________')}", bold=False)
         add_text(f"ESTADO CIVIL: {info.get('estado_civil', '__________')}\t\tSEXO: {info.get('genero', '__________')}", bold=False)

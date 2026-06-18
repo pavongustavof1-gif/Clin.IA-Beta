@@ -586,6 +586,7 @@ function displayReviewScreen(result) {
     }
 
     // Información del paciente
+    setVal('review_numero_expediente',  info.numero_expediente);
     setVal('review_nombre_del_paciente', info.nombre_del_paciente);
     setVal('review_fecha_de_nacimiento', info.fecha_de_nacimiento);
     setVal('review_edad',               info.edad);
@@ -665,6 +666,7 @@ function buildStructuredDataFromForm() {
 
     // informacion_paciente
     const info = {};
+    if (getVal('review_numero_expediente'))    info.numero_expediente    = getVal('review_numero_expediente');
     if (getVal('review_nombre_del_paciente'))  info.nombre_del_paciente  = getVal('review_nombre_del_paciente');
     if (getVal('review_fecha_de_nacimiento'))  info.fecha_de_nacimiento  = getVal('review_fecha_de_nacimiento');
     if (getVal('review_edad'))                 info.edad                 = getVal('review_edad');
@@ -1062,6 +1064,10 @@ function resetApplication() {
     // Reset PDF button and checkbox
     elements.downloadPdfBtn.style.display = 'none';
     if (elements.createPDF) elements.createPDF.checked = true;
+
+    // Reset numero_expediente
+    const numExpField = document.getElementById('review_numero_expediente');
+    if (numExpField) numExpField.value = '';
 
     // Clear file input
     elements.audioFileInput.value = '';

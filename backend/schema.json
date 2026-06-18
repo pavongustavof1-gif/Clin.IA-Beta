@@ -26,6 +26,10 @@
         "numero_de_expediente": {
           "type": "string",
           "description": "Medical record number if mentioned"
+        },
+        "numero_expediente": {
+          "type": "string",
+          "description": "Número de expediente clínico asignado por el consultorio"
         }
       }
     },

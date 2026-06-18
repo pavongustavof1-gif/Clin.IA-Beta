@@ -216,12 +216,12 @@ class PDFGenerator:
         ]
 
         right_paras = []
-        curp = self._safe(info.get('curp'))
-        if curp:
-            right_paras.append(pid('CURP', curp))
         exp = self._safe(info.get('numero_expediente') or info.get('expediente'))
         if exp:
             right_paras.append(pid('Expediente', exp))
+        curp = self._safe(info.get('curp'))
+        if curp:
+            right_paras.append(pid('CURP', curp))
         right_paras.append(pid('Fecha consulta', fecha or ''))
 
         page_width = LETTER[0] - 36 * mm

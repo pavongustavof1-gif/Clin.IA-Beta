@@ -4,6 +4,7 @@
 from google import genai
 from google.genai import types # For configuration
 from config import Config
+from logger import logger
 import json
 import os
 import time
@@ -30,26 +31,36 @@ class LLMProcessor:
         with open(schema_path, 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
-    def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
+    def create_extraction_prompt(self, transcript: str, utterances: list = None, role_map: dict = None) -> str:
         """
         Create detailed prompt for Gemini to extract medical information
 
         Args:
             transcript: Raw Spanish transcript from AssemblyAI
             utterances: Optional speaker-labeled utterances from AssemblyAI
+            role_map: Optional dict mapping speaker labels to clinical role names
 
         Returns:
             Formatted prompt for LLM
         """
         if utterances:
+            role_map = role_map or {}
+            def _role(u):
+                spk = u['speaker']
+                return role_map.get(spk, 'Hablante ' + spk)
             transcript_content = "\n".join(
-                f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
+                f"[{_role(u)}]: {u['text']}" for u in utterances
             )
             speaker_instruction = (
-                "\n6. La transcripción incluye etiquetas de hablante ([Persona A], [Persona B], etc.). "
-                "Usa estas etiquetas para distinguir las declaraciones del médico de las del paciente. "
-                "Generalmente, el médico hace preguntas, describe hallazgos y prescribe tratamiento; "
-                "el paciente describe síntomas y responde preguntas."
+                "\n6. El transcript está etiquetado con roles clínicos:\n"
+                "[Doctor]: intervenciones del médico — diagnósticos, indicaciones, preguntas clínicas\n"
+                "[Paciente]: lo que dice el paciente — síntomas, respuestas, historia\n"
+                "[Familiar]: comentarios del familiar o acompañante, si está presente\n"
+                "[Enfermera]: intervenciones de enfermería, si está presente\n\n"
+                "Extrae la información SOAP basándote en estos roles:\n"
+                "- Subjetivo: principalmente de [Paciente] y [Familiar]\n"
+                "- Objetivo: de [Doctor] al describir hallazgos de exploración\n"
+                "- Evaluación y Plan: de [Doctor]"
             )
         else:
             transcript_content = transcript
@@ -78,7 +89,8 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
     "nombre_del_paciente": "string (si se menciona)",
     "fecha_de_nacimiento": "string en formato DD/MM/YYYY (si se menciona)",
     "edad": "string (si se menciona)",
-    "genero": "string (si se menciona)"
+    "genero": "string (si se menciona)",
+    "numero_expediente": "string - número de expediente si se menciona explícitamente; omitir si no se menciona"
   }},
   "subjetivo": {{
     "motivo_de_consulta": "string - razón principal de la visita",
@@ -145,14 +157,14 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-    def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
+    def extract_structured_data(self, transcript: str, utterances: list = None, role_map: dict = None, max_retries: int = 3) -> Dict:
         """
         Extract structured medical data from transcript using Gemini
         """
-        print(f"[LLM] Processing with {self.model_id}...", flush=True)
+        logger.info(f"LLM: Processing with {self.model_id}...")
         if utterances:
-            print(f"[LLM] Using {len(utterances)} speaker-labeled utterances", flush=True)
-        prompt = self.create_extraction_prompt(transcript, utterances)
+            logger.info(f"LLM: Using {len(utterances)} speaker-labeled utterances")
+        prompt = self.create_extraction_prompt(transcript, utterances, role_map)
         
         last_error = "Unknown error"
         
@@ -170,41 +182,41 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                 if not response.text:
                     raise ValueError("Empty response from Google API")
                     
-                print(f"[LLM] Raw response received. Length: {len(response.text)}", flush=True)
-                
+                logger.debug(f"LLM: Raw response received. Length: {len(response.text)}")
+
                 # Clean the text JUST IN CASE Gemini added markdown backticks
                 cleaned_text = self._clean_json_response(response.text)
-                
+
                 structured_data = json.loads(cleaned_text)
-                print("[LLM] Success!", flush=True)
+                logger.info("LLM: Extraction successful.")
                 return structured_data
-                
+
             except Exception as e:
                 last_error = str(e)
                 error_msg = str(e).lower()
-                print(f"[LLM] Attempt {attempt + 1} failed: {last_error}", flush=True)
-                
+                logger.error(f"LLM: Attempt {attempt + 1} failed: {last_error}")
+
                 # Catch rate limits and server timeouts
                 if any(x in error_msg for x in ["429", "504", "deadline", "cancelled", "quota", "503"]):
                     if attempt < max_retries - 1:
                         wait_time = 5 * (attempt + 1)
-                        print(f"[LLM] Server busy. Retrying in {wait_time}s...", flush=True)
+                        logger.warning(f"LLM: Server busy. Retrying in {wait_time}s...")
                         time.sleep(wait_time)
                         continue
-                
+
                 # Catch JSON formatting errors and tell the prompt to be more careful
                 if "json" in error_msg or "expecting value" in error_msg:
                     if attempt < max_retries - 1:
                          prompt += "\n\nNOTA: Asegúrate de devolver SOLO JSON válido, sin texto adicional."
-                         print("[LLM] JSON format error, retrying...", flush=True)
+                         logger.warning("LLM: JSON format error, retrying...")
                          time.sleep(2)
                          continue
-                
+
                 # If it's a completely different error (like a 404), break immediately
                 break
-        
+
         # Fallback: We now include "last_error" so you can see it in the UI/Logs!
-        print(f"[LLM] All attempts failed. Final error: {last_error}", flush=True)
+        logger.error(f"LLM: All attempts failed. Final error: {last_error}")
         return {
             "error": "Processing failed",
             "details": last_error, 
@@ -279,8 +291,4 @@ if __name__ == "__main__":
     processor = LLMProcessor()
     result = processor.extract_structured_data(sample_transcript)
     
-    print("\n" + "="*80)
-    print("EXTRACTED STRUCTURED DATA")
-    print("="*80)
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    print("="*80)
+    logger.info("EXTRACTED STRUCTURED DATA:\n" + json.dumps(result, indent=2, ensure_ascii=False))

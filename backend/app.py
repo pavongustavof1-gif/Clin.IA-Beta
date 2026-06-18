@@ -7,6 +7,7 @@ from transcription import TranscriptionService
 from llm_processor import LLMProcessor
 from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
+from logger import logger
 #  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
@@ -20,24 +21,24 @@ from werkzeug.utils import secure_filename
 # This recreates the physical JSON files from Render Environment Variables
 def teleport_secrets():
     if os.environ.get("RENDER"):
-        print("[Teleporter] Running in Cloud mode...")
-        
+        logger.info("Teleporter: Running in Cloud mode...")
+
         # 1. Teleport the Client Secrets (OAuth Web)
         if "GOOGLE_SECRETS_JSON" in os.environ:
             with open("client_secrets.json", "w") as f:
                 f.write(os.environ["GOOGLE_SECRETS_JSON"])
-            print("[Teleporter] client_secrets.json created.")
+            logger.info("Teleporter: client_secrets.json created.")
 
         # 2. Teleport the Service Account (if you use it)
         if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
             with open("credentials.json", "w") as f:
                 f.write(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-            print("[Teleporter] credentials.json created.")
+            logger.info("Teleporter: credentials.json created.")
 
 # Run the teleporter immediately
-print("[STARTUP] Teleporter starting...") # <--  Test only
+logger.info("Startup: Teleporter starting...")
 teleport_secrets()
-print("[STARTUP] Teleporter finished.")   # <--  Test only
+logger.info("Startup: Teleporter finished.")
 # ----------------------
 
 
@@ -71,10 +72,10 @@ CORS(app, resources={
 # Validate configuration on startup
 try:
     Config.validate()
-    print("[Flask] Configuration validated successfully")
+    logger.info("Flask: Configuration validated successfully")
 except ValueError as e:
-    print(f"[Flask] Configuration error: {e}")
-    print("[Flask] Please check your .env file")
+    logger.error(f"Flask: Configuration error: {e}")
+    logger.error("Flask: Please check your .env file")
     exit(1)
 
 # Initialize services
@@ -109,7 +110,7 @@ def init_db():
     ''')
     conn.commit()
     conn.close()
-    print("[DB] SQLite session database initialized.", flush=True)
+    logger.info("DB: SQLite session database initialized.")
 
 
 def save_session(session_id: str, data: dict):
@@ -142,9 +143,9 @@ def save_session(session_id: str, data: dict):
         ))
         conn.commit()
         conn.close()
-        print(f"[DB] Session {session_id} saved.", flush=True)
+        logger.info(f"DB: Session {session_id} saved.")
     except Exception as e:
-        print(f"[DB] Warning: Could not save session {session_id}: {str(e)}", flush=True)
+        logger.warning(f"DB: Could not save session {session_id}: {str(e)}")
 
 
 def load_session(session_id: str) -> dict | None:
@@ -160,7 +161,7 @@ def load_session(session_id: str) -> dict | None:
         conn.close()
         return json.loads(row[0]) if row else None
     except Exception as e:
-        print(f"[DB] Warning: Could not load session {session_id}: {str(e)}", flush=True)
+        logger.warning(f"DB: Could not load session {session_id}: {str(e)}")
         return None
 
 
@@ -177,7 +178,7 @@ def load_structured_data(session_id: str) -> dict | None:
         conn.close()
         return json.loads(row[0]) if row else None
     except Exception as e:
-        print(f"[DB] Warning: Could not load structured data for {session_id}: {str(e)}", flush=True)
+        logger.warning(f"DB: Could not load structured data for {session_id}: {str(e)}")
         return None
 
 
@@ -197,9 +198,9 @@ def save_pdf_to_session(session_id: str, pdf_bytes: bytes):
         )
         conn.commit()
         conn.close()
-        print(f"[PDF] Stored in session {session_id}", flush=True)
+        logger.info(f"PDF: Stored in session {session_id}")
     except Exception as e:
-        print(f"[PDF] Warning: could not store PDF: {str(e)}", flush=True)
+        logger.warning(f"PDF: Could not store PDF: {str(e)}")
 
 
 # Initialize on startup
@@ -249,12 +250,10 @@ def process_audio():
         consent_given = request.form.get('consent_given', 'false').lower() == 'true'
         consent_timestamp = request.form.get('consent_timestamp', '')
         
-        print(f"\n{'='*80}")
-        print(f"[Orchestrator] Starting new processing job")
-        print(f"[Orchestrator] Filename: {audio_file.filename}")
-        print(f"[Orchestrator] Print raw transcript: {print_raw}")
-        print(f"[Orchestrator] Create Google Doc: {create_doc}")
-        print(f"{'='*80}\n")
+        logger.info("Orchestrator: Starting new processing job")
+        logger.info(f"Orchestrator: Filename: {audio_file.filename}")
+        logger.debug(f"Orchestrator: Print raw transcript: {print_raw}")
+        logger.debug(f"Orchestrator: Create Google Doc: {create_doc}")
         
         # Step 2: Save audio to temporary file
         filename = secure_filename(audio_file.filename)
@@ -262,15 +261,14 @@ def process_audio():
         temp_path = os.path.join(temp_dir, f"clinia_{datetime.now().timestamp()}_{filename}")
         
         audio_file.save(temp_path)
-        print(f"[Orchestrator] Audio saved to: {temp_path}")
-        
+        logger.debug(f"Orchestrator: Audio saved to: {temp_path}")
+
         # Get file size for validation
         file_size = os.path.getsize(temp_path)
-        print(f"[Orchestrator] File size: {file_size / (1024*1024):.2f} MB")
-        
+        logger.debug(f"Orchestrator: File size: {file_size / (1024*1024):.2f} MB")
+
         # Step 3: Transcribe audio (Phase A)
-        print("\n[Orchestrator] PHASE A: Transcription")
-        print("-" * 80)
+        logger.info("Orchestrator: PHASE A — Transcription")
         
         try:
             transcript_result = transcription_service.transcribe_audio(
@@ -287,11 +285,11 @@ def process_audio():
                     'transcript': transcript_text
                 }), 400
             
-            print(f"[Orchestrator] Transcription completed: {len(transcript_text)} characters")
-            print(f"[Orchestrator] Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.", flush=True)
-            
+            logger.info(f"Orchestrator: Transcription completed: {len(transcript_text)} characters")
+            logger.info(f"Orchestrator: Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.")
+
         except Exception as e:
-            print(f"[Orchestrator] Transcription failed: {str(e)}")
+            logger.error(f"Orchestrator: Transcription failed: {str(e)}")
             return jsonify({
                 'error': 'Transcription failed',
                 'details': str(e)
@@ -300,34 +298,34 @@ def process_audio():
             # Clean up audio file
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-                print(f"[Orchestrator] Cleaned up temp file: {temp_path}")
-        
+                logger.debug(f"Orchestrator: Cleaned up temp file: {temp_path}")
+
         # Step 4: Extract structured data (Phase B)
-        print("\n[Orchestrator] PHASE B: LLM Processing")
-        print("-" * 80)
+        logger.info("Orchestrator: PHASE B — LLM Processing")
         
         try:
             structured_data = llm_processor.extract_structured_data(
                 transcript_text,
-                utterances=transcript_result.get('utterances', [])
+                utterances=transcript_result.get('utterances', []),
+                role_map=transcript_result.get('speaker_role_map', {})
             )
             
             # Validate extracted data
             is_valid, error_msg = llm_processor.validate_against_schema(structured_data)
             
             if not is_valid:
-                print(f"[Orchestrator] Warning: Data validation failed: {error_msg}")
+                logger.warning(f"Orchestrator: Data validation failed: {error_msg}")
                 # Continue anyway for Alpha version
-            
+
             # Inject consultation timestamp (NOM-004 compliance)
             if 'metadata' not in structured_data:
                 structured_data['metadata'] = {}
             structured_data['metadata']['fecha_hora_consulta'] = consultation_timestamp
 
-            print("[Orchestrator] Structured data extraction completed")
+            logger.info("Orchestrator: Structured data extraction completed")
 
         except Exception as e:
-            print(f"[Orchestrator] LLM processing failed: {str(e)}")
+            logger.error(f"Orchestrator: LLM processing failed: {str(e)}")
             return jsonify({
                 'error': 'LLM processing failed',
                 'details': str(e),
@@ -338,8 +336,12 @@ def process_audio():
         session_id = f"session_{datetime.now().timestamp()}"
 
         utterances = transcript_result.get('utterances', [])
+        role_map = transcript_result.get('speaker_role_map', {})
+        def _role(u):
+            spk = u['speaker']
+            return role_map.get(spk, 'Hablante ' + spk)
         labeled_text = "\n".join(
-            f"[Persona {u['speaker']}]: {u['text']}" for u in utterances
+            f"[{_role(u)}]: {u['text']}" for u in utterances
         ) if utterances else None
 
         transcript_payload = {
@@ -347,7 +349,8 @@ def process_audio():
             'labeled_text': labeled_text,
             'confidence': transcript_result.get('confidence'),
             'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
-            'word_count': transcript_result.get('words', 0)
+            'word_count': transcript_result.get('words', 0),
+            'speaker_role_map': role_map
         }
 
         response = {
@@ -367,11 +370,11 @@ def process_audio():
             'consent_timestamp': consent_timestamp
         })
 
-        print(f"[Orchestrator] Ready for review. Session: {session_id}")
+        logger.info(f"Orchestrator: Ready for review. Session: {session_id}")
         return jsonify(response), 200
 
     except Exception as e:
-        print(f"\n[Orchestrator] CRITICAL ERROR: {str(e)}")
+        logger.error(f"Orchestrator: CRITICAL ERROR: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
@@ -408,8 +411,7 @@ def confirm_and_generate():
 
         doc_info = None
         if create_doc:
-            print("\n[Orchestrator] PHASE C: Google Docs Generation")
-            print("-" * 80)
+            logger.info("Orchestrator: PHASE C — Google Docs Generation")
             try:
                 docs_generator = GoogleDocsGenerator()
                 patient_name = structured_data.get('informacion_paciente', {}).get(
@@ -417,21 +419,20 @@ def confirm_and_generate():
                 )
                 doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
                 doc_info = docs_generator.create_medical_note(structured_data, title=doc_title)
-                print(f"[Orchestrator] Google Doc created: {doc_info['link']}")
+                logger.info(f"Orchestrator: Google Doc created: {doc_info['link']}")
             except Exception as e:
-                print(f"[Orchestrator] Google Docs creation failed: {str(e)}")
+                logger.error(f"Orchestrator: Google Docs creation failed: {str(e)}")
                 doc_info = {'error': 'Failed to create Google Doc', 'details': str(e)}
 
         # PDF generation (if requested) — runs independently of Google Docs
         pdf_bytes = None
         if create_pdf:
-            print("\n[Orchestrator] PHASE C2: PDF Generation")
-            print("-" * 80)
+            logger.info("Orchestrator: PHASE C2 — PDF Generation")
             try:
                 pdf_bytes = pdf_generator.generate_pdf(structured_data)
-                print(f"[PDF] Generated successfully — {len(pdf_bytes)} bytes", flush=True)
+                logger.info(f"PDF: Generated successfully — {len(pdf_bytes)} bytes")
             except Exception as e:
-                print(f"[PDF] Warning: generation failed: {str(e)}", flush=True)
+                logger.warning(f"PDF: Generation failed: {str(e)}")
                 # Never raise — PDF failure must not block the pipeline
 
         response = {
@@ -462,11 +463,11 @@ def confirm_and_generate():
         if pdf_bytes:
             save_pdf_to_session(session_id, pdf_bytes)
 
-        print(f"[Orchestrator] Confirmation complete. Session: {session_id}")
+        logger.info(f"Orchestrator: Confirmation complete. Session: {session_id}")
         return jsonify(response), 200
 
     except Exception as e:
-        print(f"\n[Orchestrator] CRITICAL ERROR in confirm: {str(e)}")
+        logger.error(f"Orchestrator: CRITICAL ERROR in confirm: {str(e)}")
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
@@ -574,7 +575,7 @@ def delete_session(session_id):
         conn.commit()
         conn.close()
         if affected:
-            print(f"[DB] Session {session_id} deleted — patient ARCO request.", flush=True)
+            logger.info(f"DB: Session {session_id} deleted — patient ARCO request.")
             return jsonify({
                 'status': 'deleted',
                 'session_id': session_id,
@@ -582,7 +583,7 @@ def delete_session(session_id):
             }), 200
         return jsonify({'error': 'Session not found'}), 404
     except Exception as e:
-        print(f"[DB] Error deleting session {session_id}: {str(e)}", flush=True)
+        logger.error(f"DB: Error deleting session {session_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -613,12 +614,12 @@ def download_pdf(session_id):
         cursor = conn.cursor()
 
         # Debug logging — reveals session_id mismatches in Render logs
-        print(f"[PDF] Download requested for session: {session_id}", flush=True)
+        logger.info(f"PDF: Download requested for session: {session_id}")
         cursor.execute(
             'SELECT session_id, pdf_data IS NOT NULL as has_pdf FROM sessions ORDER BY rowid DESC LIMIT 5'
         )
         recent = cursor.fetchall()
-        print(f"[PDF] Recent sessions in DB: {recent}", flush=True)
+        logger.debug(f"PDF: Recent sessions in DB: {recent}")
 
         cursor.execute(
             'SELECT pdf_data FROM sessions WHERE session_id = ?',
@@ -655,7 +656,7 @@ def download_pdf(session_id):
         return response
 
     except Exception as e:
-        print(f"[PDF] Download error: {str(e)}", flush=True)
+        logger.error(f"PDF: Download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -692,9 +693,7 @@ def internal_server_error(error):
 if __name__ == '__main__':
     # This block only runs when you run 'python app.py' on your computer.
     # It does NOT run on Render.
-    print("\n" + "="*80)
-    print("ClinIA Beta - Medical Note Taker (Local Mode)")
-    print("="*80)
+    logger.info("ClinIA Beta - Medical Note Taker (Local Mode) — starting Flask server")
     
     # We use port 5000 locally, but Render will assign its own port via environment variables
     port = int(os.environ.get("PORT", 5000))
