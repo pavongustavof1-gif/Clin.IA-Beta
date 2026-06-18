@@ -17,6 +17,45 @@ import sqlite3
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
+def validate_audio_file(file) -> tuple[bool, str]:
+    """
+    Validate an uploaded audio file before processing.
+    Returns (is_valid: bool, error_message: str).
+    error_message is empty string when valid.
+    """
+    if not file or file.filename == '':
+        return False, "No se recibió ningún archivo de audio."
+
+    _, ext = os.path.splitext(file.filename.lower())
+    if ext not in Config.ALLOWED_AUDIO_EXTENSIONS:
+        return False, (
+            f"Formato de archivo no permitido: '{ext}'. "
+            "Formatos aceptados: WAV, MP3, WEBM, M4A."
+        )
+
+    mime_type = (file.content_type or '').lower().split(';')[0].strip()
+    if mime_type and mime_type not in Config.ALLOWED_AUDIO_MIME_TYPES:
+        logger.warning(f"Validation: unexpected MIME type '{mime_type}' for file '{file.filename}'")
+        # Log but don't reject — some browsers send non-standard MIME types for audio
+
+    content_length = request.content_length
+    if content_length and content_length > Config.MAX_AUDIO_SIZE_BYTES:
+        return False, "El archivo es demasiado grande. Tamaño máximo permitido: 200 MB."
+
+    # Seek to end to get actual size, then reset
+    file.seek(0, 2)
+    actual_size = file.tell()
+    file.seek(0)
+
+    if actual_size > Config.MAX_AUDIO_SIZE_BYTES:
+        return False, "El archivo es demasiado grande. Tamaño máximo permitido: 200 MB."
+
+    if actual_size < Config.MIN_AUDIO_SIZE_BYTES:
+        return False, "El archivo de audio está vacío o es demasiado corto para procesar."
+
+    return True, ''
+
+
 # --- THE TELEPORTER ---
 # This checks if we are in the cloud. If so, it creates the secret file from a variable.
 # This recreates the physical JSON files from Render Environment Variables
@@ -235,13 +274,12 @@ def process_audio():
     """
     try:
         # Step 1: Validate request
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
-        
-        audio_file = request.files['audio']
-        
-        if audio_file.filename == '':
-            return jsonify({'error': 'Empty filename'}), 400
+        audio_file = request.files.get('audio')
+        is_valid, error_message = validate_audio_file(audio_file)
+        if not is_valid:
+            logger.warning(f"Validation: rejected upload — {error_message}")
+            return jsonify({'error': error_message, 'error_code': 'INVALID_AUDIO_FILE'}), 400
+        logger.info(f"Validation: audio file accepted — {audio_file.filename}")
         
         # Get optional parameters
         print_raw = request.form.get('print_raw', 'true').lower() == 'true'

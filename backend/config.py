@@ -32,6 +32,20 @@ class Config:
     # Flask
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
     
+    # Audio validation
+    ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.webm', '.m4a', '.ogg', '.mp4'}
+    ALLOWED_AUDIO_MIME_TYPES = {
+        'audio/wav', 'audio/wave', 'audio/x-wav',
+        'audio/mpeg', 'audio/mp3',
+        'audio/webm', 'video/webm',
+        'audio/mp4', 'video/mp4',
+        'audio/x-m4a', 'audio/m4a',
+        'audio/ogg', 'application/ogg',
+        'application/octet-stream',  # some browsers send this for audio blobs
+    }
+    MAX_AUDIO_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
+    MIN_AUDIO_SIZE_BYTES = 1024               # 1 KB — reject empty or near-empty files
+
     # Audio constraints (Alpha version)
     MAX_AUDIO_DURATION_SECONDS = 300  # 5 minutes
     ALLOWED_AUDIO_FORMATS = ['wav', 'mp3', 'webm', 'ogg', 'm4a']
