@@ -570,7 +570,12 @@ function displayResults(result) {
         elements.documentLink.style.display = 'none';
     }
     
-    // 2. Transcript
+    // 2. Transcript — only shown when "Mostrar transcripción completa" is checked
+    const showTranscript = elements.printRawTranscript?.checked ?? true;
+    if (elements.transcriptResult) {
+        elements.transcriptResult.style.display = showTranscript ? 'block' : 'none';
+    }
+
     if (result.transcript) {
         const t = result.transcript;
         
@@ -675,13 +680,6 @@ function displayReviewScreen(result) {
     // Metadatos
     setVal('review_medico',             meta.medico);
     setVal('review_fecha_hora_consulta', meta.fecha_hora_consulta);
-
-    // Show or hide transcript panel based on checkbox state
-    const showTranscript = elements.printRawTranscript?.checked ?? true;
-    const transcriptPanel = document.getElementById('reviewTranscriptPanel');
-    if (transcriptPanel) {
-        transcriptPanel.style.display = showTranscript ? '' : 'none';
-    }
 
     // Populate transcript panel
     const t = result.transcript || {};
