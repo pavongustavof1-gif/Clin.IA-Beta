@@ -359,7 +359,7 @@ class PDFGenerator:
             ('frecuencia_cardiaca',     'FC'),
             ('temperatura',             'Temp'),
             ('frecuencia_respiratoria', 'FR'),
-            ('saturacion_oxigeno',      'SpO₂'),
+            ('saturacion_oxigeno',      'SpO2'),
             ('peso',                    'Peso'),
             ('talla',                   'Talla'),
         ]

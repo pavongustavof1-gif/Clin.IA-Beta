@@ -676,6 +676,13 @@ function displayReviewScreen(result) {
     setVal('review_medico',             meta.medico);
     setVal('review_fecha_hora_consulta', meta.fecha_hora_consulta);
 
+    // Show or hide transcript panel based on checkbox state
+    const showTranscript = elements.printRawTranscript?.checked ?? true;
+    const transcriptPanel = document.getElementById('reviewTranscriptPanel');
+    if (transcriptPanel) {
+        transcriptPanel.style.display = showTranscript ? '' : 'none';
+    }
+
     // Populate transcript panel
     const t = result.transcript || {};
     const transcriptEl = document.getElementById('reviewTranscriptText');
