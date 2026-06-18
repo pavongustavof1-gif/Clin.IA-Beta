@@ -127,7 +127,7 @@ pdf_generator = PDFGenerator()
 
 # ── SQLite session persistence ──────────────────────────────────────────────
 
-DB_PATH = 'clinia_sessions.db'
+DB_PATH = os.environ.get('DB_PATH', '/data/clinia_sessions.db')
 
 def init_db():
     """Initialize SQLite database and create sessions table if not exists."""
