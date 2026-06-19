@@ -636,6 +636,7 @@ function displayReviewScreen(result) {
     setVal('review_numero_expediente',  info.numero_expediente);
     setVal('review_nombre_del_paciente', info.nombre_del_paciente);
     setVal('review_fecha_de_nacimiento', info.fecha_de_nacimiento);
+    setVal('review_curp',               info.curp);
     setVal('review_edad',               info.edad);
     setVal('review_genero',             info.genero);
 
@@ -658,6 +659,7 @@ function displayReviewScreen(result) {
 
     // Evaluación
     setVal('review_diagnostico',      ev.diagnostico);
+    setVal('review_codigo_cie11',     ev.codigo_cie11);
     setVal('review_impresion_clinica', ev.impresion_clinica);
     setVal('review_pronostico',        ev.pronostico);
 
@@ -716,6 +718,7 @@ function buildStructuredDataFromForm() {
     if (getVal('review_numero_expediente'))    info.numero_expediente    = getVal('review_numero_expediente');
     if (getVal('review_nombre_del_paciente'))  info.nombre_del_paciente  = getVal('review_nombre_del_paciente');
     if (getVal('review_fecha_de_nacimiento'))  info.fecha_de_nacimiento  = getVal('review_fecha_de_nacimiento');
+    if (getVal('review_curp'))                 info.curp                 = getVal('review_curp').toUpperCase();
     if (getVal('review_edad'))                 info.edad                 = getVal('review_edad');
     if (getVal('review_genero'))               info.genero               = getVal('review_genero');
     if (Object.keys(info).length) sd.informacion_paciente = info;
@@ -747,6 +750,7 @@ function buildStructuredDataFromForm() {
     // evaluacion
     const ev = {};
     if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
+    if (getVal('review_codigo_cie11'))      ev.codigo_cie11      = getVal('review_codigo_cie11').toUpperCase();
     if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
     if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
     if (Object.keys(ev).length) sd.evaluacion = ev;
@@ -1113,9 +1117,13 @@ function resetApplication() {
     elements.downloadPdfBtn.style.display = 'none';
     if (elements.createPDF) elements.createPDF.checked = true;
 
-    // Reset numero_expediente
+    // Reset patient/evaluation fields
     const numExpField = document.getElementById('review_numero_expediente');
     if (numExpField) numExpField.value = '';
+    const curpField = document.getElementById('review_curp');
+    if (curpField) curpField.value = '';
+    const cie11Field = document.getElementById('review_codigo_cie11');
+    if (cie11Field) cie11Field.value = '';
 
     // Clear file input
     elements.audioFileInput.value = '';

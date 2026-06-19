@@ -142,6 +142,10 @@ class GoogleDocsGenerator:
         if num_exp:
             add_text("Expediente: ", bold=True, newline=False)
             add_text(num_exp, bold=False)
+        curp = info.get('curp', '')
+        if curp:
+            add_text("CURP: ", bold=True, newline=False)
+            add_text(curp, bold=False)
         add_text(f"FECHA: {meta.get('fecha_consulta', '__________')}\t\tEDAD: {info.get('edad', '____')}", bold=False)
         add_text(f"NOMBRE: {info.get('nombre_del_paciente', '____________________')}\t\tFECHA DE NACIMIENTO: {info.get('fecha_de_nacimiento', '__________')}", bold=False)
         add_text(f"ESTADO CIVIL: {info.get('estado_civil', '__________')}\t\tSEXO: {info.get('genero', '__________')}", bold=False)
@@ -211,7 +215,11 @@ class GoogleDocsGenerator:
         
         add_text("Diagnóstico: ", bold=True, newline=False)
         add_text(ev.get('diagnostico', ev.get('diagnostico_principal', '')), bold=False)
-        
+
+        if ev.get('codigo_cie11'):
+            add_text("CIE-11: ", bold=True, newline=False)
+            add_text(ev.get('codigo_cie11', ''), bold=False)
+
         add_text("Impresión Clínica: ", bold=True, newline=False)
         add_text(ev.get('impresion_clinica', ''), bold=False)
 

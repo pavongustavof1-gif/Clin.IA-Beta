@@ -30,6 +30,10 @@
         "numero_expediente": {
           "type": "string",
           "description": "Número de expediente clínico asignado por el consultorio"
+        },
+        "curp": {
+          "type": "string",
+          "description": "Clave Única de Registro de Población — 18 caracteres alfanuméricos. No autogenerar."
         }
       }
     },
@@ -111,6 +115,10 @@
             "type": "string"
           },
           "description": "Additional or differential diagnoses"
+        },
+        "codigo_cie11": {
+          "type": "string",
+          "description": "Código CIE-11 primario correspondiente al diagnóstico principal. Ejemplo: CA40, 5A11, BA00"
         },
         "impresion_clinica": {
           "type": "string",
