@@ -1477,13 +1477,6 @@ body {
     position: relative;
 }
 
-/* Allow ECT popup to escape the scrollable review panel */
-.review-form-panel {
-    overflow-y: visible !important;
-    max-height: none !important;
-}
-
-.review-panel {
-    overflow-y: visible !important;
-    max-height: none !important;
+#reviewSection {
+    overflow: visible !important;
 }
