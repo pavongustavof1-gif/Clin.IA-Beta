@@ -25,6 +25,10 @@ class Config:
     # If you must keep a file path, make it flexible:
     GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
     
+    # WHO ICD-11 API
+    ICD_CLIENT_ID     = os.environ.get('ICD_CLIENT_ID', '')
+    ICD_CLIENT_SECRET = os.environ.get('ICD_CLIENT_SECRET', '')
+
     # Resend email delivery
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
     RESEND_SENDER  = 'admin@clinianotes.com'

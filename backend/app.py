@@ -613,6 +613,16 @@ def process_transcript():
         }), 500
 
 
+@app.route('/api/icd-token', methods=['GET'])
+def get_icd_token():
+    """Proxy endpoint — returns a fresh WHO ICD API token to the frontend ECT widget."""
+    from icd_service import _get_token
+    token = _get_token()
+    if not token:
+        return jsonify({'error': 'ICD credentials not configured'}), 503
+    return jsonify({'token': token})
+
+
 @app.route('/api/session/<session_id>', methods=['GET'])
 def get_session(session_id):
     """Retrieve session data by ID"""

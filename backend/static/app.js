@@ -205,7 +205,76 @@ function init() {
         });
     }
 
+    // CIE-11 "cambiar" button
+    const cie11ClearBtn = document.getElementById('cie11-clear-btn');
+    if (cie11ClearBtn) {
+        cie11ClearBtn.addEventListener('click', () => setCIE11Selection('', ''));
+    }
+
+    initCIE11Widget();
+
     console.log('[ClinIA] Application initialized successfully');
+}
+
+// ─────────────────────────────────────────────
+// CIE-11 / WHO ECT widget
+// ─────────────────────────────────────────────
+function initCIE11Widget() {
+    if (typeof ECT === 'undefined') {
+        console.warn('CIE-11: ECT library not loaded');
+        return;
+    }
+
+    const mySettings = {
+        apiServerUrl: 'https://id.who.int',
+        apiSecured: true,
+        language: 'es',
+        source: 'mms',
+        popupMode: true,
+        sourceApp: 'ClinIA',
+    };
+
+    const myCallbacks = {
+        selectedEntityFunction: (selectedEntity) => {
+            setCIE11Selection(selectedEntity.code, selectedEntity.title || selectedEntity.selectedText);
+            ECT.Handler.clear('1');
+        },
+        getNewTokenFunction: async () => {
+            try {
+                const resp = await fetch('/api/icd-token');
+                const data = await resp.json();
+                return data.token;
+            } catch (e) {
+                console.error('CIE-11: Failed to get token', e);
+                return null;
+            }
+        },
+    };
+
+    ECT.Handler.configure(mySettings, myCallbacks);
+    console.log('CIE-11: ECT widget initialized');
+}
+
+function setCIE11Selection(code, title) {
+    document.getElementById('review_codigo_cie11').value = code || '';
+    document.getElementById('review_titulo_cie11').value = title || '';
+
+    const badge          = document.getElementById('cie11-badge');
+    const titleDisplay   = document.getElementById('cie11-title-display');
+    const selectedDisplay = document.getElementById('cie11-selected-display');
+    const searchBlock    = document.getElementById('cie11-search-block');
+
+    if (!badge) return;
+
+    if (code) {
+        badge.textContent = code;
+        titleDisplay.textContent = title || '';
+        selectedDisplay.style.display = 'block';
+        searchBlock.style.display = 'none';
+    } else {
+        selectedDisplay.style.display = 'none';
+        searchBlock.style.display = 'block';
+    }
 }
 
 // ─────────────────────────────────────────────
@@ -662,6 +731,9 @@ function displayReviewScreen(result) {
     setVal('review_impresion_clinica', ev.impresion_clinica);
     setVal('review_pronostico',        ev.pronostico);
 
+    // Pre-fill CIE-11 from AI suggestion
+    setCIE11Selection(ev.codigo_cie11 || '', ev.titulo_cie11 || '');
+
     // Plan
     setVal('review_tratamiento', plan.tratamiento);
 
@@ -751,6 +823,12 @@ function buildStructuredDataFromForm() {
     if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
     if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
     if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
+    const cie11Code  = document.getElementById('review_codigo_cie11').value.trim();
+    const cie11Title = document.getElementById('review_titulo_cie11').value.trim();
+    if (cie11Code) {
+        ev.codigo_cie11 = cie11Code;
+        if (cie11Title) ev.titulo_cie11 = cie11Title;
+    }
     if (Object.keys(ev).length) sd.evaluacion = ev;
 
     // plan
@@ -1120,6 +1198,7 @@ function resetApplication() {
     if (numExpField) numExpField.value = '';
     const curpField = document.getElementById('review_curp');
     if (curpField) curpField.value = '';
+    setCIE11Selection('', '');
 
     // Clear file input
     elements.audioFileInput.value = '';
