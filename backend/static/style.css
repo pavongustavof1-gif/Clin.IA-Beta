@@ -1461,7 +1461,7 @@ body {
     max-width: 520px !important;
     width: 100% !important;
     z-index: 9999 !important;
-    overflow: visible !important;
+    position: fixed !important;
 }
 
 .ctw-window * {
@@ -1476,4 +1476,5 @@ body {
 
 #cie11-field-block {
     overflow: visible !important;
+    position: relative;
 }
