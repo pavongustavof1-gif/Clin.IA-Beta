@@ -55,7 +55,6 @@
     </style>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <link rel="stylesheet" href="https://icdcdn.who.int/embeddedct/icd11ect-1.8.css">
 
     <!-- SVG Icon Sprite — defined once, used via <use href="#id"> -->
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none;position:absolute" aria-hidden="true" focusable="false">
@@ -520,36 +519,13 @@
 
                                 <!-- CIE-11 — WHO Embedded Coding Tool -->
                                 <div class="review-field" id="cie11-field-block">
-                                    <label class="review-label">
+                                    <label class="review-label" for="review_codigo_cie11">
                                         Código CIE-11
-                                        <span class="review-hint">(sugerido por IA · busca o edita)</span>
+                                        <span class="review-hint">(sugerido por IA · editable)</span>
                                     </label>
-
-                                    <!-- Shows AI-suggested code + title; click X to search manually -->
-                                    <div id="cie11-selected-display" style="display:none; margin-bottom:6px;">
-                                        <span id="cie11-badge"
-                                              style="background:#E1F5EE; color:#0F6E56; padding:4px 10px;
-                                                     border-radius:4px; font-weight:600; font-size:14px;
-                                                     font-family:monospace; margin-right:8px;"></span>
-                                        <span id="cie11-title-display"
-                                              style="color:#5F5E5A; font-size:14px;"></span>
-                                        <button type="button" id="cie11-clear-btn"
-                                                style="margin-left:10px; background:none; border:none;
-                                                       color:#A32D2D; cursor:pointer; font-size:13px;">
-                                            ✕ cambiar
-                                        </button>
-                                    </div>
-
-                                    <!-- ECT search input — shown when no code selected or doctor clicks "cambiar" -->
-                                    <div id="cie11-search-block">
-                                        <input type="text" class="ctw-input review-input" autocomplete="off"
-                                               data-ctw-ino="1"
-                                               placeholder="Escribe diagnóstico en español para buscar código CIE-11...">
-                                        <div class="ctw-window" data-ctw-ino="1"></div>
-                                    </div>
-
-                                    <!-- Hidden inputs carrying values into buildStructuredDataFromForm() -->
-                                    <input type="hidden" id="review_codigo_cie11">
+                                    <input type="text" id="review_codigo_cie11" class="review-input"
+                                           placeholder="ej. CA40, 5A11, BA00"
+                                           style="text-transform: uppercase; font-family: monospace;">
                                     <input type="hidden" id="review_titulo_cie11">
                                 </div>
 
@@ -778,6 +754,5 @@
     </div><!-- /avisoModal -->
     
     <script src="{{ url_for('static', filename='app.js') }}"></script>
-    <script src="https://icdcdn.who.int/embeddedct/icd11ect-1.8.js"></script>
 </body>
 </html>
