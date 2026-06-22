@@ -430,10 +430,6 @@ class PDFGenerator:
                 self.styles['normal'],
             ))
 
-        cie11 = self._safe(ev.get('codigo_cie11'))
-        if cie11:
-            rows.append(self._label_para('CIE-11:', cie11))
-
         diag_add = ev.get('diagnosticos_adicionales') or []
         if isinstance(diag_add, list) and diag_add:
             rows.append(Paragraph('<b>Diagnósticos adicionales:</b>', self.styles['bold_label']))

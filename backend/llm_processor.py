@@ -77,8 +77,7 @@ INSTRUCCIONES CRÍTICAS:
 4. Organiza la información según el formato SOAP
 5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
 6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'
-7. codigo_cie11: proporcionar el código más específico posible basado en el diagnóstico. El médico puede corregirlo en la pantalla de revisión. No inventar códigos si no estás seguro — es preferible omitirlo.
-8. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.{speaker_instruction}
+7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.{speaker_instruction}
 
 TRANSCRIPCIÓN:
 {transcript_content}
@@ -117,7 +116,6 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
   }},
   "evaluacion": {{
     "diagnostico": "string - diagnóstico principal",
-    "codigo_cie11": "string - código CIE-11 primario que corresponde al diagnóstico principal. Proporcionar solo el código alfanumérico, sin descripción. Ejemplos: CA40, 5A11, BA00, MG22. Si no puedes determinarlo con certeza, omitir.",
     "diagnosticos_adicionales": ["otros diagnósticos o diagnósticos diferenciales"],
     "impresion_clinica": "string - impresión general del médico",
     "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)"

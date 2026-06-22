@@ -659,7 +659,6 @@ function displayReviewScreen(result) {
 
     // Evaluación
     setVal('review_diagnostico',      ev.diagnostico);
-    setVal('review_codigo_cie11',     ev.codigo_cie11);
     setVal('review_impresion_clinica', ev.impresion_clinica);
     setVal('review_pronostico',        ev.pronostico);
 
@@ -750,7 +749,6 @@ function buildStructuredDataFromForm() {
     // evaluacion
     const ev = {};
     if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
-    if (getVal('review_codigo_cie11'))      ev.codigo_cie11      = getVal('review_codigo_cie11').toUpperCase();
     if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
     if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
     if (Object.keys(ev).length) sd.evaluacion = ev;
@@ -1122,8 +1120,6 @@ function resetApplication() {
     if (numExpField) numExpField.value = '';
     const curpField = document.getElementById('review_curp');
     if (curpField) curpField.value = '';
-    const cie11Field = document.getElementById('review_codigo_cie11');
-    if (cie11Field) cie11Field.value = '';
 
     // Clear file input
     elements.audioFileInput.value = '';
