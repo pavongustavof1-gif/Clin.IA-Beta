@@ -152,6 +152,10 @@ body {
     overflow: hidden;
 }
 
+#reviewSection {
+    overflow: visible !important;
+}
+
 .card::before {
     content: '';
     position: absolute;
@@ -729,6 +733,7 @@ body {
     flex: 1;
     min-width: 0;
     overflow-y: auto;
+    overflow-x: visible;
     max-height: 80vh;
 }
 
@@ -785,6 +790,7 @@ body {
 
 .review-form-panel {
     overflow-y: auto;
+    overflow-x: visible;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
@@ -1461,6 +1467,7 @@ body {
     max-width: 520px !important;
     width: 100% !important;
     z-index: 9999 !important;
+    overflow: visible !important;
 }
 
 .ctw-window * {
@@ -1475,8 +1482,5 @@ body {
 
 #cie11-field-block {
     position: relative;
-}
-
-#reviewSection {
     overflow: visible !important;
 }
