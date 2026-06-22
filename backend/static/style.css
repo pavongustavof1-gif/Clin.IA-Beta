@@ -1461,7 +1461,6 @@ body {
     max-width: 520px !important;
     width: 100% !important;
     z-index: 9999 !important;
-    position: fixed !important;
 }
 
 .ctw-window * {
@@ -1475,6 +1474,16 @@ body {
 }
 
 #cie11-field-block {
-    overflow: visible !important;
     position: relative;
+}
+
+/* Allow ECT popup to escape the scrollable review panel */
+.review-form-panel {
+    overflow-y: visible !important;
+    max-height: none !important;
+}
+
+.review-panel {
+    overflow-y: visible !important;
+    max-height: none !important;
 }
