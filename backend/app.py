@@ -856,6 +856,27 @@ def download_pdf(session_id):
         logger.error(f"PDF: Download error: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
+# temporal VVVV  Borrar
+@app.route('/api/admin/reset-db', methods=['POST'])
+def reset_db():
+    """TEMPORARY — delete and reinitialize the database. Remove after use."""
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('DROP TABLE IF EXISTS sessions')
+        conn.commit()
+        conn.close()
+        init_db()
+        logger.info("DB: Database reset by admin.")
+        return jsonify({'status': 'ok', 'message': 'Database dropped and reinitialized'}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+# temporal ^^^^ Borrar
+
+
+
+
+
 
 # Error handlers
 @app.errorhandler(413)
