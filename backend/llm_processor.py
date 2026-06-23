@@ -5,6 +5,7 @@ from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
+from icd_service import lookup_cie11
 import json
 import os
 import time
@@ -191,6 +192,20 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
 
                 structured_data = json.loads(cleaned_text)
                 logger.info("LLM: Extraction successful.")
+
+                # CIE-11 lookup — inject code from WHO API based on Gemini's extracted diagnosis
+                try:
+                    diagnostico = structured_data.get('evaluacion', {}).get('diagnostico', '')
+                    if diagnostico:
+                        cie_result = lookup_cie11(diagnostico)
+                        if cie_result:
+                            structured_data.setdefault('evaluacion', {})
+                            structured_data['evaluacion']['codigo_cie11'] = cie_result['code']
+                            structured_data['evaluacion']['titulo_cie11'] = cie_result['title']
+                            logger.info(f"ICD: Injected CIE-11 code {cie_result['code']} into structured_data")
+                except Exception as e:
+                    logger.warning(f"ICD: Could not inject CIE-11 code (non-fatal): {e}")
+
                 return structured_data
 
             except Exception as e:

@@ -516,6 +516,19 @@
                                     <label class="review-label" for="review_diagnostico">Diagnóstico</label>
                                     <input type="text" id="review_diagnostico" class="review-input">
                                 </div>
+
+                                <!-- CIE-11 — WHO Embedded Coding Tool -->
+                                <div class="review-field" id="cie11-field-block">
+                                    <label class="review-label" for="review_codigo_cie11">
+                                        Código CIE-11
+                                        <span class="review-hint">(sugerido por IA · editable)</span>
+                                    </label>
+                                    <input type="text" id="review_codigo_cie11" class="review-input"
+                                           placeholder="ej. CA40, 5A11, BA00"
+                                           style="text-transform: uppercase; font-family: monospace;">
+                                    <input type="hidden" id="review_titulo_cie11">
+                                </div>
+
                                 <div class="review-field">
                                     <label class="review-label" for="review_impresion_clinica">Impresión Clínica</label>
                                     <textarea id="review_impresion_clinica" class="review-textarea" rows="2"></textarea>
@@ -698,7 +711,7 @@
 
                 <h3 class="aviso-section-title">2. Datos personales que se recaban</h3>
                 <p><strong>Datos de identificación:</strong> nombre completo, CURP, fecha de nacimiento, edad, sexo, domicilio, teléfono, número de expediente clínico.</p>
-                <p><strong>Datos de salud (datos personales sensibles):</strong> motivo de consulta, síntomas, signos vitales, hallazgos de exploración física, diagnóstico con código CIE-10, pronóstico, tratamiento, medicamentos prescritos, estudios solicitados, antecedentes heredofamiliares y personales patológicos, y cualquier otra información clínica mencionada durante la consulta.</p>
+                <p><strong>Datos de salud (datos personales sensibles):</strong> motivo de consulta, síntomas, signos vitales, hallazgos de exploración física, diagnóstico con código CIE-11, pronóstico, tratamiento, medicamentos prescritos, estudios solicitados, antecedentes heredofamiliares y personales patológicos, y cualquier otra información clínica mencionada durante la consulta.</p>
                 <p><strong>Datos de la consulta:</strong> grabación de audio, transcripción de texto, fecha y hora exacta de la consulta con zona horaria del dispositivo.</p>
                 <p><strong>Datos de consentimiento:</strong> registro del consentimiento otorgado por el paciente antes del inicio de la grabación, incluyendo fecha y hora.</p>
 

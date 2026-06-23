@@ -662,6 +662,10 @@ function displayReviewScreen(result) {
     setVal('review_impresion_clinica', ev.impresion_clinica);
     setVal('review_pronostico',        ev.pronostico);
 
+    // Pre-fill CIE-11 from AI suggestion
+    setVal('review_codigo_cie11', (ev.codigo_cie11 || '').toUpperCase());
+    document.getElementById('review_titulo_cie11').value = ev.titulo_cie11 || '';
+
     // Plan
     setVal('review_tratamiento', plan.tratamiento);
 
@@ -751,6 +755,12 @@ function buildStructuredDataFromForm() {
     if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
     if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
     if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
+    const cie11Code  = document.getElementById('review_codigo_cie11').value.trim();
+    const cie11Title = document.getElementById('review_titulo_cie11').value.trim();
+    if (cie11Code) {
+        ev.codigo_cie11 = cie11Code;
+        if (cie11Title) ev.titulo_cie11 = cie11Title;
+    }
     if (Object.keys(ev).length) sd.evaluacion = ev;
 
     // plan
@@ -1120,6 +1130,8 @@ function resetApplication() {
     if (numExpField) numExpField.value = '';
     const curpField = document.getElementById('review_curp');
     if (curpField) curpField.value = '';
+    setVal('review_codigo_cie11', '');
+    document.getElementById('review_titulo_cie11').value = '';
 
     // Clear file input
     elements.audioFileInput.value = '';

@@ -116,6 +116,14 @@
           },
           "description": "Additional or differential diagnoses"
         },
+        "codigo_cie11": {
+          "type": "string",
+          "description": "Código CIE-11 primario correspondiente al diagnóstico principal. Ejemplo: CA40, 5A11, BA00. Obtenido vía WHO ICD API — no autogenerar."
+        },
+        "titulo_cie11": {
+          "type": "string",
+          "description": "Descripción oficial en español del código CIE-11 seleccionado. Obtenida vía WHO ICD API."
+        },
         "impresion_clinica": {
           "type": "string",
           "description": "Clinical impression"

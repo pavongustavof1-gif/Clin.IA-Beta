@@ -443,6 +443,14 @@ class PDFGenerator:
         if pronostico:
             rows.append(self._label_para('Pronóstico:', pronostico))
 
+        cie11_code  = self._safe(ev.get('codigo_cie11'))
+        cie11_title = self._safe(ev.get('titulo_cie11'))
+        if cie11_code:
+            cie11_value = cie11_code
+            if cie11_title:
+                cie11_value += f'  —  {cie11_title}'
+            rows.append(self._label_para('Código CIE-11:', cie11_value))
+
         if not rows:
             return []
         return [self._section_header('A', 'EVALUACIÓN', self.COLOR_A),

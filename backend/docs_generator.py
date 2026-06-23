@@ -216,6 +216,15 @@ class GoogleDocsGenerator:
         add_text("Diagnóstico: ", bold=True, newline=False)
         add_text(ev.get('diagnostico', ev.get('diagnostico_principal', '')), bold=False)
 
+        cie11_code  = ev.get('codigo_cie11', '')
+        cie11_title = ev.get('titulo_cie11', '')
+        if cie11_code:
+            add_text("Código CIE-11: ", bold=True, newline=False)
+            cie11_rest = cie11_code
+            if cie11_title:
+                cie11_rest += f'  —  {cie11_title}'
+            add_text(cie11_rest, bold=False)
+
         add_text("Impresión Clínica: ", bold=True, newline=False)
         add_text(ev.get('impresion_clinica', ''), bold=False)
 

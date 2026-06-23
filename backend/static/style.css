@@ -1454,3 +1454,7 @@ body {
     padding: 0.75rem 1rem;
     margin-bottom: 1rem;
 }
+
+#cie11-field-block {
+    position: relative;
+}
