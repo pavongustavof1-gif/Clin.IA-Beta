@@ -829,6 +829,13 @@ async function confirmAndGenerate() {
         await sleep(500);
         displayResults(result);
 
+        // Lock review form — note is now immutable (NOM-024)
+        document.querySelectorAll('.review-input').forEach(el => {
+            el.setAttribute('readonly', true);
+            el.style.backgroundColor = 'var(--bg-secondary, #f5f5f5)';
+            el.style.color = 'var(--text-muted, #888)';
+        });
+
     } catch (error) {
         console.error('[ClinIA] Confirm error:', error);
         showError(`Error al generar el documento: ${error.message}`);

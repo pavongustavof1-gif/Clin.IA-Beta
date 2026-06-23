@@ -122,7 +122,8 @@ class PDFGenerator:
     # Public entry point
     # ──────────────────────────────────────────────────────────────
 
-    def generate_pdf(self, structured_data: dict) -> bytes:
+    def generate_pdf(self, structured_data: dict, session_id: str = '') -> bytes:
+        self._session_id = session_id
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
@@ -568,6 +569,12 @@ class PDFGenerator:
         left_content = [
             Paragraph('Generado por Clin.IA — clinianotes.com', small),
             Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
+            Paragraph(
+                'En esta consulta se utilizo un sistema de transcripcion e inteligencia artificial (ClinIA) '
+                'para generar la nota clinica. El audio de la consulta es eliminado automaticamente tras la '
+                'transcripcion. El paciente ha sido informado y ha expresado su consentimiento.',
+                small_i
+            ),
         ]
         right_content = [
             Paragraph('________________________________', right),
@@ -603,7 +610,8 @@ class PDFGenerator:
         # Branding (left)
         canvas.setFont('Helvetica', 7)
         canvas.setFillColor(self.GRAY_TEXT)
-        canvas.drawString(18 * mm, 10 * mm, 'Generado por Clin.IA · clinianotes.com')
+        id_label = f'ID de nota: {self._session_id}  ·  ' if getattr(self, '_session_id', '') else ''
+        canvas.drawString(18 * mm, 10 * mm, f'{id_label}Generado por Clin.IA · clinianotes.com')
         # Page number (right)
         canvas.drawRightString(LETTER[0] - 18 * mm, 10 * mm, f'Página {doc.page}')
         canvas.restoreState()

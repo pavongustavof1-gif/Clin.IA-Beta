@@ -150,6 +150,20 @@ def init_db():
         )
     ''')
     conn.commit()
+
+    migrations = [
+        "ALTER TABLE sessions ADD COLUMN status TEXT DEFAULT 'pending_review'",
+        "ALTER TABLE sessions ADD COLUMN locked_at TEXT",
+        "ALTER TABLE sessions ADD COLUMN addenda_json TEXT",
+        "ALTER TABLE sessions ADD COLUMN cancelled_at TEXT",
+        "ALTER TABLE sessions ADD COLUMN cancellation_reason TEXT",
+    ]
+    for sql in migrations:
+        try:
+            cursor.execute(sql)
+        except sqlite3.OperationalError:
+            pass  # Column already exists — safe to ignore
+    conn.commit()
     conn.close()
     logger.info("DB: SQLite session database initialized.")
 
@@ -448,6 +462,26 @@ def confirm_and_generate():
         if not session:
             return jsonify({'error': 'Session not found'}), 404
 
+        # NOM-024 immutability — reject if already confirmed or cancelled
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute('SELECT status FROM sessions WHERE session_id = ?', (session_id,))
+            row = cursor.fetchone()
+            conn.close()
+            if row and row[0] == 'confirmed':
+                return jsonify({
+                    'error': 'Esta nota ya fue confirmada y no puede modificarse. Para hacer correcciones, utilice la función de adéndum.',
+                    'error_code': 'SESSION_LOCKED'
+                }), 409
+            if row and row[0] == 'cancelled':
+                return jsonify({
+                    'error': 'Esta nota ha sido cancelada por solicitud ARCO y no puede modificarse.',
+                    'error_code': 'SESSION_CANCELLED'
+                }), 409
+        except Exception as e:
+            logger.warning(f"DB: Could not check session lock status: {e}")
+
         local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
 
         doc_info = None
@@ -470,7 +504,7 @@ def confirm_and_generate():
         if create_pdf:
             logger.info("Orchestrator: PHASE C2 — PDF Generation")
             try:
-                pdf_bytes = pdf_generator.generate_pdf(structured_data)
+                pdf_bytes = pdf_generator.generate_pdf(structured_data, session_id=session_id)
                 logger.info(f"PDF: Generated successfully — {len(pdf_bytes)} bytes")
             except Exception as e:
                 logger.warning(f"PDF: Generation failed: {str(e)}")
@@ -495,9 +529,38 @@ def confirm_and_generate():
             'structured_data': structured_data,
             'document': doc_info,
             'status': 'confirmed',
+            'locked_at': datetime.now().isoformat(),
             'timestamp': response['timestamp'],
             'consent_tratamiento': consent_tratamiento
         })
+
+        # Explicitly write new columns (INSERT OR REPLACE doesn't cover them)
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE sessions SET status = ?, locked_at = ? WHERE session_id = ?',
+                ('confirmed', datetime.now().isoformat(), session_id)
+            )
+            conn.commit()
+            conn.close()
+            logger.info(f"DB: Session {session_id} locked — status=confirmed")
+        except Exception as e:
+            logger.warning(f"DB: Could not lock session {session_id}: {e}")
+
+        # Delete transcript text to minimize LFPDPPP exposure
+        try:
+            conn = sqlite3.connect(DB_PATH)
+            cursor = conn.cursor()
+            cursor.execute(
+                'UPDATE sessions SET transcript_text = NULL WHERE session_id = ?',
+                (session_id,)
+            )
+            conn.commit()
+            conn.close()
+            logger.info(f"DB: Transcript text deleted for session {session_id} — LFPDPPP minimization")
+        except Exception as e:
+            logger.warning(f"DB: Could not delete transcript text for {session_id}: {e}")
 
         # Store PDF bytes AFTER save_session to prevent the INSERT OR REPLACE
         # from wiping the pdf_data column
@@ -623,29 +686,101 @@ def get_session(session_id):
 
 
 @app.route('/api/session/<session_id>', methods=['DELETE'])
-def delete_session(session_id):
+def cancel_session(session_id):
     """
-    Delete a session record from SQLite.
-    Used when a patient exercises their derecho de cancelación under LFPDPPP.
-    The corresponding Google Doc must be deleted manually by the doctor from their Drive.
+    Soft-delete (bloqueo) a session in response to a patient ARCO Cancelación request.
+    NOM-004 requires clinical records to be retained for 5 years minimum.
+    We block access instead of deleting — hard deletion occurs after the retention period.
     """
     try:
+        reason = request.args.get('reason', 'Solicitud ARCO — Cancelación')
         conn = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM sessions WHERE session_id = ?', (session_id,))
-        affected = cursor.rowcount
+        cursor.execute('SELECT status FROM sessions WHERE session_id = ?', (session_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+        cursor.execute(
+            '''UPDATE sessions
+               SET status = 'cancelled',
+                   cancelled_at = ?,
+                   cancellation_reason = ?,
+                   transcript_text = NULL
+               WHERE session_id = ?''',
+            (datetime.now().isoformat(), reason, session_id)
+        )
         conn.commit()
         conn.close()
-        if affected:
-            logger.info(f"DB: Session {session_id} deleted — patient ARCO request.")
-            return jsonify({
-                'status': 'deleted',
-                'session_id': session_id,
-                'note': 'El documento en Google Drive debe ser eliminado manualmente por el Responsable.'
-            }), 200
-        return jsonify({'error': 'Session not found'}), 404
+        logger.info(f"DB: Session {session_id} blocked — ARCO Cancelación request.")
+        return jsonify({
+            'status': 'cancelled',
+            'session_id': session_id,
+            'message': 'La sesión ha sido bloqueada conforme al derecho de cancelación LFPDPPP. Los datos clínicos se conservan durante el período de retención obligatorio de 5 años (NOM-004) y serán eliminados definitivamente al vencimiento de dicho plazo.',
+        }), 200
     except Exception as e:
-        logger.error(f"DB: Error deleting session {session_id}: {str(e)}")
+        logger.error(f"DB: Error cancelling session {session_id}: {str(e)}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/session/<session_id>/addendum', methods=['POST'])
+def add_addendum(session_id):
+    """
+    Append an addendum to a confirmed (locked) session.
+    Types: 'adendum_clinico' (doctor correction) or 'rectificacion_arco' (patient ARCO request).
+    The original structured_data is never modified.
+    """
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'No data provided'}), 400
+
+        addendum_text = data.get('addendum_text', '').strip()
+        addendum_type = data.get('addendum_type', 'adendum_clinico')
+        author        = data.get('author', 'Médico')
+
+        if not addendum_text:
+            return jsonify({'error': 'El texto del adéndum no puede estar vacío'}), 400
+        if addendum_type not in ('adendum_clinico', 'rectificacion_arco'):
+            return jsonify({'error': 'Tipo de adéndum no válido'}), 400
+
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute('SELECT status, addenda_json FROM sessions WHERE session_id = ?', (session_id,))
+        row = cursor.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+
+        status, addenda_json = row
+        if status == 'cancelled':
+            conn.close()
+            return jsonify({'error': 'No se pueden agregar adéndum a una sesión cancelada'}), 409
+        if status != 'confirmed':
+            conn.close()
+            return jsonify({'error': 'Solo se pueden agregar adéndum a notas confirmadas'}), 409
+
+        addenda = json.loads(addenda_json) if addenda_json else []
+        new_addendum = {
+            'id': f"adendum_{len(addenda) + 1}",
+            'type': addendum_type,
+            'text': addendum_text,
+            'author': author,
+            'timestamp': datetime.now().isoformat(),
+        }
+        addenda.append(new_addendum)
+
+        cursor.execute(
+            'UPDATE sessions SET addenda_json = ? WHERE session_id = ?',
+            (json.dumps(addenda, ensure_ascii=False), session_id)
+        )
+        conn.commit()
+        conn.close()
+        logger.info(f"DB: Addendum added to session {session_id} — type={addendum_type}")
+        return jsonify({'status': 'ok', 'addendum': new_addendum, 'total_addenda': len(addenda)}), 200
+
+    except Exception as e:
+        logger.error(f"DB: Error adding addendum to session {session_id}: {str(e)}")
         return jsonify({'error': str(e)}), 500
 
 
