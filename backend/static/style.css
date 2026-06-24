@@ -1458,3 +1458,118 @@ body {
 #cie11-field-block {
     position: relative;
 }
+
+/* ── Consent Card ─────────────────────────────────────── */
+.consent-card {
+    border-left: 4px solid var(--teal);
+    padding: 1rem 1.25rem;
+}
+
+.consent-card-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+}
+
+.consent-card-icon {
+    flex-shrink: 0;
+    color: var(--teal);
+    margin-top: 2px;
+}
+
+.consent-card-label {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: var(--text-primary);
+}
+
+.consent-card-label input[type="checkbox"] {
+    flex-shrink: 0;
+    margin-top: 3px;
+    accent-color: var(--teal);
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+/* ── Toggle Switches (Opciones grid) ──────────────────── */
+.options-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem 1.5rem;
+    align-items: center;
+}
+
+.toggle-label {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    cursor: pointer;
+    padding: 0.35rem 0;
+}
+
+.toggle-text {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    white-space: nowrap;
+}
+
+.toggle-switch {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 0;
+}
+
+.toggle-switch input[type="checkbox"] {
+    opacity: 0;
+    width: 0;
+    height: 0;
+    position: absolute;
+}
+
+.toggle-slider {
+    display: block;
+    width: 40px;
+    height: 22px;
+    background: var(--border-default, #ccc);
+    border-radius: 11px;
+    transition: background 0.2s;
+    cursor: pointer;
+    position: relative;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 16px;
+    height: 16px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background: var(--teal);
+}
+
+.toggle-switch input:checked + .toggle-slider::after {
+    transform: translateX(18px);
+}
+
+.personas-select {
+    font-size: 0.88rem;
+    color: var(--text-secondary);
+    background: var(--bg-card);
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+    cursor: pointer;
+    width: 52px;
+}

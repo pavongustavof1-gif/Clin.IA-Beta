@@ -264,6 +264,24 @@
 
             </section>
             
+            <!-- Consent Card — separate from Opciones -->
+            <section class="card consent-card" id="consentCard">
+                <div class="consent-card-body">
+                    <div class="consent-card-icon">
+                        <svg width="22" height="22" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <label class="consent-card-label" for="consentCheckbox">
+                        <input type="checkbox" id="consentCheckbox">
+                        <span>El paciente ha sido informado y otorga su consentimiento para la
+                        <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
+                        mediante ClinIA, de conformidad con la LFPDPPP.
+                        <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
+                    </label>
+                </div>
+            </section>
+
             <!-- Options Section -->
             <section class="card options-section">
                 <h3>
@@ -272,43 +290,38 @@
                 </h3>
                 <div class="options-grid">
 
-                    <!-- Column 1: Consent — spans full height -->
-                    <div class="options-col options-col-consent">
-                        <label class="checkbox-label consent-label">
-                            <input type="checkbox" id="consentCheckbox">
-                            <span>El paciente ha sido informado y otorga su consentimiento para la
-                            <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
-                            mediante ClinIA, de conformidad con la LFPDPPP.
-                            <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
+                    <!-- Column 1: Transcripción toggle -->
+                    <div class="options-col">
+                        <label class="toggle-label" for="printRawTranscript">
+                            <span class="toggle-text">Transcripción</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="printRawTranscript" checked role="switch">
+                                <span class="toggle-slider"></span>
+                            </span>
                         </label>
                     </div>
 
-                    <!-- Column 2: Mostrar transcripción (top) + Google Docs (bottom) -->
+                    <!-- Column 2: PDF toggle -->
                     <div class="options-col">
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="printRawTranscript" checked>
-                            <span>Mostrar transcripción completa</span>
-                        </label>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="createGoogleDoc" checked>
-                            <span>Crear documento en Google Docs</span>
+                        <label class="toggle-label" for="createPDF">
+                            <span class="toggle-text">PDF</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="createPDF" checked role="switch">
+                                <span class="toggle-slider"></span>
+                            </span>
                         </label>
                     </div>
 
-                    <!-- Column 3: Personas selector (top) + PDF (bottom) -->
+                    <!-- Column 3: Personas selector -->
                     <div class="options-col">
-                        <div class="checkbox-label" style="cursor:default;">
-                            <span style="flex-shrink:0; white-space:nowrap;">Personas en consulta:</span>
-                            <select id="speakersExpected" style="font-size:0.88rem; color:var(--text-secondary); background:var(--bg-card); border:1px solid var(--border-default); border-radius:var(--radius-sm); padding:2px 4px; cursor:pointer; width:44px; margin-left:0.5rem;">
+                        <div class="toggle-label" style="cursor:default;">
+                            <span class="toggle-text">Personas</span>
+                            <select id="speakersExpected" class="personas-select">
                                 <option value="2" selected>2</option>
                                 <option value="3">3</option>
                                 <option value="4">4</option>
                             </select>
                         </div>
-                        <label class="checkbox-label">
-                            <input type="checkbox" id="createPDF" checked>
-                            <span>Generar nota en PDF</span>
-                        </label>
                     </div>
 
                 </div>
@@ -680,11 +693,7 @@
         <!-- Footer -->
         <footer class="footer">
             <p>ClinIA Beta v0.3 - Solo para usuarios de prueba</p>
-            <p class="disclaimer">
-                <svg class="disclaimer-icon" width="14" height="14" aria-hidden="true"><use href="#icon-warning"/></svg>
-                Obtener consentimiento de pacientes en versión Beta
-            </p>
-            <p class="footer-links">
+<p class="footer-links">
                 <a href="#" class="footer-link" onclick="showAvisoModal(); return false;">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
                 <span>clinianotes.com</span>

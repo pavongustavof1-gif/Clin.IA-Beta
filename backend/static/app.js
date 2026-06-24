@@ -78,7 +78,6 @@ const elements = {
     audioDuration: document.getElementById('audioDuration'),
     
     printRawTranscript: document.getElementById('printRawTranscript'),
-    createGoogleDoc: document.getElementById('createGoogleDoc'),
     createPDF: document.getElementById('createPDF'),
     downloadPdfBtn: document.getElementById('downloadPdfBtn'),
     
@@ -477,13 +476,14 @@ async function processAudio() {
     // Show progress
     elements.progressSection.style.display = 'block';
     updateProgress(0, 'Preparando audio...');
+    elements.progressSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
     
     try {
         // Prepare form data
         const formData = new FormData();
         formData.append('audio', state.currentAudioBlob, 'recording.webm');
         formData.append('print_raw', elements.printRawTranscript.checked);
-        formData.append('create_doc', elements.createGoogleDoc.checked);
+        formData.append('create_doc', false);
         formData.append('speakers_expected', elements.speakersExpected.value);
         const _now = new Date();
         const _pad = n => String(n).padStart(2, '0');
@@ -805,7 +805,7 @@ async function confirmAndGenerate() {
             body: JSON.stringify({
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
-                create_doc: elements.createGoogleDoc.checked,
+                create_doc: false,
                 create_pdf: elements.createPDF ? elements.createPDF.checked : true,
                 doctor_email: elements.doctorEmail?.value?.trim() || '',
                 consent_tratamiento_given: elements.consentTratamiento ? elements.consentTratamiento.checked : false,
@@ -1170,6 +1170,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (overlay) {
         overlay.addEventListener('click', function(e) {
             if (e.target === this) closeAvisoModal();
+        });
+    }
+
+    // Scroll review panel into view when a review field is focused
+    const reviewSection = document.getElementById('reviewSection');
+    if (reviewSection) {
+        reviewSection.querySelectorAll('input, select, textarea').forEach(el => {
+            el.addEventListener('focus', () => {
+                reviewSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, { passive: true });
         });
     }
 });
