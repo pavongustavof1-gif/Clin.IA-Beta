@@ -14,7 +14,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether,
+    HRFlowable, KeepTogether, PageBreak,
 )
 from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
@@ -135,6 +135,8 @@ class PDFGenerator:
             title="Nota de Evolución Clínica — Clin.IA",
         )
         story = []
+        story.extend(self._build_consent_page(structured_data))
+        story.append(PageBreak())
         story.extend(self._build_header(structured_data))
         story.extend(self._build_patient_block(structured_data))
         story.append(HRFlowable(width="100%", thickness=1.5, color=self.TEAL, spaceAfter=4 * mm))
@@ -558,38 +560,187 @@ class PDFGenerator:
     # Signature / compliance block
     # ──────────────────────────────────────────────────────────────
 
-    def _build_signature_block(self, structured_data: dict) -> list:
+    def _build_consent_page(self, structured_data: dict) -> list:
+        """
+        Page 1: Carta de Consentimiento Informado.
+        Satisfies NOM-004 section 10.1 and LFPDPPP informed consent requirement.
+        """
+        info   = structured_data.get('informacion_paciente') or {}
         meta   = structured_data.get('metadata') or {}
-        medico = self._safe(meta.get('medico'))
+        fecha  = self._safe(
+            meta.get('fecha_hora_consulta') or meta.get('fecha_consulta'),
+            datetime.now().strftime('%Y-%m-%d %H:%M')
+        )
+        paciente      = self._safe(info.get('nombre_del_paciente'), '___________________________')
+        session_label = getattr(self, '_session_id', '')
+        page_width    = LETTER[0] - 36 * mm
 
-        small = ParagraphStyle('sig_small', fontName='Helvetica',         fontSize=7, textColor=self.GRAY_TEXT)
-        small_i = ParagraphStyle('sig_i',   fontName='Helvetica-Oblique', fontSize=7, textColor=self.GRAY_TEXT)
-        right = ParagraphStyle('sig_r',     fontName='Helvetica',         fontSize=7, textColor=self.GRAY_TEXT, alignment=TA_RIGHT)
+        title_style = ParagraphStyle('consent_title', fontName='Helvetica-Bold', fontSize=14,
+                                      textColor=self.TEAL, alignment=TA_CENTER, spaceAfter=6 * mm)
+        subtitle_style = ParagraphStyle('consent_subtitle', fontName='Helvetica-Bold', fontSize=10,
+                                         textColor=colors.black, spaceAfter=3 * mm, spaceBefore=5 * mm)
+        body_style = ParagraphStyle('consent_body', fontName='Helvetica', fontSize=9,
+                                     textColor=colors.black, leading=14, spaceAfter=3 * mm)
+        small_style = ParagraphStyle('consent_small', fontName='Helvetica-Oblique', fontSize=7,
+                                      textColor=self.GRAY_TEXT, alignment=TA_CENTER, spaceBefore=4 * mm)
+        sig_label = ParagraphStyle('csl', fontName='Helvetica',      fontSize=8,
+                                    textColor=colors.black, alignment=TA_CENTER)
+        sig_name  = ParagraphStyle('csn', fontName='Helvetica-Bold', fontSize=8,
+                                    textColor=colors.black, alignment=TA_CENTER)
+        sig_sub   = ParagraphStyle('css', fontName='Helvetica',      fontSize=7,
+                                    textColor=self.GRAY_TEXT, alignment=TA_CENTER)
+
+        elems = []
+
+        # Header banner
+        date_style_w = ParagraphStyle('cdate', fontName='Helvetica', fontSize=8,
+                                       textColor=colors.white, alignment=TA_RIGHT)
+        left_cell  = [Paragraph('Consultorio Médico', self.styles['clinic_name']),
+                      Paragraph('Dirección del consultorio', self.styles['clinic_address'])]
+        right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', self.styles['note_title']),
+                      Paragraph(html.escape(fecha), date_style_w)]
+        banner = Table([[left_cell, right_cell]],
+                       colWidths=[page_width * 0.60, page_width * 0.40])
+        banner.setStyle(TableStyle([
+            ('BACKGROUND',    (0, 0), (-1, -1), self.TEAL),
+            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+            ('ALIGN',         (1, 0), (1,  0),  'RIGHT'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ]))
+        elems.append(banner)
+        elems.append(Spacer(1, 6 * mm))
+
+        # Patient identification
+        elems.append(Paragraph('Datos del Paciente', subtitle_style))
+        elems.append(Paragraph(
+            f'Nombre: <b>{html.escape(paciente)}</b> &nbsp;&nbsp;&nbsp; Fecha: <b>{html.escape(fecha)}</b>',
+            body_style
+        ))
+        curp = self._safe(info.get('curp'))
+        if curp:
+            elems.append(Paragraph(f'CURP: <b>{html.escape(curp)}</b>', body_style))
+        elems.append(Spacer(1, 4 * mm))
+
+        # Purpose
+        elems.append(Paragraph('Propósito de la Consulta', subtitle_style))
+        elems.append(Paragraph(
+            'El paciente acude a consulta médica para evaluación, diagnóstico y/o tratamiento por parte del '
+            'médico tratante. La presente carta documenta el consentimiento informado del paciente conforme a '
+            'lo establecido en la NOM-004-SSA3-2012 (sección 10.1) y la Ley Federal de Protección de Datos '
+            'Personales en Posesión de los Particulares (LFPDPPP).', body_style
+        ))
+
+        # AI and data use
+        elems.append(Paragraph('Uso de Inteligencia Artificial y Datos Personales', subtitle_style))
+        elems.append(Paragraph(
+            'En esta consulta se utiliza <b>Clin.IA</b>, un sistema de transcripción e inteligencia artificial '
+            'que genera automáticamente la nota clínica a partir del audio de la consulta. El paciente ha sido '
+            'informado de lo anterior y ha expresado su consentimiento. El audio de la consulta es '
+            '<b>eliminado automáticamente</b> tras la transcripción y no es almacenado. La transcripción de '
+            'texto es eliminada tras la confirmación de la nota clínica. Los datos clínicos estructurados y el '
+            'PDF de la nota son conservados durante el período mínimo de <b>5 años</b> conforme a '
+            'NOM-004-SSA3-2012 (10 años para pacientes menores de edad hasta 18+5 años).', body_style
+        ))
+
+        # ARCO rights
+        elems.append(Paragraph('Derechos ARCO', subtitle_style))
+        elems.append(Paragraph(
+            'El paciente tiene derecho a <b>Acceder</b> a sus datos personales, solicitar su '
+            '<b>Rectificación</b> mediante adéndum a la nota clínica, solicitar su <b>Cancelación</b> '
+            '(bloqueo conforme al período de retención legal), u <b>Oponerse</b> al uso secundario de sus '
+            f'datos. Para ejercer estos derechos, contactar a: <b>admin@clinianotes.com</b> indicando nombre '
+            f'completo, fecha de consulta e ID de nota: <b>{html.escape(session_label)}</b>. '
+            'El plazo de respuesta es de 20 días hábiles conforme a la LFPDPPP.', body_style
+        ))
+
+        # Consent declaration
+        elems.append(Paragraph('Declaración de Consentimiento', subtitle_style))
+        elems.append(Paragraph(
+            'El paciente declara haber leído y comprendido la presente carta, haber recibido explicación '
+            'verbal por parte del médico tratante, y otorgar su consentimiento libre, voluntario e informado '
+            'para la consulta médica y el procesamiento de sus datos personales con los fines descritos.',
+            body_style
+        ))
+        elems.append(Spacer(1, 10 * mm))
+
+        # Signature block — Patient + Doctor
+        medico   = self._safe(meta.get('medico'))
+        sig_line = '________________________________'
+        left_sig = [
+            Paragraph(sig_line, sig_label),
+            Paragraph('Firma del Paciente', sig_name),
+            Paragraph(html.escape(paciente), sig_sub),
+            Paragraph('Huella digital (si aplica)', sig_sub),
+        ]
+        right_sig = [
+            Paragraph(sig_line, sig_label),
+            Paragraph('Firma y Sello del Médico', sig_name),
+            Paragraph(html.escape(medico) if medico else 'Médico Tratante', sig_sub),
+        ]
+        sig_table = Table([[left_sig, right_sig]],
+                          colWidths=[page_width * 0.50, page_width * 0.50])
+        sig_table.setStyle(TableStyle([
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 8 * mm),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 8 * mm),
+            ('TOPPADDING',    (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elems.append(sig_table)
+        elems.append(Spacer(1, 6 * mm))
+
+        # Beta watermark
+        elems.append(Paragraph(
+            'SOLO PARA PRUEBAS — Este documento es generado por una versión Beta de Clin.IA y no constituye '
+            'un expediente clínico oficial hasta su validación por el médico tratante.', small_style
+        ))
+        if session_label:
+            elems.append(Paragraph(f'ID de nota: {session_label}', small_style))
+
+        return elems
+
+    def _build_signature_block(self, structured_data: dict) -> list:
+        meta     = structured_data.get('metadata') or {}
+        info     = structured_data.get('informacion_paciente') or {}
+        medico   = self._safe(meta.get('medico'))
+        paciente = self._safe(info.get('nombre_del_paciente'))
+
+        small   = ParagraphStyle('sb_s',  fontName='Helvetica',         fontSize=7,
+                                  textColor=self.GRAY_TEXT, alignment=TA_CENTER)
+        small_b = ParagraphStyle('sb_b',  fontName='Helvetica-Bold',    fontSize=7,
+                                  textColor=colors.black, alignment=TA_CENTER)
+        small_i = ParagraphStyle('sb_i',  fontName='Helvetica-Oblique', fontSize=7,
+                                  textColor=self.GRAY_TEXT)
+
+        sig_line = '________________________________'
 
         left_content = [
-            Paragraph('Generado por Clin.IA — clinianotes.com', small),
+            Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
             Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
-            Paragraph(
-                'En esta consulta se utilizo un sistema de transcripcion e inteligencia artificial (ClinIA) '
-                'para generar la nota clinica. El audio de la consulta es eliminado automaticamente tras la '
-                'transcripcion. El paciente ha sido informado y ha expresado su consentimiento.',
-                small_i
-            ),
+        ]
+        mid_content = [
+            Paragraph(sig_line, small),
+            Paragraph('Firma del Paciente', small_b),
+            Paragraph(html.escape(paciente) if paciente else '', small),
         ]
         right_content = [
-            Paragraph('________________________________', right),
-            Paragraph('Firma y sello del médico', right),
+            Paragraph(sig_line, small),
+            Paragraph('Firma y Sello del Médico', small_b),
+            Paragraph(html.escape(medico) if medico else 'Médico Tratante', small),
         ]
-        if medico:
-            right_content.append(Paragraph(html.escape(medico), right))
 
         page_width = LETTER[0] - 36 * mm
         t = Table(
-            [[left_content, right_content]],
-            colWidths=[page_width * 0.55, page_width * 0.45],
+            [[left_content, mid_content, right_content]],
+            colWidths=[page_width * 0.35, page_width * 0.32, page_width * 0.33]
         )
         t.setStyle(TableStyle([
             ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
+            ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
             ('LEFTPADDING',   (0, 0), (-1, -1), 0),
             ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
             ('TOPPADDING',    (0, 0), (-1, -1), 0),
