@@ -703,6 +703,13 @@ function displayReviewScreen(result) {
     }
 
     elements.reviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    // Keep active review field in view as doctor tabs through form
+    document.querySelectorAll('.review-input, .review-select, .review-textarea').forEach(el => {
+        el.addEventListener('focus', function() {
+            this.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+    });
 }
 
 function buildStructuredDataFromForm() {
@@ -1173,15 +1180,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Scroll review panel into view when a review field is focused
-    const reviewSection = document.getElementById('reviewSection');
-    if (reviewSection) {
-        reviewSection.querySelectorAll('input, select, textarea').forEach(el => {
-            el.addEventListener('focus', () => {
-                reviewSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-            }, { passive: true });
-        });
-    }
 });
 
 // ─────────────────────────────────────────────
