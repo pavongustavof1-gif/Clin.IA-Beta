@@ -387,7 +387,7 @@ def process_audio():
             }), 500
         
         # Step 5: Prepare pending_review response
-       session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
 
         utterances = transcript_result.get('utterances', [])
         role_map = transcript_result.get('speaker_role_map', {})
