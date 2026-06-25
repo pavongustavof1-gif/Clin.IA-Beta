@@ -1462,7 +1462,6 @@ body {
 /* ── Consent card ───────────────────────────────────────────────────── */
 .consent-card {
     margin-bottom: var(--spacing-md);
-    border-left: 4px solid var(--teal, #0F6E56);
 }
 
 .consent-card-body {
