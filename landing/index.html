@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Clin.IA genera notas clínicas en segundos a partir de la grabación de tu consulta. Conforme a NOM-004-SSA3-2012. Ahorra hasta 2 horas diarias de documentación médica.">
+    <meta name="keywords" content="nota clínica, expediente clínico electrónico, NOM-004, NOM-024, inteligencia artificial médica, transcripción médica, SOAP, consultorio México, asistente médico IA, nota de evolución">
+    <meta name="author" content="Clin.IA">
+    <! -- Prevent search engines from indexing this page -->
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="language" content="es-MX">
+    <link rel="canonical" href="https://clinianotes.com/">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://clinianotes.com/">
+    <meta property="og:title" content="Clin.IA — Tu consulta se escribe sola">
+    <meta property="og:description" content="Clin.IA genera notas clínicas en segundos a partir de la grabación de tu consulta. Conforme a NOM-004-SSA3-2012. Ahorra hasta 2 horas diarias.">
+    <meta property="og:locale" content="es_MX">
+    <meta property="og:site_name" content="Clin.IA">
+    <!-- PLACEHOLDER: <meta property="og:image" content="https://clinianotes.com/og-image.png"> -->
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Clin.IA — Tu consulta se escribe sola">
+    <meta name="twitter:description" content="Notas clínicas en segundos. Conforme a NOM-004-SSA3-2012. Para médicos en México.">
+    <!-- PLACEHOLDER: <meta name="twitter:image" content="https://clinianotes.com/og-image.png"> -->
+
+    <!-- Schema.org structured data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "Clin.IA",
+      "url": "https://clinianotes.com",
+      "applicationCategory": "HealthApplication",
+      "operatingSystem": "Web",
+      "description": "Asistente de inteligencia artificial para generación de notas clínicas en español, conforme a NOM-004-SSA3-2012.",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "MXN",
+        "description": "Acceso gratuito durante Beta"
+      },
+      "audience": {
+        "@type": "Audience",
+        "audienceType": "Médicos y profesionales de la salud en México"
+      },
+      "inLanguage": "es-MX",
+      "availableOnDevice": "Web browser",
+      "featureList": [
+        "Transcripción médica en español",
+        "Extracción SOAP con IA",
+        "PDF conforme a NOM-004-SSA3-2012",
+        "Código CIE-11",
+        "CURP",
+        "Carta de consentimiento informado",
+        "Cumplimiento LFPDPPP"
+      ]
+    }
+    </script>
+
+    <title>Clin.IA — Tu consulta se escribe sola</title>
+
+    <!-- PLACEHOLDER: replace href with actual favicon path -->
+    <!-- <link rel="icon" type="image/png" href="/favicon.png"> -->
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        /* ── Design Tokens — matched to Clin.IA app ── */
+        :root {
+            --bg-primary:     #f8fafc;
+            --bg-card:        #ffffff;
+            --bg-card-hover:  #f1f5f9;
+            --border-color:   rgba(148, 163, 184, 0.2);
+            --border-hover:   rgba(148, 163, 184, 0.4);
+            --shadow-card:    0 1px 3px rgba(0,0,0,0.05), 0 10px 24px rgba(0,0,0,0.03);
+            --shadow-btn:     0 2px 4px rgba(15, 23, 42, 0.05);
+            --text-primary:   #334155;
+            --text-secondary: #64748b;
+            --text-muted:     #94a3b8;
+            --teal:           #0F6E56;
+            --teal-light:     #E1F5EE;
+            --teal-mid:       #0d9488;
+            --indigo:         #7b9cef;
+            --amber:          #d4a843;
+            --amber-light:    rgba(212,168,67,0.12);
+            --radius-sm:      6px;
+            --radius-md:      12px;
+            --radius-lg:      18px;
+            --radius-xl:      24px;
+            --spacing-xs:     0.5rem;
+            --spacing-sm:     0.75rem;
+            --spacing-md:     1.25rem;
+            --spacing-lg:     2rem;
+            --spacing-xl:     2.75rem;
+            --transition:     0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        }
+
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.65;
+            font-size: 16px;
+            -webkit-font-smoothing: antialiased;
+            background-image:
+                linear-gradient(rgba(123,156,239,0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(123,156,239,0.03) 1px, transparent 1px);
+            background-size: 48px 48px;
+            background-attachment: fixed;
+        }
+
+        /* ── Layout ── */
+        .container {
+            max-width: 860px;
+            margin: 0 auto;
+            padding: 0 var(--spacing-md);
+        }
+
+        /* ── Nav ── */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(248, 250, 252, 0.9);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0.9rem var(--spacing-md);
+        }
+
+        .nav-inner {
+            max-width: 860px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .nav-logo {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-style: italic;
+            font-size: 1.5rem;
+            color: #0f172a;
+            text-decoration: none;
+            letter-spacing: -0.01em;
+        }
+
+        .nav-logo span {
+            color: var(--teal);
+        }
+
+        .nav-buttons {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        /* ── Hero ── */
+        .hero {
+            padding: var(--spacing-xl) 0 var(--spacing-lg);
+            text-align: center;
+            animation: fadeUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+        }
+
+        @keyframes fadeUp {
+            from { opacity: 0; transform: translateY(24px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: var(--spacing-md);
+            padding: 0.3rem 1rem;
+            background: var(--amber-light);
+            border: 1px solid rgba(212,168,67,0.35);
+            color: #7a4f04;
+            border-radius: 999px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            font-family: 'DM Mono', monospace;
+        }
+
+        .hero-badge-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--amber);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50%       { opacity: 0.5; transform: scale(1.3); }
+        }
+
+        .hero h1 {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-weight: 400;
+            font-style: italic;
+            font-size: clamp(3rem, 7vw, 4.5rem);
+            color: #0f172a;
+            letter-spacing: -0.02em;
+            line-height: 1.08;
+            margin-bottom: 1.25rem;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 2.5vw, 1.15rem);
+            font-weight: 300;
+            color: var(--text-secondary);
+            max-width: 560px;
+            margin: 0 auto var(--spacing-lg);
+            line-height: 1.6;
+        }
+
+        .hero-subtitle strong {
+            color: var(--teal);
+            font-weight: 600;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: var(--spacing-sm);
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: var(--spacing-xl);
+        }
+
+        .btn-primary,
+        .btn-secondary {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.85rem 2rem;
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #e2e8f0 100%);
+            color: #334155 !important;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            border-radius: var(--radius-md);
+            text-decoration: none;
+            transition: all var(--transition);
+            border: 1px solid #cbd5e1;
+            box-shadow: inset 0 1px 0 #ffffff, var(--shadow-btn);
+            cursor: pointer;
+        }
+
+        .btn-primary:hover,
+        .btn-secondary:hover {
+            background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 40%, #cbd5e1 100%);
+            border-color: #94a3b8;
+            transform: translateY(-1px);
+            box-shadow: inset 0 1px 0 #ffffff, 0 4px 12px rgba(15,23,42,0.08);
+        }
+
+        .btn-primary:active,
+        .btn-secondary:active {
+            transform: translateY(1px);
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* ── Hero graphic placeholder ── */
+        .hero-graphic {
+            width: 100%;
+            max-width: 720px;
+            margin: 0 auto;
+            aspect-ratio: 16 / 7;
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-card);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+            color: var(--text-muted);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.78rem;
+            letter-spacing: 0.06em;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .hero-graphic::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--teal), transparent);
+            opacity: 0.4;
+        }
+
+        .hero-graphic-icon {
+            width: 40px;
+            height: 40px;
+            color: var(--border-hover);
+        }
+
+        /* ── Divider ── */
+        .section-divider {
+            width: 60px;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--teal), transparent);
+            margin: 0 auto var(--spacing-lg);
+        }
+
+        /* ── Section titles ── */
+        .section-eyebrow {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.72rem;
+            font-weight: 600;
+            letter-spacing: 0.14em;
+            text-transform: uppercase;
+            color: var(--teal);
+            margin-bottom: 0.6rem;
+            text-align: center;
+        }
+
+        .section-title {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-weight: 400;
+            font-size: clamp(1.8rem, 4vw, 2.4rem);
+            color: #0f172a;
+            letter-spacing: -0.01em;
+            text-align: center;
+            margin-bottom: var(--spacing-md);
+            line-height: 1.2;
+        }
+
+        .section-subtitle {
+            font-size: 1rem;
+            color: var(--text-secondary);
+            text-align: center;
+            max-width: 520px;
+            margin: 0 auto var(--spacing-xl);
+            font-weight: 300;
+            line-height: 1.6;
+        }
+
+        /* ── How it works ── */
+        .how-section {
+            padding: var(--spacing-xl) 0;
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: var(--spacing-md);
+            position: relative;
+        }
+
+        .steps-grid::before {
+            content: '';
+            position: absolute;
+            top: 28px;
+            left: calc(16.66% + 16px);
+            right: calc(16.66% + 16px);
+            height: 1px;
+            background: linear-gradient(90deg, var(--teal), var(--indigo), var(--teal));
+            opacity: 0.2;
+            pointer-events: none;
+        }
+
+        .step-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: var(--spacing-lg) var(--spacing-md);
+            text-align: center;
+            box-shadow: var(--shadow-card);
+            transition: border-color var(--transition), box-shadow var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .step-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--teal), transparent);
+            opacity: 0.4;
+        }
+
+        .step-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .step-number {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--teal-light);
+            color: var(--teal);
+            font-family: 'DM Mono', monospace;
+            font-size: 1.1rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto var(--spacing-md);
+        }
+
+        .step-card h3 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 0.5rem;
+            letter-spacing: 0;
+            text-transform: none;
+        }
+
+        .step-card p {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        /* ── Compliance section ── */
+        .compliance-section {
+            padding: var(--spacing-xl) 0;
+        }
+
+        .compliance-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: var(--spacing-md);
+        }
+
+        .compliance-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow-card);
+            transition: border-color var(--transition), box-shadow var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .compliance-card::before {
+            display: none;
+        }
+
+        .compliance-card:hover {
+            border-color: var(--border-hover);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.06);
+        }
+
+        .compliance-card.featured {
+            border-color: rgba(15,110,86,0.2);
+        }
+
+        .compliance-icon {
+            width: 36px;
+            height: 36px;
+            color: var(--teal);
+            margin-bottom: var(--spacing-sm);
+        }
+
+        .compliance-card h3 {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.78rem;
+            font-weight: 500;
+            letter-spacing: 0.08em;
+            color: var(--teal);
+            margin-bottom: 0.4rem;
+            text-transform: uppercase;
+        }
+
+        .compliance-card h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 0.5rem;
+            text-transform: none;
+            letter-spacing: 0;
+        }
+
+        .compliance-card p {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* ── Differentiators ── */
+        .diff-section {
+            padding: var(--spacing-xl) 0;
+        }
+
+        .diff-list {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-sm);
+        }
+
+        .diff-item {
+            display: flex;
+            align-items: flex-start;
+            gap: var(--spacing-md);
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-lg);
+            padding: var(--spacing-md) var(--spacing-lg);
+            box-shadow: var(--shadow-card);
+            transition: border-color var(--transition);
+        }
+
+        .diff-item:hover {
+            border-color: var(--border-hover);
+        }
+
+        .diff-check {
+            width: 22px;
+            height: 22px;
+            border-radius: 50%;
+            background: var(--teal-light);
+            color: var(--teal);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 1px;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .diff-content h4 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #0f172a;
+            margin-bottom: 0.2rem;
+        }
+
+        .diff-content p {
+            font-size: 0.86rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        /* ── CTA section ── */
+        .cta-section {
+            padding: var(--spacing-xl) 0 calc(var(--spacing-xl) * 1.5);
+        }
+
+        .cta-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            padding: var(--spacing-xl);
+            text-align: center;
+            box-shadow: var(--shadow-card);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cta-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--teal), var(--indigo), var(--teal), transparent);
+            opacity: 0.6;
+        }
+
+        .cta-card h2 {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-weight: 400;
+            font-style: italic;
+            font-size: clamp(1.8rem, 4vw, 2.4rem);
+            color: #0f172a;
+            margin-bottom: 0.75rem;
+            letter-spacing: -0.01em;
+        }
+
+        .cta-card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            max-width: 440px;
+            margin: 0 auto var(--spacing-lg);
+            line-height: 1.6;
+        }
+
+        .cta-note {
+            margin-top: var(--spacing-md);
+            font-size: 0.78rem;
+            color: var(--text-muted);
+            font-family: 'DM Mono', monospace;
+            letter-spacing: 0.03em;
+        }
+
+        /* ── Footer ── */
+        footer {
+            text-align: center;
+            padding: var(--spacing-lg) 0 var(--spacing-xl);
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            line-height: 2;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .footer-logo {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-style: italic;
+            font-size: 1.25rem;
+            color: #0f172a;
+            margin-bottom: 0.35rem;
+        }
+
+        .footer-links {
+            display: flex;
+            gap: var(--spacing-md);
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 0.25rem;
+        }
+
+        .footer-link {
+            color: var(--text-muted);
+            text-decoration: none;
+            transition: color var(--transition);
+            font-size: 0.8rem;
+        }
+
+        .footer-link:hover { color: var(--indigo); }
+
+        .footer-sep { opacity: 0.4; }
+
+        /* ── Responsive ── */
+        @media (max-width: 700px) {
+            .steps-grid {
+                grid-template-columns: 1fr;
+            }
+            .steps-grid::before { display: none; }
+            .compliance-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+
+        /* ── Nav text links ─────────────────────────────────────────────── */
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .nav-link {
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.82rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            text-decoration: none;
+            padding: 0.2rem 0.1rem;
+            transition: color var(--transition);
+            white-space: nowrap;
+        }
+
+        .nav-link:hover { color: var(--teal); }
+
+        .nav-sep {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            user-select: none;
+        }
+
+        /* ── FAQ ────────────────────────────────────────────────────────── */
+        .faq-section { padding: var(--spacing-xl) 0; }
+
+        .faq-list {
+            display: flex;
+            flex-direction: column;
+            border: 1px solid var(--border-color);
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+            background: var(--bg-card);
+            box-shadow: var(--shadow-card);
+        }
+
+        .faq-item { border-bottom: 1px solid var(--border-color); }
+        .faq-item:last-child { border-bottom: none; }
+
+        .faq-question {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 1.1rem var(--spacing-lg);
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            text-align: left;
+            transition: background var(--transition), color var(--transition);
+        }
+
+        .faq-question:hover {
+            background: var(--bg-card-hover);
+            color: var(--teal);
+        }
+
+        .faq-question[aria-expanded="true"] {
+            color: var(--teal);
+            background: var(--bg-card-hover);
+        }
+
+        .faq-arrow {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            transition: transform var(--transition), color var(--transition);
+            flex-shrink: 0;
+            line-height: 1;
+        }
+
+        .faq-question[aria-expanded="true"] .faq-arrow {
+            transform: rotate(90deg);
+            color: var(--teal);
+        }
+
+        .faq-answer {
+            display: none;
+            padding: 0 var(--spacing-lg) 1.1rem calc(var(--spacing-lg) + 1.85rem);
+        }
+
+        .faq-answer.open { display: block; }
+
+        .faq-answer p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        @media (max-width: 700px) {
+            .nav-links { gap: 0.25rem; }
+            .nav-link  { font-size: 0.72rem; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ── Nav ── -->
+    <nav>
+        <div class="nav-inner">
+            <a href="/" class="nav-logo">Clin<span>.</span>IA</a>
+            <nav class="nav-links">
+                <a href="https://app.clinianotes.com" class="nav-link" target="_blank" rel="noopener">App</a>
+                <span class="nav-sep">|</span>
+                <a href="mailto:info@clinianotes.com?subject=Solicitud%20de%20acceso%20Beta%20%E2%80%94%20Clin.IA&body=Nombre%3A%0AEspecialidad%3A%0ACiudad%3A%0A%0A%C2%BFPor%20qu%C3%A9%20le%20interesa%20Clin.IA%3F%0A" class="nav-link">Acceso</a>
+                <span class="nav-sep">|</span>
+                <a href="#como-funciona" class="nav-link">Cómo Funciona</a>
+                <span class="nav-sep">|</span>
+                <a href="#cumplimiento" class="nav-link">Cumplimiento Normativo</a>
+                <span class="nav-sep">|</span>
+                <a href="#por-que" class="nav-link">Por qué Clin.IA</a>
+                <span class="nav-sep">|</span>
+                <a href="#faq" class="nav-link">Preguntas Frecuentes</a>
+            </nav>
+        </div>
+    </nav>
+
+    <main>
+
+        <!-- ── Hero ── -->
+        <section class="hero">
+            <div class="container">
+                <div class="hero-badge">
+                    <span class="hero-badge-dot"></span>
+                    Beta · acceso por invitación
+                </div>
+
+                <h1>Tu consulta<br>se escribe sola.</h1>
+
+                <p class="hero-subtitle">
+                    Clin.IA escucha, transcribe y genera tu nota clínica en segundos,<br>
+                    ahorrando hasta 2 horas diarias.<br>
+                    <strong>Conforme a NOM-004-SSA3-2012.</strong>
+                </p>
+
+
+                <!-- PLACEHOLDER: replace with actual product screenshot or graphic -->
+                <div class="hero-graphic" role="img" aria-label="Captura de pantalla de Clin.IA">
+                    <svg class="hero-graphic-icon" fill="none" stroke="currentColor" stroke-width="1.2" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                    </svg>
+                    <span>PLACEHOLDER — captura de pantalla o gráfico del producto</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── How it works ── -->
+        <section class="how-section" id="como-funciona">
+            <div class="container">
+                <p class="section-eyebrow">Cómo funciona</p>
+                <h2 class="section-title">Tres pasos. Sin interrumpir la consulta.</h2>
+                <p class="section-subtitle">Clin.IA trabaja en segundo plano mientras tú te concentras en tu paciente.</p>
+
+                <div class="steps-grid">
+                    <div class="step-card">
+                        <div class="step-number">1</div>
+                        <h3>Graba</h3>
+                        <p>Inicia la grabación al comenzar la consulta, después de obtener consentimiento. Clin.IA captura el audio directamente desde tu navegador, sin instalar nada.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">2</div>
+                        <h3>Revisa</h3>
+                        <p>La IA transcribe y estructura automáticamente la información en formato SOAP. Tú revisas y corriges en segundos antes de confirmar.</p>
+                    </div>
+                    <div class="step-card">
+                        <div class="step-number">3</div>
+                        <h3>Descarga</h3>
+                        <p>Obtén la nota clínica en PDF tamaño carta, conforme a NOM-004, lista para imprimir y firmar. También llega a tu correo automáticamente.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Compliance ── -->
+        <section class="compliance-section" id="cumplimiento">
+            <div class="container">
+                <p class="section-eyebrow">Cumplimiento normativo</p>
+                <h2 class="section-title">El expediente que te protege.</h2>
+                <p class="section-subtitle">Clin.IA genera notas con valor probatorio real — no solo texto estructurado.</p>
+
+                <div class="compliance-grid">
+                    <div class="compliance-card featured">
+                        <svg class="compliance-icon" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                        <h3>NOM-004-SSA3-2012</h3>
+                        <h4>Expediente clínico completo</h4>
+                        <p>Todos los campos obligatorios: datos del paciente, CURP, fecha y hora exacta con zona horaria, motivo de consulta, exploración física, diagnóstico con código CIE-11, pronóstico y tratamiento.</p>
+                    </div>
+
+                    <div class="compliance-card">
+                        <svg class="compliance-icon" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                        </svg>
+                        <h3>LFPDPPP</h3>
+                        <h4>Privacidad del paciente</h4>
+                        <p>El audio se elimina automáticamente tras la transcripción. La transcripción se elimina al confirmar la nota. Los derechos ARCO del paciente están implementados y documentados.</p>
+                    </div>
+
+                    <div class="compliance-card">
+                        <svg class="compliance-icon" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <h3>NOM-024-SSA3-2012</h3>
+                        <h4>Diseñada para cumplir con SIRES</h4>
+                        <p>Inmutabilidad de notas confirmadas, correcciones vía adéndum, identificador único de nota, CURP y codificación CIE-11 — los pilares técnicos del expediente electrónico conforme.</p>
+                    </div>
+
+                    <div class="compliance-card">
+                        <svg class="compliance-icon" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                        </svg>
+                        <h3>Consentimiento informado</h3>
+                        <h4>NOM-004 sección 10.1</h4>
+                        <p>Carta de consentimiento informado generada automáticamente en la Página 1 del PDF, con líneas de firma para paciente y médico. Lista para imprimir y adjuntar al expediente físico.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── Differentiators ── -->
+        <section class="diff-section" id="por-que">
+            <div class="container">
+                <p class="section-eyebrow">Por qué Clin.IA</p>
+                <h2 class="section-title">Un expediente defendible, no solo una nota rápida.</h2>
+                <p class="section-subtitle">La diferencia entre una nota y un expediente es la diferencia entre un riesgo y una defensa.</p>
+
+                <div class="diff-list">
+                    <div class="diff-item">
+                        <div class="diff-check">✓</div>
+                        <div class="diff-content">
+                            <h4>Funciona desde el navegador — sin instalar nada</h4>
+                            <p>Graba directamente en cualquier navegador. Sin aplicaciones adicionales, sin hardware especial.</p>
+                        </div>
+                    </div>
+                    <div class="diff-item">
+                        <div class="diff-check">✓</div>
+                        <div class="diff-content">
+                            <h4>Transcripción médica en español con IA especializada</h4>
+                            <p>La IA reconoce terminología clínica, nombres de medicamentos y dosis en español con alta precisión.</p>
+                        </div>
+                    </div>
+                    <div class="diff-item">
+                        <div class="diff-check">✓</div>
+                        <div class="diff-content">
+                            <h4>El médico siempre tiene la última palabra</h4>
+                            <p>La IA sugiere, tú confirmas. Revisas y corriges cada campo antes de generar el documento final.</p>
+                        </div>
+                    </div>
+                    <div class="diff-item">
+                        <div class="diff-check">✓</div>
+                        <div class="diff-content">
+                            <h4>Audio eliminado automáticamente — sin almacenamiento de voz</h4>
+                            <p>El audio se procesa y se elimina inmediatamente. Clin.IA no almacena grabaciones de tus consultas.</p>
+                        </div>
+                    </div>
+                    <div class="diff-item">
+                        <div class="diff-check">✓</div>
+                        <div class="diff-content">
+                            <h4>PDF en tu correo al confirmar la nota</h4>
+                            <p>La nota clínica llega a tu bandeja de entrada automáticamente, lista para archivar o imprimir.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── FAQ ── -->
+        <section class="faq-section" id="faq">
+            <div class="container">
+                <p class="section-eyebrow">Preguntas frecuentes</p>
+                <h2 class="section-title">Resolvemos tus dudas.</h2>
+
+                <div class="faq-list">
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Necesito instalar algo?
+                        </button>
+                        <div class="faq-answer">
+                            <p>No. Clin.IA funciona desde cualquier navegador en tu tableta, teléfono o computadora. Sin instalaciones.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Funciona en tableta?
+                        </button>
+                        <div class="faq-answer">
+                            <p>Sí. Está diseñado para usarse en tablet durante la consulta. Compatible con iPad y tabletas Android.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Qué pasa con la grabación?
+                        </button>
+                        <div class="faq-answer">
+                            <p>El audio se elimina automáticamente de nuestros servidores tan pronto como se genera la transcripción. No guardamos grabaciones.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Funciona con cualquier especialidad?
+                        </button>
+                        <div class="faq-answer">
+                            <p>Sí. Clin.IA reconoce terminología médica general. El diccionario por especialidad estará disponible próximamente.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Qué tan precisa es la transcripción?
+                        </button>
+                        <div class="faq-answer">
+                            <p>Alta precisión en español médico gracias a reconocimiento especializado. El médico siempre revisa antes de confirmar la nota.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Qué incluye la Beta?
+                        </button>
+                        <div class="faq-answer">
+                            <p>Acceso completo a todas las funciones sin costo durante el período Beta. Se te notificará antes de que inicie cualquier cobro.</p>
+                        </div>
+                    </div>
+                    <div class="faq-item">
+                        <button class="faq-question" aria-expanded="false">
+                            <span class="faq-arrow">›</span>
+                            ¿Cumple con la NOM-004?
+                        </button>
+                        <div class="faq-answer">
+                            <p>Sí. La nota generada incluye todos los campos obligatorios de la nota de evolución según NOM-004-SSA3-2012.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ── CTA ── -->
+        <section class="cta-section">
+            <div class="container">
+                <div class="cta-card">
+                    <h2>Empieza a ahorrar tiempo en cada consulta.</h2>
+                    <p>Clin.IA está en Beta por invitación. Escríbenos con tu nombre, especialidad y ciudad y te contactamos.</p>
+                    <a href="mailto:info@clinianotes.com?subject=Solicitud%20de%20acceso%20Beta%20%E2%80%94%20ClinIA&body=Nombre%3A%0AEspecialidad%3A%0ACiudad%3A%0A%0A%C2%BFPor%20qu%C3%A9%20le%20interesa%20ClinIA%3F%0A" class="btn-primary">
+                        Solicitar acceso Beta
+                        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+                        </svg>
+                    </a>
+                    <p class="cta-note">info@clinianotes.com · respuesta en menos de 24 horas</p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- ── Footer ── -->
+    <footer>
+        <div class="container">
+            <div class="footer-logo">Clin.IA</div>
+            <div class="footer-links">
+                <a href="https://app.clinianotes.com" class="footer-link" target="_blank" rel="noopener">Abrir la app</a>
+                <span class="footer-sep">·</span>
+                <a href="mailto:info@clinianotes.com" class="footer-link">info@clinianotes.com</a>
+                <span class="footer-sep">·</span>
+                <a href="https://app.clinianotes.com" class="footer-link" target="_blank" rel="noopener">Aviso de Privacidad</a>
+            </div>
+            <p style="margin-top: 0.75rem; font-size: 0.72rem; color: var(--text-muted);">
+                © 2026 Clin.IA · clinianotes.com · Versión Beta
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // FAQ accordion
+        document.querySelectorAll('.faq-question').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const isOpen = btn.getAttribute('aria-expanded') === 'true';
+                // Close all
+                document.querySelectorAll('.faq-question').forEach(b => {
+                    b.setAttribute('aria-expanded', 'false');
+                    b.nextElementSibling.classList.remove('open');
+                });
+                // Open clicked if it was closed
+                if (!isOpen) {
+                    btn.setAttribute('aria-expanded', 'true');
+                    btn.nextElementSibling.classList.add('open');
+                }
+            });
+        });
+
+        // Smooth scroll offset for sticky nav
+        document.querySelectorAll('a[href^="#"]').forEach(a => {
+            a.addEventListener('click', e => {
+                const target = document.querySelector(a.getAttribute('href'));
+                if (target) {
+                    e.preventDefault();
+                    const navHeight = document.querySelector('nav').offsetHeight;
+                    const top = target.getBoundingClientRect().top + window.scrollY - navHeight - 24;
+                    window.scrollTo({ top, behavior: 'smooth' });
+                }
+            });
+        });
+    </script>
+
+</body>
+</html>
