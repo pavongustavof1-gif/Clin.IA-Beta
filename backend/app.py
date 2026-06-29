@@ -84,7 +84,7 @@ logger.info("Startup: Teleporter finished.")
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
-app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB max file size
+app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB — matches Config.MAX_AUDIO_SIZE_BYTES
 
 # Enable CORS for frontend  <-- replaced below
 # CORS(app, resources={
