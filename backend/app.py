@@ -9,7 +9,6 @@ from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email
-#  from docs_generator import GoogleDocsGenerator  <-- removed per Gemini
 import os
 import tempfile
 import json
