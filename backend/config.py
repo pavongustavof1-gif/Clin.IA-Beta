@@ -49,10 +49,6 @@ class Config:
     }
     MAX_AUDIO_SIZE_BYTES = 200 * 1024 * 1024  # 200 MB
     MIN_AUDIO_SIZE_BYTES = 1024               # 1 KB — reject empty or near-empty files
-
-    # Audio constraints (Alpha version)
-    MAX_AUDIO_DURATION_SECONDS = 300  # 5 minutes
-    ALLOWED_AUDIO_FORMATS = ['wav', 'mp3', 'webm', 'ogg', 'm4a']
     
     # Language
     PRIMARY_LANGUAGE = 'es'  # Spanish
