@@ -1,5 +1,4 @@
 # backend/docs_generator.py
-# latest changes: add tratamiento: line 180
 # modify flow; add teleporter
 import os
 import json
@@ -10,10 +9,6 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-
-# --- THE TELEPORTER ---
-
-
 
 # ID of your template (Must be a native Google Doc)
 TEMPLATE_ID = '1XVXnvw6JiAg1If3BUJtaAIrLdcpujAlovHVPyuUny1A'
