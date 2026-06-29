@@ -148,7 +148,7 @@ class TranscriptionService:
             logger.error(f"AssemblyAI: Error during transcription: {str(e)}")
             raise
 
-    def transcribe_from_bytes(self, audio_data: bytes, print_raw: bool = True) -> Dict:
+    def transcribe_from_bytes(self, audio_data: bytes, print_raw: bool = True, speakers_expected: int = 0) -> Dict:
         """
         Transcribe audio from bytes (for real-time recording)
 
@@ -168,7 +168,7 @@ class TranscriptionService:
             tmp_path = tmp_file.name
 
         try:
-            result = self.transcribe_audio(tmp_path, print_raw)
+            result = self.transcribe_audio(tmp_path, print_raw, speakers_expected)
             return result
         finally:
             # Clean up temporary file
