@@ -105,6 +105,7 @@ CORS(app, resources={
             "https://clinianotes.com",
             "https://www.clinianotes.com",
             "https://app.clinianotes.com",
+            "https://clin-ia-beta.onrender.com",
         ],
         "methods": ["GET", "POST", "OPTIONS"],
         "allow_headers": ["Content-Type"]
