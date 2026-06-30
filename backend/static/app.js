@@ -537,12 +537,19 @@ async function processAudio() {
         // Step 1: Upload and transcribe
         updateProgress(10, 'Enviando audio al servidor...', 1);
 
+        // DEBUG — remove after testing
+        const token = sessionStorage.getItem('clinia_token');
+        alert('Token present: ' + (token ? token.substring(0, 20) + '...' : 'MISSING'));
+
         const response = await fetch(`${API_BASE_URL}/api/process-audio`, {
             method: 'POST',
             headers: getAuthHeaders(),
             body: formData
         });
 
+        // DEBUG — remove after testing
+        alert('Response status: ' + response.status);
+        
         if (response.status === 401) return handleSessionExpired();
 
         if (!response.ok) {
