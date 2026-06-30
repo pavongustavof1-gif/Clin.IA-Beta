@@ -14,3 +14,4 @@ requests==2.32.3
 urllib3==2.2.3
 supabase==2.15.2
 PyJWT==2.10.1
+cryptography==42.0.5
