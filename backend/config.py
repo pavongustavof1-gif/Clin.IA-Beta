@@ -33,6 +33,11 @@ class Config:
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
     RESEND_SENDER  = 'admin@clinianotes.com'
 
+    # Supabase
+    SUPABASE_URL        = os.getenv('SUPABASE_URL')
+    SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+    SUPABASE_JWT_SECRET  = os.getenv('SUPABASE_JWT_SECRET')
+
     # Flask
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
     
@@ -63,7 +68,14 @@ class Config:
         
         if not cls.GEMINI_API_KEY:
             errors.append("GEMINI_API_KEY is required")
-        
+
+        if not cls.SUPABASE_URL:
+            errors.append("SUPABASE_URL is required")
+        if not cls.SUPABASE_SERVICE_KEY:
+            errors.append("SUPABASE_SERVICE_KEY is required")
+        if not cls.SUPABASE_JWT_SECRET:
+            errors.append("SUPABASE_JWT_SECRET is required")
+
         if errors:
             raise ValueError(f"Configuration errors: {', '.join(errors)}")
         

@@ -1,6 +1,6 @@
 # backend/app.py
 # fixed potential problem per Gemini
-from flask import Flask, request, jsonify, send_from_directory, render_template
+from flask import Flask, request, jsonify, send_from_directory, render_template, g
 from flask_cors import CORS
 from config import Config
 from transcription import TranscriptionService
@@ -9,12 +9,27 @@ from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email
+from auth import require_auth
 import os
+import re
 import tempfile
 import json
 import sqlite3
 from datetime import datetime
 from werkzeug.utils import secure_filename
+
+
+def _derive_initials(nombre: str) -> str:
+    """Return uppercase initials from a name, skipping common title prefixes, max 4 chars."""
+    TITLE_PREFIXES = {'dr', 'dra', 'lic', 'mtro', 'mtra', 'ing', 'prof'}
+    words = re.split(r'\s+', nombre.strip())
+    initials = [
+        w[0].upper()
+        for w in words
+        if w and re.match(r'[a-záéíóúüñA-ZÁÉÍÓÚÜÑ]', w[0])
+        and w.rstrip('.').lower() not in TITLE_PREFIXES
+    ]
+    return ''.join(initials[:4])
 
 def validate_audio_file(file) -> tuple[bool, str]:
     """
@@ -280,6 +295,7 @@ def health_check():
     })
 
 @app.route('/api/process-audio', methods=['POST'])
+@require_auth
 def process_audio():
     """
     Main orchestrator endpoint - processes audio through entire pipeline
@@ -305,6 +321,7 @@ def process_audio():
         consent_given = request.form.get('consent_given', 'false').lower() == 'true'
         consent_timestamp = request.form.get('consent_timestamp', '')
         
+        logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
         logger.info("Orchestrator: Starting new processing job")
         logger.info(f"Orchestrator: Filename: {audio_file.filename}")
         logger.debug(f"Orchestrator: Print raw transcript: {print_raw}")
@@ -388,7 +405,8 @@ def process_audio():
             }), 500
         
         # Step 5: Prepare pending_review response
-        session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+        initials = _derive_initials(g.usuario.get('nombre', ''))
+        session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{initials}"
 
         utterances = transcript_result.get('utterances', [])
         role_map = transcript_result.get('speaker_role_map', {})
@@ -436,6 +454,7 @@ def process_audio():
 
 
 @app.route('/api/confirm-and-generate', methods=['POST'])
+@require_auth
 def confirm_and_generate():
     """
     Receives doctor-reviewed structured_data, creates Google Doc, returns final response.
@@ -455,6 +474,8 @@ def confirm_and_generate():
             'given': data.get('consent_tratamiento_given', False),
             'timestamp': data.get('consent_tratamiento_timestamp', '')
         }
+
+        logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
 
         if not session_id:
             return jsonify({'error': 'Session not found'}), 404
@@ -600,6 +621,7 @@ def confirm_and_generate():
 
 
 @app.route('/api/transcribe-only', methods=['POST'])
+# TODO: remove or auth-gate before production — this is a test-only utility
 def transcribe_only():
     """
     Endpoint for transcription only (no LLM processing)
@@ -638,6 +660,7 @@ def transcribe_only():
 
 
 @app.route('/api/process-transcript', methods=['POST'])
+# TODO: remove or auth-gate before production — this is a test-only utility
 def process_transcript():
     """
     Process a raw transcript (for testing LLM without audio).
@@ -678,8 +701,10 @@ def process_transcript():
 
 
 @app.route('/api/session/<session_id>', methods=['GET'])
+@require_auth
 def get_session(session_id):
     """Retrieve session data by ID"""
+    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     session = load_session(session_id)
     if session:
         return jsonify(session), 200
@@ -687,12 +712,14 @@ def get_session(session_id):
 
 
 @app.route('/api/session/<session_id>', methods=['DELETE'])
+@require_auth
 def cancel_session(session_id):
     """
     Soft-delete (bloqueo) a session in response to a patient ARCO Cancelación request.
     NOM-004 requires clinical records to be retained for 5 years minimum.
     We block access instead of deleting — hard deletion occurs after the retention period.
     """
+    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
         reason = request.args.get('reason', 'Solicitud ARCO — Cancelación')
         conn = sqlite3.connect(DB_PATH)
@@ -725,12 +752,14 @@ def cancel_session(session_id):
 
 
 @app.route('/api/session/<session_id>/addendum', methods=['POST'])
+@require_auth
 def add_addendum(session_id):
     """
     Append an addendum to a confirmed (locked) session.
     Types: 'adendum_clinico' (doctor correction) or 'rectificacion_arco' (patient ARCO request).
     The original structured_data is never modified.
     """
+    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
         data = request.get_json()
         if not data:
@@ -786,8 +815,10 @@ def add_addendum(session_id):
 
 
 @app.route('/api/export-json/<session_id>', methods=['GET'])
+@require_auth
 def export_json(session_id):
     """Export structured data as downloadable JSON"""
+    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     data = load_structured_data(session_id)
     if not data:
         return jsonify({'error': 'Session not found'}), 404
@@ -802,11 +833,13 @@ def export_json(session_id):
 
 
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
+@require_auth
 def download_pdf(session_id):
     """
     Returns the generated PDF as a downloadable file attachment.
     Used when a doctor clicks 'Descargar PDF' in the results screen.
     """
+    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
         conn   = sqlite3.connect(DB_PATH)
         cursor = conn.cursor()
