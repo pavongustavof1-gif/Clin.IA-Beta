@@ -1,3 +1,5 @@
+import json
+import urllib.request
 import jwt
 from functools import wraps
 from flask import request, jsonify, g
@@ -5,14 +7,30 @@ from config import Config
 from supabase_client import get_supabase
 from logger import logger
 
+# Cached public key — fetched once from Supabase JWKS on first request
+_jwks_public_key = None
+
+def _get_public_key():
+    """Fetch and cache the EC public key from Supabase's JWKS endpoint."""
+    global _jwks_public_key
+    if _jwks_public_key is not None:
+        return _jwks_public_key
+    jwks_url = f"{Config.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
+    with urllib.request.urlopen(jwks_url) as resp:
+        jwks = json.loads(resp.read())
+    _jwks_public_key = jwt.algorithms.ECAlgorithm.from_jwk(jwks["keys"][0])
+    logger.info("Auth: JWKS public key loaded and cached")
+    return _jwks_public_key
+
 
 def verify_jwt(token: str) -> dict | None:
-    """Validate a Supabase JWT and return the decoded payload, or None if invalid/expired."""
+    """Validate a Supabase JWT (ES256) and return the decoded payload, or None if invalid/expired."""
     try:
+        public_key = _get_public_key()
         payload = jwt.decode(
             token,
-            Config.SUPABASE_JWT_SECRET,
-            algorithms=["HS256"],
+            public_key,
+            algorithms=["ES256"],
             audience="authenticated",
         )
         return payload
@@ -21,6 +39,9 @@ def verify_jwt(token: str) -> dict | None:
         return None
     except jwt.InvalidTokenError as e:
         logger.warning(f"Auth: JWT invalid — {e}")
+        return None
+    except Exception as e:
+        logger.warning(f"Auth: JWT verification error — {e}")
         return None
 
 
