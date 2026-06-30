@@ -7,6 +7,30 @@
 //   - Fixed error message text to say "45 minutos"
 
 // ─────────────────────────────────────────────
+// Auth helpers
+// ─────────────────────────────────────────────
+function getAuthHeaders() {
+    return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
+}
+
+function logout() {
+    sessionStorage.removeItem('clinia_token');
+    sessionStorage.removeItem('clinia_email');
+    window.location.href = '/login';
+}
+
+function handleSessionExpired() {
+    sessionStorage.removeItem('clinia_token');
+    sessionStorage.removeItem('clinia_email');
+    window.location.href = '/login';
+}
+
+// Auth guard — runs immediately, before init()
+if (!sessionStorage.getItem('clinia_token')) {
+    window.location.href = '/login';
+}
+
+// ─────────────────────────────────────────────
 // Global state
 // ─────────────────────────────────────────────
 const state = {
@@ -106,7 +130,8 @@ const elements = {
     reviewSection: document.getElementById('reviewSection'),
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
-    retryBtn: document.getElementById('retryBtn')
+    retryBtn: document.getElementById('retryBtn'),
+    logoutBtn: document.getElementById('logoutBtn')
 };
 
 // ─────────────────────────────────────────────
@@ -154,20 +179,36 @@ function init() {
     elements.audioFileInput.addEventListener('change', handleFileUpload);
     elements.processBtn.addEventListener('click', processAudio);
     elements.retryBtn.addEventListener('click', resetApplication);
+    if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', logout);
     elements.downloadJsonBtn.addEventListener('click', downloadJSON);
-    elements.downloadPdfBtn.addEventListener('click', () => {
+    elements.downloadPdfBtn.addEventListener('click', async () => {
         if (!state.sessionId) {
             console.error('[ClinIA] No session ID available for PDF download');
             return;
         }
-        const url = `${API_BASE_URL}/api/download-pdf/${state.sessionId}`;
         console.log('[ClinIA] Downloading PDF for session:', state.sessionId);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = '';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        try {
+            const response = await fetch(`${API_BASE_URL}/api/download-pdf/${state.sessionId}`, {
+                headers: getAuthHeaders()
+            });
+            if (response.status === 401) return handleSessionExpired();
+            if (!response.ok) {
+                showError('Error al descargar el PDF');
+                return;
+            }
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (error) {
+            console.error('[ClinIA] PDF download error:', error);
+            showError('Error al descargar el PDF');
+        }
     });
     
     // Tab switching
@@ -498,8 +539,11 @@ async function processAudio() {
 
         const response = await fetch(`${API_BASE_URL}/api/process-audio`, {
             method: 'POST',
+            headers: getAuthHeaders(),
             body: formData
         });
+
+        if (response.status === 401) return handleSessionExpired();
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -808,7 +852,7 @@ async function confirmAndGenerate() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/confirm-and-generate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
             body: JSON.stringify({
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
@@ -819,6 +863,8 @@ async function confirmAndGenerate() {
                 consent_tratamiento_timestamp: new Date().toISOString()
             })
         });
+
+        if (response.status === 401) return handleSessionExpired();
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -1069,7 +1115,10 @@ async function downloadJSON() {
     if (!state.sessionId) return;
     
     try {
-        const response = await fetch(`${API_BASE_URL}/api/export-json/${state.sessionId}`);
+        const response = await fetch(`${API_BASE_URL}/api/export-json/${state.sessionId}`, {
+            headers: getAuthHeaders()
+        });
+        if (response.status === 401) return handleSessionExpired();
         const blob = await response.blob();
         
         const url = window.URL.createObjectURL(blob);

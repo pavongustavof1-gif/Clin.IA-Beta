@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Iniciar Sesión - Clin.IA</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        .login-page {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: var(--spacing-md);
+        }
+
+        .login-card {
+            width: 100%;
+            max-width: 380px;
+        }
+
+        .login-header {
+            text-align: center;
+            margin-bottom: var(--spacing-lg);
+        }
+
+        .login-header h1 {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-weight: 400;
+            font-style: italic;
+            font-size: 2.4rem;
+            color: #0f172a;
+            margin-bottom: 0.25rem;
+        }
+
+        .login-header p {
+            font-size: 0.85rem;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+        }
+
+        .login-field {
+            margin-bottom: var(--spacing-md);
+        }
+
+        .login-label {
+            display: block;
+            font-size: 0.88rem;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 0.35rem;
+        }
+
+        .login-input {
+            width: 100%;
+            background: #ffffff;
+            border: 1px solid #cbd5e1;
+            border-radius: var(--radius-sm);
+            color: var(--text-primary);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.95rem;
+            padding: 0.65rem 0.85rem;
+            line-height: 1.5;
+            transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+        }
+
+        .login-input:focus {
+            outline: none;
+            border-color: #7b9cef;
+            box-shadow: 0 0 0 3px rgba(123,156,239,0.15);
+        }
+
+        .login-error {
+            display: none;
+            background: rgba(224, 82, 82, 0.08);
+            border: 1px solid rgba(224, 82, 82, 0.25);
+            border-radius: var(--radius-sm);
+            color: #c0392b;
+            font-size: 0.86rem;
+            padding: 0.6rem 0.85rem;
+            margin-bottom: var(--spacing-md);
+        }
+
+        #loginBtn {
+            max-width: 100%;
+            margin-top: var(--spacing-xs);
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-page">
+        <div class="card login-card">
+            <div class="login-header">
+                <h1>Clin.IA</h1>
+                <p>Iniciar Sesión</p>
+            </div>
+
+            <div id="loginError" class="login-error"></div>
+
+            <form id="loginForm">
+                <div class="login-field">
+                    <label class="login-label" for="email">Correo electrónico</label>
+                    <input type="email" id="email" class="login-input" autocomplete="email" required>
+                </div>
+                <div class="login-field">
+                    <label class="login-label" for="password">Contraseña</label>
+                    <input type="password" id="password" class="login-input" autocomplete="current-password" required>
+                </div>
+                <button type="submit" id="loginBtn" class="btn btn-primary">Iniciar Sesión</button>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseClient = window.supabase.createClient(
+            "{{ supabase_url }}",
+            "{{ supabase_anon_key }}"
+        );
+
+        const form = document.getElementById('loginForm');
+        const errorBox = document.getElementById('loginError');
+        const loginBtn = document.getElementById('loginBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorBox.style.display = 'none';
+            loginBtn.disabled = true;
+            loginBtn.textContent = 'Iniciando sesión...';
+
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value;
+
+            const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+
+            if (error || !data?.session) {
+                errorBox.textContent = 'Correo o contraseña incorrectos.';
+                errorBox.style.display = 'block';
+                loginBtn.disabled = false;
+                loginBtn.textContent = 'Iniciar Sesión';
+                return;
+            }
+
+            sessionStorage.setItem('clinia_token', data.session.access_token);
+            sessionStorage.setItem('clinia_email', data.user.email);
+            window.location.href = '/';
+        });
+    </script>
+
+</body>
+</html>

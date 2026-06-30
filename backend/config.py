@@ -34,9 +34,10 @@ class Config:
     RESEND_SENDER  = 'admin@clinianotes.com'
 
     # Supabase
-    SUPABASE_URL        = os.getenv('SUPABASE_URL')
+    SUPABASE_URL         = os.getenv('SUPABASE_URL')
     SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
     SUPABASE_JWT_SECRET  = os.getenv('SUPABASE_JWT_SECRET')
+    SUPABASE_ANON_KEY    = os.getenv('SUPABASE_ANON_KEY')
 
     # Flask
     SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
@@ -75,6 +76,8 @@ class Config:
             errors.append("SUPABASE_SERVICE_KEY is required")
         if not cls.SUPABASE_JWT_SECRET:
             errors.append("SUPABASE_JWT_SECRET is required")
+        if not cls.SUPABASE_ANON_KEY:
+            errors.append("SUPABASE_ANON_KEY is required")
 
         if errors:
             raise ValueError(f"Configuration errors: {', '.join(errors)}")

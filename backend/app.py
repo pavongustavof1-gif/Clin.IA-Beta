@@ -284,6 +284,14 @@ init_db()
 def index():
     return render_template('index.html')
 
+@app.route('/login')
+def login():
+    return render_template(
+        'login.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
