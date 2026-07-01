@@ -25,10 +25,12 @@ function handleSessionExpired() {
     window.location.href = '/login';
 }
 
-// Auth guard — runs immediately, before init()
-if (!sessionStorage.getItem('clinia_token')) {
-    window.location.href = '/login';
-}
+// Auth guard — handles both normal load and back/forward cache restore
+window.addEventListener('pageshow', function(event) {
+    if (!sessionStorage.getItem('clinia_token')) {
+        window.location.href = '/login';
+    }
+});
 
 // ─────────────────────────────────────────────
 // Global state
