@@ -35,7 +35,7 @@ class Config:
 
     # Supabase
     # SUPABASE_JWT_SECRET is no longer needed — JWT verification uses the JWKS endpoint (ES256)
-    SUPABASE_URL         = os.getenv('SUPABASE_URL')
+    SUPABASE_URL         = os.getenv('SUPABASE_URL').rstrip('/')
     SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
     SUPABASE_ANON_KEY    = os.getenv('SUPABASE_ANON_KEY')
 
