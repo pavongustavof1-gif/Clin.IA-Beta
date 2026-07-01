@@ -46,31 +46,38 @@ def verify_jwt(token: str) -> dict | None:
 
 
 def get_usuario_context(user_id: str) -> dict | None:
-    """
-    Query the usuarios table for the given auth.users UUID.
-    Returns {usuario_id, clinica_id, rol, nombre, email} or None if not found.
-    """
+    import urllib.error
+    url = (
+        Config.SUPABASE_URL.rstrip('/')
+        + '/rest/v1/usuarios'
+        + f'?id=eq.{user_id}'
+        + '&select=id,clinica_id,rol,nombre,email'
+        + '&limit=1'
+    )
+    req = urllib.request.Request(url, headers={
+        'apikey': Config.SUPABASE_SERVICE_KEY,
+        'Authorization': f'Bearer {Config.SUPABASE_SERVICE_KEY}',
+        'Accept': 'application/json',
+    })
     try:
-        result = (
-            get_supabase()
-            .table("usuarios")
-            .select("id, clinica_id, rol, nombre, email")
-            .eq("id", user_id)
-            .single()
-            .execute()
-        )
-        row = result.data
-        if not row:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            rows = json.loads(resp.read())
+        if not rows:
             return None
+        row = rows[0]
         return {
-            "usuario_id": row["id"],
-            "clinica_id": row["clinica_id"],
-            "rol":        row["rol"],
-            "nombre":     row["nombre"],
-            "email":      row["email"],
+            'usuario_id': row['id'],
+            'clinica_id': row['clinica_id'],
+            'rol':        row['rol'],
+            'nombre':     row['nombre'],
+            'email':      row['email'],
         }
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        logger.warning(f'Auth: Supabase REST error {e.code} for {user_id}: {body}')
+        return None
     except Exception as e:
-        logger.warning(f"Auth: Could not fetch usuario context for {user_id}: {e}")
+        logger.warning(f'Auth: Could not fetch usuario context for {user_id}: {e}')
         return None
 
 
