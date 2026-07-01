@@ -1,5 +1,8 @@
 from supabase import create_client, Client
 from config import Config
+from supabase import create_client, Client
+from config import Config
+from logger import logger
 
 _client: Client | None = None
 
