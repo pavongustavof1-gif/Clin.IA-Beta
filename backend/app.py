@@ -1,5 +1,4 @@
 # backend/app.py
-# fixed potential problem per Gemini
 from flask import Flask, request, jsonify, send_from_directory, render_template, g
 from flask_cors import CORS
 from config import Config
@@ -14,7 +13,8 @@ import os
 import re
 import tempfile
 import json
-import sqlite3
+import urllib.request
+import urllib.error
 from datetime import datetime
 from werkzeug.utils import secure_filename
 
@@ -30,6 +30,7 @@ def _derive_initials(nombre: str) -> str:
         and w.rstrip('.').lower() not in TITLE_PREFIXES
     ]
     return ''.join(initials[:4])
+
 
 def validate_audio_file(file) -> tuple[bool, str]:
     """
@@ -101,15 +102,6 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB — matches Config.MAX_AUDIO_SIZE_BYTES
 
-# Enable CORS for frontend  <-- replaced below
-# CORS(app, resources={
-#     r"/api/*": {
-#         "origins": ["http://localhost:3000", "http://localhost:5000", "http://127.0.0.1:5000"],
-#         "methods": ["GET", "POST", "OPTIONS"],
-#         "allow_headers": ["Content-Type"]
-#     }
-# })
-
 # Enable CORS for both local testing and production domains
 CORS(app, resources={
     r"/api/*": {
@@ -119,10 +111,9 @@ CORS(app, resources={
             "https://clinianotes.com",
             "https://www.clinianotes.com",
             "https://app.clinianotes.com",
-            "https://clin-ia-beta.onrender.com",
         ],
-        "methods": ["GET", "POST", "OPTIONS"],
-        "allow_headers": ["Content-Type"]
+        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+        "allow_headers": ["Content-Type", "Authorization"]
     }
 })
 
@@ -139,143 +130,109 @@ except ValueError as e:
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
 pdf_generator = PDFGenerator()
-# docs_generator = GoogleDocsGenerator() <-- Gemini says no good
 
-# ── SQLite session persistence ──────────────────────────────────────────────
+# ── Supabase REST helpers ────────────────────────────────────────────────────
 
-DB_PATH = os.environ.get('DB_PATH', '/data/clinia_sessions.db')
+def _sb_headers(extra: dict = None) -> dict:
+    h = {
+        'apikey': Config.SUPABASE_SERVICE_KEY,
+        'Authorization': f'Bearer {Config.SUPABASE_SERVICE_KEY}',
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+    }
+    if extra:
+        h.update(extra)
+    return h
 
-def init_db():
-    """Initialize SQLite database and create sessions table if not exists."""
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS sessions (
-            session_id         TEXT PRIMARY KEY,
-            timestamp          TEXT NOT NULL,
-            transcript_text    TEXT,
-            transcript_confidence REAL,
-            transcript_duration   REAL,
-            transcript_words      INTEGER,
-            structured_data_json  TEXT,
-            doc_link           TEXT,
-            doc_title          TEXT,
-            consent_given      INTEGER DEFAULT 0,
-            consent_timestamp  TEXT,
-            full_response_json TEXT NOT NULL
-        )
-    ''')
-    conn.commit()
+def _sb_get(path: str) -> list | None:
+    """GET from Supabase REST. Returns parsed JSON list or None on error."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    req = urllib.request.Request(url, headers=_sb_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase GET {path} failed {e.code}: {e.read().decode()}")
+        return None
+    except Exception as e:
+        logger.warning(f"DB: Supabase GET {path} error: {e}")
+        return None
 
-    migrations = [
-        "ALTER TABLE sessions ADD COLUMN status TEXT DEFAULT 'pending_review'",
-        "ALTER TABLE sessions ADD COLUMN locked_at TEXT",
-        "ALTER TABLE sessions ADD COLUMN addenda_json TEXT",
-        "ALTER TABLE sessions ADD COLUMN cancelled_at TEXT",
-        "ALTER TABLE sessions ADD COLUMN cancellation_reason TEXT",
-    ]
-    for sql in migrations:
-        try:
-            cursor.execute(sql)
-        except sqlite3.OperationalError:
-            pass  # Column already exists — safe to ignore
-    conn.commit()
-    conn.close()
-    logger.info("DB: SQLite session database initialized.")
+def _sb_patch(path: str, body: dict) -> bool:
+    """PATCH to Supabase REST. Returns True on success."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    data = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(url, data=data, headers=_sb_headers(), method='PATCH')
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+        return True
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase PATCH {path} failed {e.code}: {e.read().decode()}")
+        return False
+    except Exception as e:
+        logger.warning(f"DB: Supabase PATCH {path} error: {e}")
+        return False
 
+# ── Supabase session persistence ─────────────────────────────────────────────
 
-def save_session(session_id: str, data: dict):
-    """Persist a session to SQLite. Silently logs on failure — never raises."""
+def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
+    """Upsert a session to Supabase sesiones table. Silently logs on failure — never raises."""
     try:
         transcript = data.get('transcript') or {}
         doc        = data.get('document')  or {}
-        conn   = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO sessions
-            (session_id, timestamp, transcript_text, transcript_confidence,
-             transcript_duration, transcript_words, structured_data_json,
-             doc_link, doc_title, consent_given, consent_timestamp,
-             full_response_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            session_id,
-            data.get('timestamp', datetime.now().isoformat()),
-            transcript.get('text', ''),
-            transcript.get('confidence'),
-            transcript.get('duration_seconds'),
-            transcript.get('word_count'),
-            json.dumps(data.get('structured_data', {}), ensure_ascii=False),
-            doc.get('link'),
-            doc.get('title'),
-            1 if data.get('consent_given') else 0,
-            data.get('consent_timestamp'),
-            json.dumps(data, ensure_ascii=False)
-        ))
-        conn.commit()
-        conn.close()
-        logger.info(f"DB: Session {session_id} saved.")
+        body = {
+            'session_id':           session_id,
+            'usuario_id':           usuario_id,
+            'clinica_id':           clinica_id,
+            'timestamp':            data.get('timestamp', datetime.now().isoformat()),
+            'status':               data.get('status', 'pending_review'),
+            'structured_data':      data.get('structured_data', {}),
+            'transcript_text':      transcript.get('text'),
+            'transcript_confidence': transcript.get('confidence'),
+            'transcript_duration':  transcript.get('duration_seconds'),
+            'transcript_words':     transcript.get('word_count'),
+            'doc_link':             doc.get('link') if doc else None,
+            'doc_title':            doc.get('title') if doc else None,
+            'consent_given':        bool(data.get('consent_given')),
+            'consent_timestamp':    data.get('consent_timestamp'),
+            'consent_tratamiento':  data.get('consent_tratamiento'),
+            'addenda':              data.get('addenda', []),
+            'locked_at':            data.get('locked_at'),
+            'cancelled_at':         data.get('cancelled_at'),
+            'cancellation_reason':  data.get('cancellation_reason'),
+            'full_response':        data,
+        }
+        url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones'
+        payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+        req = urllib.request.Request(
+            url, data=payload,
+            headers=_sb_headers({'Prefer': 'resolution=merge-duplicates'}),
+            method='POST'
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        logger.info(f"DB: Session {session_id} saved to Supabase.")
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Could not save session {session_id}: {e.code} {e.read().decode()}")
     except Exception as e:
-        logger.warning(f"DB: Could not save session {session_id}: {str(e)}")
+        logger.warning(f"DB: Could not save session {session_id}: {e}")
 
 
 def load_session(session_id: str) -> dict | None:
-    """Retrieve a full session from SQLite. Returns None if not found."""
-    try:
-        conn   = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            'SELECT full_response_json FROM sessions WHERE session_id = ?',
-            (session_id,)
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return json.loads(row[0]) if row else None
-    except Exception as e:
-        logger.warning(f"DB: Could not load session {session_id}: {str(e)}")
+    """Retrieve a full session from Supabase. Returns None if not found."""
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=full_response&limit=1')
+    if not rows:
         return None
+    return rows[0].get('full_response')
 
 
 def load_structured_data(session_id: str) -> dict | None:
     """Retrieve only structured_data for a session — used by the export endpoint."""
-    try:
-        conn   = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute(
-            'SELECT structured_data_json FROM sessions WHERE session_id = ?',
-            (session_id,)
-        )
-        row = cursor.fetchone()
-        conn.close()
-        return json.loads(row[0]) if row else None
-    except Exception as e:
-        logger.warning(f"DB: Could not load structured data for {session_id}: {str(e)}")
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=structured_data&limit=1')
+    if not rows:
         return None
-
-
-def save_pdf_to_session(session_id: str, pdf_bytes: bytes):
-    """Store PDF bytes in the sessions table (adds the column if not yet present)."""
-    try:
-        conn   = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        # Migrate existing databases gracefully — ignore if column already exists
-        try:
-            cursor.execute('ALTER TABLE sessions ADD COLUMN pdf_data BLOB')
-        except sqlite3.OperationalError:
-            pass
-        cursor.execute(
-            'UPDATE sessions SET pdf_data = ? WHERE session_id = ?',
-            (pdf_bytes, session_id)
-        )
-        conn.commit()
-        conn.close()
-        logger.info(f"PDF: Stored in session {session_id}")
-    except Exception as e:
-        logger.warning(f"PDF: Could not store PDF: {str(e)}")
-
-
-# Initialize on startup
-init_db()
+    return rows[0].get('structured_data')
 
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -307,7 +264,7 @@ def health_check():
 def process_audio():
     """
     Main orchestrator endpoint - processes audio through entire pipeline
-    
+
     Expected: multipart/form-data with 'audio' file
     Returns: Complete medical note with Google Docs link
     """
@@ -319,7 +276,7 @@ def process_audio():
             logger.warning(f"Validation: rejected upload — {error_message}")
             return jsonify({'error': error_message, 'error_code': 'INVALID_AUDIO_FILE'}), 400
         logger.info(f"Validation: audio file accepted — {audio_file.filename}")
-        
+
         # Get optional parameters
         print_raw = request.form.get('print_raw', 'true').lower() == 'true'
         create_doc = request.form.get('create_doc', 'true').lower() == 'true'
@@ -328,18 +285,18 @@ def process_audio():
         consultation_timestamp = request.form.get('consultation_timestamp', local_timestamp)
         consent_given = request.form.get('consent_given', 'false').lower() == 'true'
         consent_timestamp = request.form.get('consent_timestamp', '')
-        
+
         logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
         logger.info("Orchestrator: Starting new processing job")
         logger.info(f"Orchestrator: Filename: {audio_file.filename}")
         logger.debug(f"Orchestrator: Print raw transcript: {print_raw}")
         logger.debug(f"Orchestrator: Create Google Doc: {create_doc}")
-        
+
         # Step 2: Save audio to temporary file
         filename = secure_filename(audio_file.filename)
         temp_dir = tempfile.gettempdir()
         temp_path = os.path.join(temp_dir, f"clinia_{datetime.now().timestamp()}_{filename}")
-        
+
         audio_file.save(temp_path)
         logger.debug(f"Orchestrator: Audio saved to: {temp_path}")
 
@@ -349,22 +306,22 @@ def process_audio():
 
         # Step 3: Transcribe audio (Phase A)
         logger.info("Orchestrator: PHASE A — Transcription")
-        
+
         try:
             transcript_result = transcription_service.transcribe_audio(
                 temp_path,
                 print_raw=print_raw,
                 speakers_expected=speakers_expected
             )
-            
+
             transcript_text = transcript_result['text']
-            
+
             if not transcript_text or len(transcript_text.strip()) < 10:
                 return jsonify({
                     'error': 'Transcription too short or empty',
                     'transcript': transcript_text
                 }), 400
-            
+
             logger.info(f"Orchestrator: Transcription completed: {len(transcript_text)} characters")
             logger.info(f"Orchestrator: Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.")
 
@@ -382,17 +339,17 @@ def process_audio():
 
         # Step 4: Extract structured data (Phase B)
         logger.info("Orchestrator: PHASE B — LLM Processing")
-        
+
         try:
             structured_data = llm_processor.extract_structured_data(
                 transcript_text,
                 utterances=transcript_result.get('utterances', []),
                 role_map=transcript_result.get('speaker_role_map', {})
             )
-            
+
             # Validate extracted data
             is_valid, error_msg = llm_processor.validate_against_schema(structured_data)
-            
+
             if not is_valid:
                 logger.warning(f"Orchestrator: Data validation failed: {error_msg}")
                 # Continue anyway for Alpha version
@@ -411,7 +368,7 @@ def process_audio():
                 'details': str(e),
                 'transcript': transcript_text
             }), 500
-        
+
         # Step 5: Prepare pending_review response
         initials = _derive_initials(g.usuario.get('nombre', ''))
         session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{initials}"
@@ -441,15 +398,13 @@ def process_audio():
             'structured_data': structured_data
         }
 
-        # Persist session — store extra fields (local_timestamp, create_doc,
-        # consent) alongside the response so confirm_and_generate can read them.
         save_session(session_id, {
             **response,
             'local_timestamp': local_timestamp,
             'create_doc': create_doc,
             'consent_given': consent_given,
             'consent_timestamp': consent_timestamp
-        })
+        }, usuario_id=g.usuario['usuario_id'], clinica_id=g.usuario['clinica_id'])
 
         logger.info(f"Orchestrator: Ready for review. Session: {session_id}")
         return jsonify(response), 200
@@ -493,24 +448,19 @@ def confirm_and_generate():
             return jsonify({'error': 'Session not found'}), 404
 
         # NOM-024 immutability — reject if already confirmed or cancelled
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute('SELECT status FROM sessions WHERE session_id = ?', (session_id,))
-            row = cursor.fetchone()
-            conn.close()
-            if row and row[0] == 'confirmed':
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status&limit=1')
+        if rows:
+            current_status = rows[0].get('status')
+            if current_status == 'confirmed':
                 return jsonify({
                     'error': 'Esta nota ya fue confirmada y no puede modificarse. Para hacer correcciones, utilice la función de adéndum.',
                     'error_code': 'SESSION_LOCKED'
                 }), 409
-            if row and row[0] == 'cancelled':
+            if current_status == 'cancelled':
                 return jsonify({
                     'error': 'Esta nota ha sido cancelada por solicitud ARCO y no puede modificarse.',
                     'error_code': 'SESSION_CANCELLED'
                 }), 409
-        except Exception as e:
-            logger.warning(f"DB: Could not check session lock status: {e}")
 
         local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -540,64 +490,39 @@ def confirm_and_generate():
                 logger.warning(f"PDF: Generation failed: {str(e)}")
                 # Never raise — PDF failure must not block the pipeline
 
+        locked_at = datetime.now().isoformat()
+
         response = {
             'session_id': session_id,
             'status': 'success',
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': locked_at,
             'transcript': session.get('transcript'),
             'structured_data': structured_data,
             'document': doc_info,
-            'pdf_available': pdf_bytes is not None,
+            'pdf_available': False,  # PDF storage migrated to Supabase Storage in Sprint 6
             'consent_grabacion': session.get('consent', {}),
             'consent_tratamiento': consent_tratamiento
         }
 
-        # Persist confirmed session first — uses INSERT OR REPLACE which
-        # rewrites the full row, so pdf_data must be written afterwards
+        # Persist confirmed session
         save_session(session_id, {
             **session,
             'structured_data': structured_data,
             'document': doc_info,
             'status': 'confirmed',
-            'locked_at': datetime.now().isoformat(),
-            'timestamp': response['timestamp'],
+            'locked_at': locked_at,
+            'timestamp': locked_at,
             'consent_tratamiento': consent_tratamiento
-        })
-
-        # Explicitly write new columns (INSERT OR REPLACE doesn't cover them)
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute(
-                'UPDATE sessions SET status = ?, locked_at = ? WHERE session_id = ?',
-                ('confirmed', datetime.now().isoformat(), session_id)
-            )
-            conn.commit()
-            conn.close()
-            logger.info(f"DB: Session {session_id} locked — status=confirmed")
-        except Exception as e:
-            logger.warning(f"DB: Could not lock session {session_id}: {e}")
+        }, usuario_id=g.usuario['usuario_id'], clinica_id=g.usuario['clinica_id'])
 
         # Delete transcript text to minimize LFPDPPP exposure
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            cursor = conn.cursor()
-            cursor.execute(
-                'UPDATE sessions SET transcript_text = NULL WHERE session_id = ?',
-                (session_id,)
-            )
-            conn.commit()
-            conn.close()
+        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'transcript_text': None})
+        if ok:
             logger.info(f"DB: Transcript text deleted for session {session_id} — LFPDPPP minimization")
-        except Exception as e:
-            logger.warning(f"DB: Could not delete transcript text for {session_id}: {e}")
+        else:
+            logger.warning(f"DB: Could not delete transcript text for {session_id}")
 
-        # Store PDF bytes AFTER save_session to prevent the INSERT OR REPLACE
-        # from wiping the pdf_data column
-        if pdf_bytes:
-            save_pdf_to_session(session_id, pdf_bytes)
-
-        # Send PDF to doctor's email if provided
+        # Send PDF to doctor's email if generated
         if pdf_bytes and doctor_email:
             patient_name = (structured_data
                 .get('informacion_paciente', {})
@@ -638,28 +563,28 @@ def transcribe_only():
     try:
         if 'audio' not in request.files:
             return jsonify({'error': 'No audio file provided'}), 400
-        
+
         audio_file = request.files['audio']
         print_raw = request.form.get('print_raw', 'true').lower() == 'true'
-        
+
         # Save to temp file
         filename = secure_filename(audio_file.filename)
         temp_path = os.path.join(tempfile.gettempdir(), filename)
         audio_file.save(temp_path)
-        
+
         try:
             # Transcribe
             result = transcription_service.transcribe_audio(temp_path, print_raw=print_raw)
-            
+
             return jsonify({
                 'status': 'success',
                 'transcript': result
             }), 200
-            
+
         finally:
             if os.path.exists(temp_path):
                 os.remove(temp_path)
-    
+
     except Exception as e:
         return jsonify({
             'error': 'Transcription failed',
@@ -678,29 +603,29 @@ def process_transcript():
     """
     try:
         data = request.get_json()
-        
+
         if not data or 'transcript' not in data:
             return jsonify({'error': 'No transcript provided'}), 400
-        
+
         transcript = data['transcript']
-        
+
         # Process with LLM
         structured_data = llm_processor.extract_structured_data(transcript)
-        
+
         # Optionally create document
         create_doc = data.get('create_doc', False)
         doc_info = None
-        
+
         if create_doc:
             docs_generator = GoogleDocsGenerator()
             doc_info = docs_generator.create_medical_note(structured_data)
-        
+
         return jsonify({
             'status': 'success',
             'structured_data': structured_data,
             'document': doc_info
         }), 200
-        
+
     except Exception as e:
         return jsonify({
             'error': 'Processing failed',
@@ -730,24 +655,21 @@ def cancel_session(session_id):
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
         reason = request.args.get('reason', 'Solicitud ARCO — Cancelación')
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT status FROM sessions WHERE session_id = ?', (session_id,))
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
+
+        # Verify session exists
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status&limit=1')
+        if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
-        cursor.execute(
-            '''UPDATE sessions
-               SET status = 'cancelled',
-                   cancelled_at = ?,
-                   cancellation_reason = ?,
-                   transcript_text = NULL
-               WHERE session_id = ?''',
-            (datetime.now().isoformat(), reason, session_id)
-        )
-        conn.commit()
-        conn.close()
+
+        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
+            'status':               'cancelled',
+            'cancelled_at':         datetime.now().isoformat(),
+            'cancellation_reason':  reason,
+            'transcript_text':      None,
+        })
+        if not ok:
+            return jsonify({'error': 'No se pudo cancelar la sesión'}), 500
+
         logger.info(f"DB: Session {session_id} blocked — ARCO Cancelación request.")
         return jsonify({
             'status': 'cancelled',
@@ -782,38 +704,32 @@ def add_addendum(session_id):
         if addendum_type not in ('adendum_clinico', 'rectificacion_arco'):
             return jsonify({'error': 'Tipo de adéndum no válido'}), 400
 
-        conn = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
-        cursor.execute('SELECT status, addenda_json FROM sessions WHERE session_id = ?', (session_id,))
-        row = cursor.fetchone()
-        if not row:
-            conn.close()
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status,addenda&limit=1')
+        if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
 
-        status, addenda_json = row
+        row = rows[0]
+        status  = row.get('status')
+        addenda = row.get('addenda') or []
+
         if status == 'cancelled':
-            conn.close()
             return jsonify({'error': 'No se pueden agregar adéndum a una sesión cancelada'}), 409
         if status != 'confirmed':
-            conn.close()
             return jsonify({'error': 'Solo se pueden agregar adéndum a notas confirmadas'}), 409
 
-        addenda = json.loads(addenda_json) if addenda_json else []
         new_addendum = {
-            'id': f"adendum_{len(addenda) + 1}",
-            'type': addendum_type,
-            'text': addendum_text,
-            'author': author,
+            'id':        f"adendum_{len(addenda) + 1}",
+            'type':      addendum_type,
+            'text':      addendum_text,
+            'author':    author,
             'timestamp': datetime.now().isoformat(),
         }
         addenda.append(new_addendum)
 
-        cursor.execute(
-            'UPDATE sessions SET addenda_json = ? WHERE session_id = ?',
-            (json.dumps(addenda, ensure_ascii=False), session_id)
-        )
-        conn.commit()
-        conn.close()
+        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'addenda': addenda})
+        if not ok:
+            return jsonify({'error': 'No se pudo guardar el adéndum'}), 500
+
         logger.info(f"DB: Addendum added to session {session_id} — type={addendum_type}")
         return jsonify({'status': 'ok', 'addendum': new_addendum, 'total_addenda': len(addenda)}), 200
 
@@ -836,67 +752,19 @@ def export_json(session_id):
         mimetype='application/json'
     )
     response.headers['Content-Disposition'] = f'attachment; filename=clinia_{session_id}.json'
-    
+
     return response
 
 
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
 @require_auth
 def download_pdf(session_id):
-    """
-    Returns the generated PDF as a downloadable file attachment.
-    Used when a doctor clicks 'Descargar PDF' in the results screen.
-    """
+    """PDF download — temporarily unavailable during Supabase Storage migration (Sprint 6)."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    try:
-        conn   = sqlite3.connect(DB_PATH)
-        cursor = conn.cursor()
+    return jsonify({
+        'error': 'Descarga de PDF no disponible temporalmente — en migración a Supabase Storage. Disponible en Sprint 6.'
+    }), 501
 
-        # Debug logging — reveals session_id mismatches in Render logs
-        logger.info(f"PDF: Download requested for session: {session_id}")
-        cursor.execute(
-            'SELECT session_id, pdf_data IS NOT NULL as has_pdf FROM sessions ORDER BY rowid DESC LIMIT 5'
-        )
-        recent = cursor.fetchall()
-        logger.debug(f"PDF: Recent sessions in DB: {recent}")
-
-        cursor.execute(
-            'SELECT pdf_data FROM sessions WHERE session_id = ?',
-            (session_id,)
-        )
-        row = cursor.fetchone()
-        conn.close()
-
-        if not row or not row[0]:
-            return jsonify({'error': 'PDF no disponible para esta sesión'}), 404
-
-        pdf_bytes = row[0]
-
-        # Build filename from patient name + date
-        session = load_session(session_id)
-        patient_name = 'Paciente'
-        if session:
-            patient_name = (session
-                .get('structured_data', {})
-                .get('informacion_paciente', {})
-                .get('nombre_del_paciente', 'Paciente'))
-        safe_name = ''.join(
-            c for c in patient_name if c.isalnum() or c in (' ', '-')
-        ).strip().replace(' ', '_')[:30]
-        date_str  = datetime.now().strftime('%Y%m%d')
-        filename  = f"ClinIA_{safe_name}_{date_str}.pdf"
-
-        response = app.response_class(
-            response=pdf_bytes,
-            mimetype='application/pdf'
-        )
-        response.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
-        response.headers['Content-Length'] = len(pdf_bytes)
-        return response
-
-    except Exception as e:
-        logger.error(f"PDF: Download error: {str(e)}")
-        return jsonify({'error': str(e)}), 500
 
 # Error handlers
 @app.errorhandler(413)
@@ -914,33 +782,11 @@ def internal_server_error(error):
         'details': str(error)
     }), 500
 
-# remove per Gemini
-# if __name__ == '__main__':
-#     print("\n" + "="*80)
-#     print("ClinIA Alpha - Medical Note Taker")
-#     print("="*80)
-#     print("Starting Flask server...")
-#     print("Frontend will be available at: http://localhost:5000")
-#     print("API endpoints:")
-#     print("  - POST /api/process-audio      (Full pipeline)")
-#     print("  - POST /api/transcribe-only    (Transcription only)"
-#     print("  - POST /api/process-transcript (LLM processing only)")
-#     print("  - GET  /api/health             (Health check)")
-#     print("="*80 + "\n")
 
 if __name__ == '__main__':
     # This block only runs when you run 'python app.py' on your computer.
     # It does NOT run on Render.
     logger.info("ClinIA Beta - Medical Note Taker (Local Mode) — starting Flask server")
-    
-    # We use port 5000 locally, but Render will assign its own port via environment variables
+
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port, debug=True)
-
-    
-    # Run Flask development server
-#     app.run(
-#         host='0.0.0.0',
-#         port=5000,
-#         debug=True
-#     )
