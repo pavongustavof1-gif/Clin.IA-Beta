@@ -717,7 +717,7 @@ class PDFGenerator:
     def _build_signature_block(self, structured_data: dict) -> list:
         meta          = structured_data.get('metadata') or {}
         info          = structured_data.get('informacion_paciente') or {}
-        medico        = self._doctor('nombre') or self._safe(meta.get('medico')) or 'Médico Tratante'
+        medico        = self._doctor('nombre', 'Médico Tratante')
         doctor_cedula = self._doctor('cedula')
         paciente      = self._safe(info.get('nombre_del_paciente'))
 
