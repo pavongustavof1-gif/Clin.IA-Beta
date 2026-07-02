@@ -122,8 +122,9 @@ class PDFGenerator:
     # Public entry point
     # ──────────────────────────────────────────────────────────────
 
-    def generate_pdf(self, structured_data: dict, session_id: str = '') -> bytes:
-        self._session_id = session_id
+    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None) -> bytes:
+        self._session_id  = session_id
+        self._doctor_info = doctor_info or {}
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
@@ -147,6 +148,10 @@ class PDFGenerator:
         buffer.seek(0)
         return buffer.read()
 
+    def _doctor(self, key: str, fallback: str = '') -> str:
+        """Return a field from doctor_info, falling back to fallback."""
+        return self._safe(getattr(self, '_doctor_info', {}).get(key), fallback)
+
     # ──────────────────────────────────────────────────────────────
     # Header block
     # ──────────────────────────────────────────────────────────────
@@ -168,9 +173,11 @@ class PDFGenerator:
             alignment=TA_RIGHT,
         )
 
+        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
+
         left_cell  = [
-            Paragraph('Consultorio Médico', self.styles['clinic_name']),
-            Paragraph('Dirección del consultorio', self.styles['clinic_address']),
+            Paragraph(html.escape(clinica_nombre), self.styles['clinic_name']),
         ]
         right_cell = [
             Paragraph('NOTA DE EVOLUCIÓN CLÍNICA', self.styles['note_title']),
@@ -182,7 +189,7 @@ class PDFGenerator:
             colWidths=[page_width * 0.60, page_width * 0.40],
         )
         t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, -1), self.TEAL),
+            ('BACKGROUND',    (0, 0), (-1, -1), clinica_color),
             ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN',         (1, 0), (1,  0),  'RIGHT'),
             ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
@@ -593,16 +600,17 @@ class PDFGenerator:
         elems = []
 
         # Header banner
+        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
         date_style_w = ParagraphStyle('cdate', fontName='Helvetica', fontSize=8,
                                        textColor=colors.white, alignment=TA_RIGHT)
-        left_cell  = [Paragraph('Consultorio Médico', self.styles['clinic_name']),
-                      Paragraph('Dirección del consultorio', self.styles['clinic_address'])]
+        left_cell  = [Paragraph(html.escape(clinica_nombre), self.styles['clinic_name'])]
         right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', self.styles['note_title']),
                       Paragraph(html.escape(fecha), date_style_w)]
         banner = Table([[left_cell, right_cell]],
                        colWidths=[page_width * 0.60, page_width * 0.40])
         banner.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, -1), self.TEAL),
+            ('BACKGROUND',    (0, 0), (-1, -1), clinica_color),
             ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN',         (1, 0), (1,  0),  'RIGHT'),
             ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
@@ -667,7 +675,8 @@ class PDFGenerator:
         elems.append(Spacer(1, 10 * mm))
 
         # Signature block — Patient + Doctor
-        medico   = self._safe(meta.get('medico'))
+        doctor_nombre = self._doctor('nombre') or self._safe(meta.get('medico')) or 'Médico Tratante'
+        doctor_cedula = self._doctor('cedula')
         sig_line = '________________________________'
         left_sig = [
             Paragraph(sig_line, sig_label),
@@ -678,8 +687,10 @@ class PDFGenerator:
         right_sig = [
             Paragraph(sig_line, sig_label),
             Paragraph('Firma y Sello del Médico', sig_name),
-            Paragraph(html.escape(medico) if medico else 'Médico Tratante', sig_sub),
+            Paragraph(html.escape(doctor_nombre), sig_sub),
         ]
+        if doctor_cedula:
+            right_sig.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', sig_sub))
         sig_table = Table([[left_sig, right_sig]],
                           colWidths=[page_width * 0.50, page_width * 0.50])
         sig_table.setStyle(TableStyle([
@@ -704,10 +715,11 @@ class PDFGenerator:
         return elems
 
     def _build_signature_block(self, structured_data: dict) -> list:
-        meta     = structured_data.get('metadata') or {}
-        info     = structured_data.get('informacion_paciente') or {}
-        medico   = self._safe(meta.get('medico'))
-        paciente = self._safe(info.get('nombre_del_paciente'))
+        meta          = structured_data.get('metadata') or {}
+        info          = structured_data.get('informacion_paciente') or {}
+        medico        = self._doctor('nombre') or self._safe(meta.get('medico')) or 'Médico Tratante'
+        doctor_cedula = self._doctor('cedula')
+        paciente      = self._safe(info.get('nombre_del_paciente'))
 
         small   = ParagraphStyle('sb_s',  fontName='Helvetica',         fontSize=7,
                                   textColor=self.GRAY_TEXT, alignment=TA_CENTER)
@@ -730,8 +742,10 @@ class PDFGenerator:
         right_content = [
             Paragraph(sig_line, small),
             Paragraph('Firma y Sello del Médico', small_b),
-            Paragraph(html.escape(medico) if medico else 'Médico Tratante', small),
+            Paragraph(html.escape(medico), small),
         ]
+        if doctor_cedula:
+            right_content.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small))
 
         page_width = LETTER[0] - 36 * mm
         t = Table(

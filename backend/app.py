@@ -234,6 +234,25 @@ def load_structured_data(session_id: str) -> dict | None:
         return None
     return rows[0].get('structured_data')
 
+
+def get_clinica_context(clinica_id: str) -> dict:
+    """Fetch clinic name and primary color from Supabase. Returns defaults on error."""
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario&limit=1')
+    if rows:
+        return {
+            'nombre':         rows[0].get('nombre') or 'Consultorio Médico',
+            'color_primario': rows[0].get('color_primario') or '#0F6E56',
+        }
+    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56'}
+
+
+def get_usuario_cedula(usuario_id: str) -> str:
+    """Fetch doctor's cédula professional from Supabase. Returns empty string on error."""
+    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{usuario_id}&select=cedula&limit=1')
+    if rows:
+        return rows[0].get('cedula') or ''
+    return ''
+
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -484,7 +503,17 @@ def confirm_and_generate():
         if create_pdf:
             logger.info("Orchestrator: PHASE C2 — PDF Generation")
             try:
-                pdf_bytes = pdf_generator.generate_pdf(structured_data, session_id=session_id)
+                clinica  = get_clinica_context(g.usuario['clinica_id'])
+                cedula   = get_usuario_cedula(g.usuario['usuario_id'])
+                doctor_info = {
+                    'nombre':         g.usuario.get('nombre', ''),
+                    'cedula':         cedula,
+                    'clinica_nombre': clinica['nombre'],
+                    'clinica_color':  clinica['color_primario'],
+                }
+                pdf_bytes = pdf_generator.generate_pdf(
+                    structured_data, session_id=session_id, doctor_info=doctor_info
+                )
                 logger.info(f"PDF: Generated successfully — {len(pdf_bytes)} bytes")
             except Exception as e:
                 logger.warning(f"PDF: Generation failed: {str(e)}")
