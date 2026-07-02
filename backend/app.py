@@ -203,11 +203,11 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
             'cancellation_reason':  data.get('cancellation_reason'),
             'full_response':        data,
         }
-        url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones'
+        url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones?on_conflict=session_id'
         payload = json.dumps(body, ensure_ascii=False, default=str).encode()
         req = urllib.request.Request(
             url, data=payload,
-            headers=_sb_headers({'Prefer': 'resolution=merge-duplicates'}),
+            headers=_sb_headers(extra={'Prefer': 'resolution=merge-duplicates'}),
             method='POST'
         )
         with urllib.request.urlopen(req, timeout=10) as resp:
