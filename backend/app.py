@@ -528,7 +528,7 @@ def confirm_and_generate():
             'transcript': session.get('transcript'),
             'structured_data': structured_data,
             'document': doc_info,
-            'pdf_available': False,  # PDF storage migrated to Supabase Storage in Sprint 6
+            'pdf_available': True,
             'consent_grabacion': session.get('consent', {}),
             'consent_tratamiento': consent_tratamiento
         }
@@ -788,11 +788,40 @@ def export_json(session_id):
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
 @require_auth
 def download_pdf(session_id):
-    """PDF download — temporarily unavailable during Supabase Storage migration (Sprint 6)."""
+    """Regenerate and stream PDF for a confirmed session."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    return jsonify({
-        'error': 'Descarga de PDF no disponible temporalmente — en migración a Supabase Storage. Disponible en Sprint 6.'
-    }), 501
+    try:
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,status&limit=1')
+        if not rows:
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+        if rows[0].get('usuario_id') != g.usuario['usuario_id']:
+            return jsonify({'error': 'No autorizado'}), 403
+
+        structured_data = load_structured_data(session_id)
+        if not structured_data:
+            return jsonify({'error': 'Datos de sesión no disponibles'}), 404
+
+        clinica      = get_clinica_context(g.usuario['clinica_id'])
+        cedula       = get_usuario_cedula(g.usuario['usuario_id'])
+        doctor_info  = {
+            'nombre':         g.usuario.get('nombre', ''),
+            'cedula':         cedula,
+            'clinica_nombre': clinica['nombre'],
+            'clinica_color':  clinica['color_primario'],
+        }
+
+        pdf_bytes = pdf_generator.generate_pdf(
+            structured_data, session_id=session_id, doctor_info=doctor_info
+        )
+        logger.info(f"PDF: Regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
+
+        response = app.response_class(response=pdf_bytes, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = f'attachment; filename=ClinIA_{session_id}.pdf'
+        return response
+
+    except Exception as e:
+        logger.error(f"PDF: Download failed for {session_id}: {e}")
+        return jsonify({'error': 'Error al generar el PDF'}), 500
 
 
 # Error handlers
