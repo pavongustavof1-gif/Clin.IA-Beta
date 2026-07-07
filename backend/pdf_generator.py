@@ -731,8 +731,6 @@ class PDFGenerator:
         sig_line = '________________________________'
 
         left_content = [
-            Paragraph(sig_line, small),
-            Paragraph(' ', small),
             Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
             Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
         ]
@@ -755,7 +753,8 @@ class PDFGenerator:
             colWidths=[page_width * 0.35, page_width * 0.32, page_width * 0.33]
         )
         t.setStyle(TableStyle([
-            ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
+            ('VALIGN',        (0, 0), (0,  0),  'BOTTOM'),
+            ('VALIGN',        (1, 0), (-1, 0),  'BOTTOM'),
             ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
             ('LEFTPADDING',   (0, 0), (-1, -1), 0),
             ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
