@@ -729,37 +729,48 @@ class PDFGenerator:
                                   textColor=self.GRAY_TEXT)
 
         sig_line = '________________________________'
+        page_width = LETTER[0] - 36 * mm
+        col_w = [page_width * 0.35, page_width * 0.32, page_width * 0.33]
 
-        left_content = [
-            Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
-            Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
-        ]
-        mid_content = [
-            Paragraph(sig_line, small),
-            Paragraph('Firma del Paciente', small_b),
-            Paragraph(html.escape(paciente) if paciente else '', small),
-        ]
-        right_content = [
+        # Row 1 — signature lines
+        right_cell = [
             Paragraph(sig_line, small),
             Paragraph('Firma y Sello del Médico', small_b),
             Paragraph(html.escape(medico), small),
         ]
         if doctor_cedula:
-            right_content.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small))
+            right_cell.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small))
 
-        page_width = LETTER[0] - 36 * mm
+        row1 = [
+            Paragraph('', small),
+            [
+                Paragraph(sig_line, small),
+                Paragraph('Firma del Paciente', small_b),
+                Paragraph(html.escape(paciente) if paciente else '', small),
+            ],
+            right_cell,
+        ]
+
+        # Row 2 — branding text spanning full width
+        row2 = [
+            Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
+            Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
+            Paragraph('', small),
+        ]
+
         t = Table(
-            [[left_content, mid_content, right_content]],
-            colWidths=[page_width * 0.35, page_width * 0.32, page_width * 0.33]
+            [row1, row2],
+            colWidths=col_w,
         )
         t.setStyle(TableStyle([
-            ('VALIGN',        (0, 0), (0,  0),  'BOTTOM'),
-            ('VALIGN',        (1, 0), (-1, 0),  'BOTTOM'),
-            ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN',         (1, 0), (-1, 0),  'CENTER'),
+            ('ALIGN',         (0, 1), (-1, 1),  'LEFT'),
             ('LEFTPADDING',   (0, 0), (-1, -1), 0),
             ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
-            ('TOPPADDING',    (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING',    (0, 0), (-1, 0),  0),
+            ('BOTTOMPADDING', (0, 0), (-1, 0),  0),
+            ('TOPPADDING',    (0, 1), (-1, 1),  4),
         ]))
         return [Spacer(1, 8 * mm), t]
 
