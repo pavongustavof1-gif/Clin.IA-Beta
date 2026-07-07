@@ -204,74 +204,6 @@
         <!-- Main Content -->
         <main class="main-content">
             
-            <!-- Recording Section -->
-            <section class="card recording-section">
-                <h2>
-                    <svg class="heading-icon" width="22" height="22" aria-hidden="true"><use href="#icon-note"/></svg>
-                    Grabar Consulta
-                </h2>
-                
-                <!-- Recording Controls — 4 buttons -->
-                <div class="recording-controls">
-                    <button id="recordBtn" class="btn btn-success">
-                        <span class="btn-icon" aria-hidden="true">
-                            <svg width="18" height="18"><use href="#icon-mic"/></svg>
-                        </span>
-                        Iniciar Grabación
-                    </button>
-
-                    <button id="pauseBtn" class="btn btn-pause" disabled>
-                        <span class="btn-icon" aria-hidden="true">
-                            <svg width="18" height="18"><use href="#icon-pause"/></svg>
-                        </span>
-                        Pausar
-                    </button>
-                    
-                    <button id="stopBtn" class="btn btn-danger" disabled>
-                        <span class="btn-icon" aria-hidden="true">
-                            <svg width="18" height="18"><use href="#icon-stop"/></svg>
-                        </span>
-                        Detener
-                    </button>
-                    
-                    <button id="uploadBtn" class="btn btn-secondary">
-                        <span class="btn-icon" aria-hidden="true">
-                            <svg width="18" height="18"><use href="#icon-upload"/></svg>
-                        </span>
-                        Cargar Audio
-                    </button>
-                    
-                    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
-                </div>
-                
-                <!-- Recording Status -->
-                <div id="recordingStatus" class="status-message" style="display: none;">
-                    <div class="recording-indicator">
-                        <span class="pulse-dot"></span>
-                        <span id="recordingTime">00:00</span>
-                    </div>
-                    <p class="warning-text">Máximo 45 minutos · Puedes pausar y reanudar</p>
-                </div>
-                
-                <!-- Audio Player -->
-                <div id="audioPlayerContainer" style="display: none;"> 
-                    <audio id="audioPlayer" controls></audio>
-                    <div class="audio-info">
-                        <span id="audioFileName"></span>
-                        <span id="audioDuration"></span>
-                    </div>
-                </div>
-                
-                <!-- Process Button -->
-                <button id="processBtn" class="btn btn-primary btn-large" disabled>
-                    <span class="btn-icon" aria-hidden="true">
-                        <svg width="20" height="20"><use href="#icon-bolt"/></svg>
-                    </span>
-                    Procesar y Generar Nota
-                </button>
-
-            </section>
-            
             <!-- Consent Card — separate from Opciones -->
             <section class="card consent-card" id="consentCard">
                 <div class="consent-card-body">
@@ -288,6 +220,74 @@
                         <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
                     </label>
                 </div>
+            </section>
+
+            <!-- Recording Section -->
+            <section class="card recording-section">
+                <h2>
+                    <svg class="heading-icon" width="22" height="22" aria-hidden="true"><use href="#icon-note"/></svg>
+                    Grabar Consulta
+                </h2>
+
+                <!-- Recording Controls — 4 buttons -->
+                <div class="recording-controls">
+                    <button id="recordBtn" class="btn btn-success">
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-mic"/></svg>
+                        </span>
+                        Iniciar Grabación
+                    </button>
+
+                    <button id="pauseBtn" class="btn btn-pause" disabled>
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-pause"/></svg>
+                        </span>
+                        Pausar
+                    </button>
+
+                    <button id="stopBtn" class="btn btn-danger" disabled>
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-stop"/></svg>
+                        </span>
+                        Detener
+                    </button>
+
+                    <button id="uploadBtn" class="btn btn-secondary" disabled>
+                        <span class="btn-icon" aria-hidden="true">
+                            <svg width="18" height="18"><use href="#icon-upload"/></svg>
+                        </span>
+                        Cargar Audio
+                    </button>
+
+                    <input type="file" id="audioFileInput" accept="audio/*" style="display: none;">
+                </div>
+
+                <!-- Recording Status -->
+                <div id="recordingStatus" class="status-message" style="display: none;">
+                    <div class="recording-indicator">
+                        <span class="pulse-dot"></span>
+                        <span id="recordingTime">00:00</span>
+                    </div>
+                    <p class="warning-text">Máximo 45 minutos · Puedes pausar y reanudar</p>
+                </div>
+
+                <!-- Audio Player -->
+                <div id="audioPlayerContainer" style="display: none;">
+                    <audio id="audioPlayer" controls></audio>
+                    <div class="audio-info">
+                        <span id="audioFileName"></span>
+                        <span id="audioDuration"></span>
+                    </div>
+                </div>
+
+                <!-- Process Button -->
+                <button id="processBtn" class="btn btn-primary btn-large" disabled>
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg width="20" height="20"><use href="#icon-bolt"/></svg>
+                    </span>
+                    Procesar y Generar Nota
+                </button>
+
             </section>
 
             <!-- Options Section -->
@@ -589,10 +589,6 @@
                             <div class="review-group">
                                 <h5 class="review-group-title">Metadatos</h5>
                                 <div class="review-field">
-                                    <label class="review-label" for="review_medico">Médico</label>
-                                    <input type="text" id="review_medico" class="review-input">
-                                </div>
-                                <div class="review-field">
                                     <label class="review-label" for="review_fecha_hora_consulta">Fecha y Hora de Consulta</label>
                                     <input type="text" id="review_fecha_hora_consulta" class="review-input">
                                 </div>
@@ -600,22 +596,23 @@
 
                         </form>
 
-                        <div class="review-actions">
-                            <button id="confirmAndGenerateBtn" class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
-                                <span class="btn-icon" aria-hidden="true">
-                                    <svg width="18" height="18"><use href="#icon-document"/></svg>
-                                </span>
-                                Confirmar y Generar Documento
-                            </button>
-                            <button class="btn btn-danger" type="button" onclick="cancelReview()">
-                                Cancelar
-                            </button>
-                        </div>
-
                     </div><!-- /review-form-panel -->
 
                 </div><!-- /review-layout -->
             </section>
+
+            <!-- Review Action Buttons -->
+            <div id="reviewActionsSection" class="review-actions" style="display: none;">
+                <button id="confirmAndGenerateBtn" class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
+                    <span class="btn-icon" aria-hidden="true">
+                        <svg width="18" height="18"><use href="#icon-document"/></svg>
+                    </span>
+                    Confirmar y Generar Documento
+                </button>
+                <button class="btn btn-danger" type="button" onclick="cancelReview()">
+                    Cancelar
+                </button>
+            </div>
 
             <!-- Results Section -->
             <section id="resultsSection" class="card results-section" style="display: none;">

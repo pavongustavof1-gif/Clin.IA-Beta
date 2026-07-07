@@ -124,12 +124,13 @@ const elements = {
     formattedData: document.getElementById('formattedData'),
     jsonData: document.getElementById('jsonData'),
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
-    
+
     doctorEmail: document.getElementById('doctorEmail'),
     consentCheckbox: document.getElementById('consentCheckbox'),
     consentTratamiento: document.getElementById('consentTratamiento'),
     confirmAndGenerateBtn: document.getElementById('confirmAndGenerateBtn'),
     reviewSection: document.getElementById('reviewSection'),
+    reviewActionsSection: document.getElementById('reviewActionsSection'),
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
     retryBtn: document.getElementById('retryBtn'),
@@ -149,8 +150,11 @@ function init() {
         return;
     }
 
-    // Restore saved doctor email
+    // Restore saved doctor email; fall back to session login email
     loadDoctorEmail();
+    if (elements.doctorEmail && !elements.doctorEmail.value) {
+        elements.doctorEmail.value = sessionStorage.getItem('clinia_email') || '';
+    }
 
     if (elements.doctorEmail) {
         elements.doctorEmail.addEventListener('blur', () => {
@@ -170,7 +174,8 @@ function init() {
         state.consentTimestamp = state.consentGiven
             ? new Date().toISOString()
             : null;
-        elements.recordBtn.disabled = !state.consentGiven;
+        elements.recordBtn.disabled  = !state.consentGiven;
+        elements.uploadBtn.disabled  = !state.consentGiven;
     });
 
     // Event listeners
@@ -659,6 +664,7 @@ function displayReviewScreen(result) {
 
     elements.progressSection.style.display = 'none';
     elements.reviewSection.style.display = 'block';
+    if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'flex';
 
     // Consent 2: reset and disable Confirmar on every new review
     if (elements.consentTratamiento) elements.consentTratamiento.checked = false;
@@ -729,7 +735,6 @@ function displayReviewScreen(result) {
     setVal('review_seguimiento', plan.seguimiento);
 
     // Metadatos
-    setVal('review_medico',             meta.medico);
     setVal('review_fecha_hora_consulta', meta.fecha_hora_consulta);
 
     // Populate transcript panel
@@ -751,9 +756,9 @@ function displayReviewScreen(result) {
     elements.reviewSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     // Keep active review field in view as doctor tabs through form
-    document.querySelectorAll('.review-input, .review-select, .review-textarea').forEach(el => {
-        el.addEventListener('focus', function() {
-            this.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    document.querySelectorAll('#reviewForm input, #reviewForm textarea, #reviewForm select').forEach(el => {
+        el.addEventListener('focus', () => {
+            el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         });
     });
 }
@@ -833,7 +838,6 @@ function buildStructuredDataFromForm() {
 
     // metadata
     const meta = {};
-    if (getVal('review_medico'))              meta.medico              = getVal('review_medico');
     if (getVal('review_fecha_hora_consulta')) meta.fecha_hora_consulta = getVal('review_fecha_hora_consulta');
     if (Object.keys(meta).length) sd.metadata = meta;
 
@@ -848,6 +852,7 @@ async function confirmAndGenerate() {
     if (antecedentes) sd.actualizacion_antecedentes = antecedentes;
 
     elements.reviewSection.style.display = 'none';
+    if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'none';
     elements.progressSection.style.display = 'block';
     updateProgress(10, 'Generando documento...', 3);
 
@@ -896,12 +901,14 @@ async function confirmAndGenerate() {
         showError(`Error al generar el documento: ${error.message}`);
         elements.progressSection.style.display = 'none';
         elements.reviewSection.style.display = 'block';
+        if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'flex';
     }
 }
 
 function cancelReview() {
     state.pendingResult = null;
     elements.reviewSection.style.display = 'none';
+    if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'none';
     elements.processBtn.disabled = false;
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }

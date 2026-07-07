@@ -731,6 +731,8 @@ class PDFGenerator:
         sig_line = '________________________________'
 
         left_content = [
+            Paragraph(sig_line, small),
+            Paragraph(' ', small),
             Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
             Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
         ]

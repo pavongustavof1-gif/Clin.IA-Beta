@@ -821,7 +821,7 @@ def download_pdf(session_id):
         logger.info(f"PDF: Regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
 
         response = app.response_class(response=pdf_bytes, mimetype='application/pdf')
-        response.headers['Content-Disposition'] = f'attachment; filename=ClinIA_{session_id}.pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="ClinIA_{session_id}.pdf"'
         return response
 
     except Exception as e:
