@@ -179,13 +179,18 @@ def _sb_patch(path: str, body: dict) -> bool:
 def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
     """Upsert a session to Supabase sesiones table. Silently logs on failure — never raises."""
     try:
+        def _ts(val):
+            if not val or str(val).strip() == '':
+                return None
+            return val
+
         transcript = data.get('transcript') or {}
         doc        = data.get('document')  or {}
         body = {
             'session_id':           session_id,
             'usuario_id':           usuario_id,
             'clinica_id':           clinica_id,
-            'timestamp':            data.get('timestamp', datetime.now().isoformat()),
+            'timestamp':            _ts(data.get('timestamp', datetime.now().isoformat())),
             'status':               data.get('status', 'pending_review'),
             'structured_data':      data.get('structured_data', {}),
             'transcript_text':      transcript.get('text'),
@@ -195,11 +200,11 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
             'doc_link':             doc.get('link') if doc else None,
             'doc_title':            doc.get('title') if doc else None,
             'consent_given':        bool(data.get('consent_given')),
-            'consent_timestamp':    data.get('consent_timestamp'),
+            'consent_timestamp':    _ts(data.get('consent_timestamp')),
             'consent_tratamiento':  data.get('consent_tratamiento'),
             'addenda':              data.get('addenda', []),
-            'locked_at':            data.get('locked_at'),
-            'cancelled_at':         data.get('cancelled_at'),
+            'locked_at':            _ts(data.get('locked_at')),
+            'cancelled_at':         _ts(data.get('cancelled_at')),
             'cancellation_reason':  data.get('cancellation_reason'),
             'full_response':        data,
         }
