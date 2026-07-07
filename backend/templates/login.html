@@ -151,6 +151,7 @@
 
             sessionStorage.setItem('clinia_token', data.session.access_token);
             sessionStorage.setItem('clinia_email', data.user.email);
+            localStorage.setItem('clinia_doctor_email', data.user.email);
             window.location.href = '/';
         });
     </script>
