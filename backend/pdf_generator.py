@@ -715,62 +715,66 @@ class PDFGenerator:
         return elems
 
     def _build_signature_block(self, structured_data: dict) -> list:
-        meta          = structured_data.get('metadata') or {}
         info          = structured_data.get('informacion_paciente') or {}
         medico        = self._doctor('nombre', 'Médico Tratante')
         doctor_cedula = self._doctor('cedula')
         paciente      = self._safe(info.get('nombre_del_paciente'))
 
-        small   = ParagraphStyle('sb_s',  fontName='Helvetica',         fontSize=7,
-                                  textColor=self.GRAY_TEXT, alignment=TA_CENTER)
-        small_b = ParagraphStyle('sb_b',  fontName='Helvetica-Bold',    fontSize=7,
-                                  textColor=colors.black, alignment=TA_CENTER)
-        small_i = ParagraphStyle('sb_i',  fontName='Helvetica-Oblique', fontSize=7,
-                                  textColor=self.GRAY_TEXT)
+        small   = ParagraphStyle('sb_s',  fontName='Helvetica',
+                                  fontSize=7, textColor=self.GRAY_TEXT,
+                                  alignment=TA_CENTER)
+        small_b = ParagraphStyle('sb_b',  fontName='Helvetica-Bold',
+                                  fontSize=7, textColor=colors.black,
+                                  alignment=TA_CENTER)
+        small_i = ParagraphStyle('sb_i',  fontName='Helvetica-Oblique',
+                                  fontSize=7, textColor=self.GRAY_TEXT,
+                                  alignment=TA_LEFT)
 
         sig_line = '________________________________'
         page_width = LETTER[0] - 36 * mm
-        col_w = [page_width * 0.35, page_width * 0.32, page_width * 0.33]
+        half = page_width / 2
 
-        # Row 1 — signature lines
+        # Left cell — patient signature
+        left_cell = [
+            Paragraph(sig_line, small),
+            Paragraph('Firma del Paciente', small_b),
+            Paragraph(html.escape(paciente) if paciente else '', small),
+        ]
+
+        # Right cell — doctor signature
         right_cell = [
             Paragraph(sig_line, small),
             Paragraph('Firma y Sello del Médico', small_b),
             Paragraph(html.escape(medico), small),
         ]
         if doctor_cedula:
-            right_cell.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small))
+            right_cell.append(
+                Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small)
+            )
 
-        row1 = [
-            Paragraph('', small),
-            [
-                Paragraph(sig_line, small),
-                Paragraph('Firma del Paciente', small_b),
-                Paragraph(html.escape(paciente) if paciente else '', small),
-            ],
-            right_cell,
-        ]
-
-        # Row 2 — branding text spanning full width
-        row2 = [
+        # Branding cell — spans full width
+        branding_cell = [
             Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
             Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
-            Paragraph('', small),
         ]
 
         t = Table(
-            [row1, row2],
-            colWidths=col_w,
+            [
+                [left_cell, right_cell],       # Row 1: two signature columns
+                [branding_cell, ''],           # Row 2: branding spans full width
+            ],
+            colWidths=[half, half],
         )
         t.setStyle(TableStyle([
             ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
-            ('ALIGN',         (1, 0), (-1, 0),  'CENTER'),
+            ('ALIGN',         (0, 0), (-1, 0),  'CENTER'),
             ('ALIGN',         (0, 1), (-1, 1),  'LEFT'),
+            ('SPAN',          (0, 1), (1, 1)),   # branding spans both columns
             ('LEFTPADDING',   (0, 0), (-1, -1), 0),
             ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
-            ('TOPPADDING',    (0, 0), (-1, 0),  0),
-            ('BOTTOMPADDING', (0, 0), (-1, 0),  0),
-            ('TOPPADDING',    (0, 1), (-1, 1),  4),
+            ('TOPPADDING',    (0, 0), (-1, 0),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, 0),  4),
+            ('TOPPADDING',    (0, 1), (-1, 1),  8),
         ]))
         return [Spacer(1, 8 * mm), t]
 
