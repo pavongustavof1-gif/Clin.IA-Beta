@@ -252,6 +252,14 @@ function init() {
         });
     }
 
+    // Resume polling if a job was in progress before a page reload
+    const savedJobId = sessionStorage.getItem('clinia_job_id');
+    if (savedJobId) {
+        elements.progressSection.style.display = 'block';
+        updateProgress(10, 'Reanudando procesamiento...', 1);
+        startJobPolling(savedJobId);
+    }
+
     console.log('[ClinIA] Application initialized successfully');
 }
 
@@ -557,30 +565,77 @@ async function processAudio() {
             throw new Error(errorData.error || 'Error en el servidor');
         }
 
-        updateProgress(30, 'Transcribiendo audio...', 1);
-        await sleep(1000);
+        if (response.status === 202) {
+            const { job_id } = await response.json();
+            sessionStorage.setItem('clinia_job_id', job_id);
+            updateProgress(20, 'Audio recibido — iniciando transcripción...', 1);
+            startJobPolling(job_id);
+            return;
+        }
 
-        updateProgress(70, 'Extrayendo información médica...', 2);
-        await sleep(1000);
-
-        updateProgress(100, 'Listo para revisión.', 2);
-
-        // Get results
+        // Fallback for any synchronous 200 response (should not occur in normal flow)
         const result = await response.json();
-        console.log('[ClinIA] Processing completed:', result);
-
-        // Store session
         state.sessionId = result.session_id;
-
-        // Route to review screen
         await sleep(400);
         displayReviewScreen(result);
-        
+
     } catch (error) {
         console.error('[ClinIA] Processing error:', error);
         showError(`Error durante el procesamiento: ${error.message}`);
         elements.progressSection.style.display = 'none';
     }
+}
+
+function startJobPolling(jobId) {
+    let pollCount = 0;
+    const pollInterval = setInterval(async () => {
+        pollCount++;
+        if (pollCount >= 360) {
+            clearInterval(pollInterval);
+            sessionStorage.removeItem('clinia_job_id');
+            elements.progressSection.style.display = 'none';
+            showError('El procesamiento está tardando más de lo esperado. Por favor intente subir el audio nuevamente.');
+            return;
+        }
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
+                headers: getAuthHeaders()
+            });
+            if (res.status === 401) {
+                clearInterval(pollInterval);
+                return handleSessionExpired();
+            }
+            if (!res.ok) return; // transient error — keep polling
+
+            const data = await res.json();
+
+            if (data.status === 'transcribing') {
+                updateProgress(30, 'Transcribiendo audio...', 1);
+            } else if (data.status === 'extracting') {
+                updateProgress(70, 'Extrayendo información médica...', 2);
+            } else if (data.status === 'done') {
+                clearInterval(pollInterval);
+                sessionStorage.removeItem('clinia_job_id');
+                updateProgress(100, 'Listo para revisión.', 3);
+                state.sessionId = data.session_id;
+                await sleep(400);
+                displayReviewScreen({
+                    session_id:      data.session_id,
+                    status:          'pending_review',
+                    transcript:      data.transcript,
+                    structured_data: data.structured_data,
+                });
+            } else if (data.status === 'error') {
+                clearInterval(pollInterval);
+                sessionStorage.removeItem('clinia_job_id');
+                elements.progressSection.style.display = 'none';
+                showError(data.error_message || 'Error durante el procesamiento');
+            }
+        } catch (err) {
+            // Network blip — keep polling silently
+            console.warn('[ClinIA] Poll error (will retry):', err);
+        }
+    }, 2500);
 }
 
 function updateProgress(percentage, text, step = null) {

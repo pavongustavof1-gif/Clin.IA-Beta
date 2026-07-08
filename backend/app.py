@@ -9,6 +9,7 @@ from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email
 from auth import require_auth
+from concurrent.futures import ThreadPoolExecutor
 import os
 import re
 import tempfile
@@ -130,6 +131,7 @@ except ValueError as e:
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
 pdf_generator = PDFGenerator()
+_executor = ThreadPoolExecutor(max_workers=4)
 
 # ── Supabase REST helpers ────────────────────────────────────────────────────
 
@@ -173,6 +175,126 @@ def _sb_patch(path: str, body: dict) -> bool:
     except Exception as e:
         logger.warning(f"DB: Supabase PATCH {path} error: {e}")
         return False
+
+def _sb_post_job(body: dict) -> str | None:
+    """Insert a trabajos row. Returns generated job_id or None on error."""
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/trabajos'
+    payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers=_sb_headers(extra={'Prefer': 'return=representation'}),
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            rows = json.loads(resp.read())
+        return rows[0]['job_id'] if rows else None
+    except Exception as e:
+        logger.warning(f"DB: Could not create job: {e}")
+        return None
+
+
+def _sb_patch_job(job_id: str, body: dict) -> None:
+    """PATCH a trabajos row. Logs silently on failure."""
+    body['updated_at'] = datetime.now().isoformat()
+    _sb_patch(f'/rest/v1/trabajos?job_id=eq.{job_id}', body)
+
+
+# ── Background job worker ─────────────────────────────────────────────────────
+
+def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_info):
+    """Runs transcription + LLM pipeline in a background thread."""
+    try:
+        # Phase A — Transcription
+        _sb_patch_job(job_id, {'status': 'transcribing'})
+        logger.info(f"Job {job_id}: starting transcription")
+
+        try:
+            transcript_result = transcription_service.transcribe_audio(
+                audio_path,
+                print_raw=params['print_raw'],
+                speakers_expected=params['speakers_expected']
+            )
+        except Exception as e:
+            logger.error(f"Job {job_id}: transcription failed — {e}")
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Transcripción fallida: {str(e)}'})
+            return
+        finally:
+            if os.path.exists(audio_path):
+                os.remove(audio_path)
+                logger.debug(f"Job {job_id}: temp file cleaned up")
+
+        transcript_text = transcript_result['text']
+        if not transcript_text or len(transcript_text.strip()) < 10:
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Transcripción muy corta o vacía'})
+            return
+
+        # Phase B — LLM extraction
+        _sb_patch_job(job_id, {'status': 'extracting'})
+        logger.info(f"Job {job_id}: starting LLM extraction")
+
+        try:
+            structured_data = llm_processor.extract_structured_data(
+                transcript_text,
+                utterances=transcript_result.get('utterances', []),
+                role_map=transcript_result.get('speaker_role_map', {})
+            )
+        except Exception as e:
+            logger.error(f"Job {job_id}: LLM extraction failed — {e}")
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Extracción de datos fallida: {str(e)}'})
+            return
+
+        if 'metadata' not in structured_data:
+            structured_data['metadata'] = {}
+        structured_data['metadata']['fecha_hora_consulta'] = params['consultation_timestamp']
+
+        # Build session
+        initials  = _derive_initials(nombre)
+        session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{initials}"
+
+        utterances = transcript_result.get('utterances', [])
+        role_map   = transcript_result.get('speaker_role_map', {})
+
+        def _role(u):
+            return role_map.get(u['speaker'], 'Hablante ' + u['speaker'])
+
+        labeled_text = "\n".join(f"[{_role(u)}]: {u['text']}" for u in utterances) if utterances else None
+
+        transcript_payload = {
+            'text':             transcript_text,
+            'labeled_text':     labeled_text,
+            'confidence':       transcript_result.get('confidence'),
+            'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
+            'word_count':       transcript_result.get('words', 0),
+            'speaker_role_map': role_map,
+        }
+
+        save_session(session_id, {
+            'session_id':        session_id,
+            'status':            'pending_review',
+            'transcript':        transcript_payload,
+            'structured_data':   structured_data,
+            'local_timestamp':   params['local_timestamp'],
+            'create_doc':        params['create_doc'],
+            'consent_given':     params['consent_given'],
+            'consent_timestamp': params['consent_timestamp'],
+        }, usuario_id=usuario_id, clinica_id=clinica_id)
+
+        _sb_patch_job(job_id, {
+            'status':          'done',
+            'session_id':      session_id,
+            'structured_data': structured_data,
+            'transcript':      transcript_payload,
+        })
+        logger.info(f"Job {job_id}: done — session {session_id}")
+
+    except Exception as e:
+        logger.error(f"Job {job_id}: unexpected error — {e}")
+        import traceback; traceback.print_exc()
+        _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Error interno: {str(e)}'})
+        if os.path.exists(audio_path):
+            os.remove(audio_path)
+
 
 # ── Supabase session persistence ─────────────────────────────────────────────
 
@@ -287,157 +409,99 @@ def health_check():
 @require_auth
 def process_audio():
     """
-    Main orchestrator endpoint - processes audio through entire pipeline
-
-    Expected: multipart/form-data with 'audio' file
-    Returns: Complete medical note with Google Docs link
+    Validates audio, saves to temp, captures request context, submits background job.
+    Returns 202 {job_id} immediately; caller polls /api/job-status/<job_id>.
     """
     try:
-        # Step 1: Validate request
         audio_file = request.files.get('audio')
         is_valid, error_message = validate_audio_file(audio_file)
         if not is_valid:
             logger.warning(f"Validation: rejected upload — {error_message}")
             return jsonify({'error': error_message, 'error_code': 'INVALID_AUDIO_FILE'}), 400
-        logger.info(f"Validation: audio file accepted — {audio_file.filename}")
 
-        # Get optional parameters
-        print_raw = request.form.get('print_raw', 'true').lower() == 'true'
-        create_doc = request.form.get('create_doc', 'true').lower() == 'true'
-        speakers_expected = int(request.form.get('speakers_expected', 2))
+        # Capture all request-scoped values before entering the background thread
+        usuario_id = g.usuario['usuario_id']
+        clinica_id = g.usuario['clinica_id']
+        nombre     = g.usuario.get('nombre', '')
+        email      = g.usuario.get('email', '')
+
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
-        consultation_timestamp = request.form.get('consultation_timestamp', local_timestamp)
-        consent_given = request.form.get('consent_given', 'false').lower() == 'true'
-        consent_timestamp = request.form.get('consent_timestamp', '')
+        params = {
+            'print_raw':            request.form.get('print_raw', 'true').lower() == 'true',
+            'create_doc':           request.form.get('create_doc', 'true').lower() == 'true',
+            'speakers_expected':    int(request.form.get('speakers_expected', 2)),
+            'local_timestamp':      local_timestamp,
+            'consultation_timestamp': request.form.get('consultation_timestamp', local_timestamp),
+            'consent_given':        request.form.get('consent_given', 'false').lower() == 'true',
+            'consent_timestamp':    request.form.get('consent_timestamp', ''),
+        }
 
-        logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-        logger.info("Orchestrator: Starting new processing job")
-        logger.info(f"Orchestrator: Filename: {audio_file.filename}")
-        logger.debug(f"Orchestrator: Print raw transcript: {print_raw}")
-        logger.debug(f"Orchestrator: Create Google Doc: {create_doc}")
+        # Fetch clinic/cédula in request thread (g.usuario is available here)
+        clinica     = get_clinica_context(clinica_id)
+        cedula      = get_usuario_cedula(usuario_id)
+        doctor_info = {
+            'nombre':         nombre,
+            'cedula':         cedula,
+            'clinica_nombre': clinica['nombre'],
+            'clinica_color':  clinica['color_primario'],
+        }
 
-        # Step 2: Save audio to temporary file
-        filename = secure_filename(audio_file.filename)
-        temp_dir = tempfile.gettempdir()
-        temp_path = os.path.join(temp_dir, f"clinia_{datetime.now().timestamp()}_{filename}")
+        logger.info(f"Auth: upload by {email} (clinica_id={clinica_id})")
 
+        filename  = secure_filename(audio_file.filename)
+        temp_path = os.path.join(tempfile.gettempdir(),
+                                 f"clinia_{datetime.now().timestamp()}_{filename}")
         audio_file.save(temp_path)
-        logger.debug(f"Orchestrator: Audio saved to: {temp_path}")
+        logger.info(f"Job: audio saved to {temp_path} ({os.path.getsize(temp_path) / (1024*1024):.2f} MB)")
 
-        # Get file size for validation
-        file_size = os.path.getsize(temp_path)
-        logger.debug(f"Orchestrator: File size: {file_size / (1024*1024):.2f} MB")
+        job_id = _sb_post_job({
+            'usuario_id': usuario_id,
+            'clinica_id': clinica_id,
+            'status':     'queued',
+        })
+        if not job_id:
+            os.remove(temp_path)
+            return jsonify({'error': 'No se pudo crear el trabajo de procesamiento'}), 500
 
-        # Step 3: Transcribe audio (Phase A)
-        logger.info("Orchestrator: PHASE A — Transcription")
+        _executor.submit(_run_job, job_id, temp_path, params,
+                         usuario_id, clinica_id, nombre, doctor_info)
 
-        try:
-            transcript_result = transcription_service.transcribe_audio(
-                temp_path,
-                print_raw=print_raw,
-                speakers_expected=speakers_expected
-            )
-
-            transcript_text = transcript_result['text']
-
-            if not transcript_text or len(transcript_text.strip()) < 10:
-                return jsonify({
-                    'error': 'Transcription too short or empty',
-                    'transcript': transcript_text
-                }), 400
-
-            logger.info(f"Orchestrator: Transcription completed: {len(transcript_text)} characters")
-            logger.info(f"Orchestrator: Transcript ID: {transcript_result.get('transcript_id', 'unknown')} — deletion handled by TranscriptionService.")
-
-        except Exception as e:
-            logger.error(f"Orchestrator: Transcription failed: {str(e)}")
-            return jsonify({
-                'error': 'Transcription failed',
-                'details': str(e)
-            }), 500
-        finally:
-            # Clean up audio file
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-                logger.debug(f"Orchestrator: Cleaned up temp file: {temp_path}")
-
-        # Step 4: Extract structured data (Phase B)
-        logger.info("Orchestrator: PHASE B — LLM Processing")
-
-        try:
-            structured_data = llm_processor.extract_structured_data(
-                transcript_text,
-                utterances=transcript_result.get('utterances', []),
-                role_map=transcript_result.get('speaker_role_map', {})
-            )
-
-            # Validate extracted data
-            is_valid, error_msg = llm_processor.validate_against_schema(structured_data)
-
-            if not is_valid:
-                logger.warning(f"Orchestrator: Data validation failed: {error_msg}")
-                # Continue anyway for Alpha version
-
-            # Inject consultation timestamp (NOM-004 compliance)
-            if 'metadata' not in structured_data:
-                structured_data['metadata'] = {}
-            structured_data['metadata']['fecha_hora_consulta'] = consultation_timestamp
-
-            logger.info("Orchestrator: Structured data extraction completed")
-
-        except Exception as e:
-            logger.error(f"Orchestrator: LLM processing failed: {str(e)}")
-            return jsonify({
-                'error': 'LLM processing failed',
-                'details': str(e),
-                'transcript': transcript_text
-            }), 500
-
-        # Step 5: Prepare pending_review response
-        initials = _derive_initials(g.usuario.get('nombre', ''))
-        session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{initials}"
-
-        utterances = transcript_result.get('utterances', [])
-        role_map = transcript_result.get('speaker_role_map', {})
-        def _role(u):
-            spk = u['speaker']
-            return role_map.get(spk, 'Hablante ' + spk)
-        labeled_text = "\n".join(
-            f"[{_role(u)}]: {u['text']}" for u in utterances
-        ) if utterances else None
-
-        transcript_payload = {
-            'text': transcript_text,
-            'labeled_text': labeled_text,
-            'confidence': transcript_result.get('confidence'),
-            'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
-            'word_count': transcript_result.get('words', 0),
-            'speaker_role_map': role_map
-        }
-
-        response = {
-            'session_id': session_id,
-            'status': 'pending_review',
-            'transcript': transcript_payload,
-            'structured_data': structured_data
-        }
-
-        save_session(session_id, {
-            **response,
-            'local_timestamp': local_timestamp,
-            'create_doc': create_doc,
-            'consent_given': consent_given,
-            'consent_timestamp': consent_timestamp
-        }, usuario_id=g.usuario['usuario_id'], clinica_id=g.usuario['clinica_id'])
-
-        logger.info(f"Orchestrator: Ready for review. Session: {session_id}")
-        return jsonify(response), 200
+        logger.info(f"Job {job_id}: submitted to executor")
+        return jsonify({'job_id': job_id}), 202
 
     except Exception as e:
-        logger.error(f"Orchestrator: CRITICAL ERROR: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+        logger.error(f"process_audio: {e}")
+        import traceback; traceback.print_exc()
+        return jsonify({'error': 'Error interno', 'details': str(e)}), 500
+
+
+@app.route('/api/job-status/<job_id>', methods=['GET'])
+@require_auth
+def job_status(job_id):
+    """Poll processing status for a background job."""
+    rows = _sb_get(
+        f'/rest/v1/trabajos?job_id=eq.{job_id}'
+        f'&select=job_id,status,error_message,session_id,structured_data,transcript,usuario_id'
+        f'&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Trabajo no encontrado'}), 404
+    row = rows[0]
+    if row.get('usuario_id') != g.usuario['usuario_id']:
+        return jsonify({'error': 'No autorizado'}), 403
+
+    status = row['status']
+    resp   = {'job_id': job_id, 'status': status}
+
+    if status == 'done':
+        resp['session_id']       = row['session_id']
+        resp['structured_data']  = row['structured_data']
+        resp['transcript']       = row['transcript']
+
+    if status == 'error':
+        resp['error_message'] = row.get('error_message', 'Error desconocido')
+
+    return jsonify(resp), 200
 
 
 @app.route('/api/confirm-and-generate', methods=['POST'])
