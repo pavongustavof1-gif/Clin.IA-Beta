@@ -122,8 +122,9 @@ class PDFGenerator:
     # Public entry point
     # ──────────────────────────────────────────────────────────────
 
-    def generate_pdf(self, structured_data: dict, session_id: str = '') -> bytes:
-        self._session_id = session_id
+    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None) -> bytes:
+        self._session_id  = session_id
+        self._doctor_info = doctor_info or {}
         buffer = BytesIO()
         doc = SimpleDocTemplate(
             buffer,
@@ -147,6 +148,10 @@ class PDFGenerator:
         buffer.seek(0)
         return buffer.read()
 
+    def _doctor(self, key: str, fallback: str = '') -> str:
+        """Return a field from doctor_info, falling back to fallback."""
+        return self._safe(getattr(self, '_doctor_info', {}).get(key), fallback)
+
     # ──────────────────────────────────────────────────────────────
     # Header block
     # ──────────────────────────────────────────────────────────────
@@ -168,9 +173,11 @@ class PDFGenerator:
             alignment=TA_RIGHT,
         )
 
+        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
+
         left_cell  = [
-            Paragraph('Consultorio Médico', self.styles['clinic_name']),
-            Paragraph('Dirección del consultorio', self.styles['clinic_address']),
+            Paragraph(html.escape(clinica_nombre), self.styles['clinic_name']),
         ]
         right_cell = [
             Paragraph('NOTA DE EVOLUCIÓN CLÍNICA', self.styles['note_title']),
@@ -182,7 +189,7 @@ class PDFGenerator:
             colWidths=[page_width * 0.60, page_width * 0.40],
         )
         t.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, -1), self.TEAL),
+            ('BACKGROUND',    (0, 0), (-1, -1), clinica_color),
             ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN',         (1, 0), (1,  0),  'RIGHT'),
             ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
@@ -593,16 +600,17 @@ class PDFGenerator:
         elems = []
 
         # Header banner
+        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
         date_style_w = ParagraphStyle('cdate', fontName='Helvetica', fontSize=8,
                                        textColor=colors.white, alignment=TA_RIGHT)
-        left_cell  = [Paragraph('Consultorio Médico', self.styles['clinic_name']),
-                      Paragraph('Dirección del consultorio', self.styles['clinic_address'])]
+        left_cell  = [Paragraph(html.escape(clinica_nombre), self.styles['clinic_name'])]
         right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', self.styles['note_title']),
                       Paragraph(html.escape(fecha), date_style_w)]
         banner = Table([[left_cell, right_cell]],
                        colWidths=[page_width * 0.60, page_width * 0.40])
         banner.setStyle(TableStyle([
-            ('BACKGROUND',    (0, 0), (-1, -1), self.TEAL),
+            ('BACKGROUND',    (0, 0), (-1, -1), clinica_color),
             ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
             ('ALIGN',         (1, 0), (1,  0),  'RIGHT'),
             ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
@@ -667,7 +675,8 @@ class PDFGenerator:
         elems.append(Spacer(1, 10 * mm))
 
         # Signature block — Patient + Doctor
-        medico   = self._safe(meta.get('medico'))
+        doctor_nombre = self._doctor('nombre') or self._safe(meta.get('medico')) or 'Médico Tratante'
+        doctor_cedula = self._doctor('cedula')
         sig_line = '________________________________'
         left_sig = [
             Paragraph(sig_line, sig_label),
@@ -678,8 +687,10 @@ class PDFGenerator:
         right_sig = [
             Paragraph(sig_line, sig_label),
             Paragraph('Firma y Sello del Médico', sig_name),
-            Paragraph(html.escape(medico) if medico else 'Médico Tratante', sig_sub),
+            Paragraph(html.escape(doctor_nombre), sig_sub),
         ]
+        if doctor_cedula:
+            right_sig.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', sig_sub))
         sig_table = Table([[left_sig, right_sig]],
                           colWidths=[page_width * 0.50, page_width * 0.50])
         sig_table.setStyle(TableStyle([
@@ -704,47 +715,66 @@ class PDFGenerator:
         return elems
 
     def _build_signature_block(self, structured_data: dict) -> list:
-        meta     = structured_data.get('metadata') or {}
-        info     = structured_data.get('informacion_paciente') or {}
-        medico   = self._safe(meta.get('medico'))
-        paciente = self._safe(info.get('nombre_del_paciente'))
+        info          = structured_data.get('informacion_paciente') or {}
+        medico        = self._doctor('nombre', 'Médico Tratante')
+        doctor_cedula = self._doctor('cedula')
+        paciente      = self._safe(info.get('nombre_del_paciente'))
 
-        small   = ParagraphStyle('sb_s',  fontName='Helvetica',         fontSize=7,
-                                  textColor=self.GRAY_TEXT, alignment=TA_CENTER)
-        small_b = ParagraphStyle('sb_b',  fontName='Helvetica-Bold',    fontSize=7,
-                                  textColor=colors.black, alignment=TA_CENTER)
-        small_i = ParagraphStyle('sb_i',  fontName='Helvetica-Oblique', fontSize=7,
-                                  textColor=self.GRAY_TEXT)
+        small   = ParagraphStyle('sb_s',  fontName='Helvetica',
+                                  fontSize=7, textColor=self.GRAY_TEXT,
+                                  alignment=TA_CENTER)
+        small_b = ParagraphStyle('sb_b',  fontName='Helvetica-Bold',
+                                  fontSize=7, textColor=colors.black,
+                                  alignment=TA_CENTER)
+        small_i = ParagraphStyle('sb_i',  fontName='Helvetica-Oblique',
+                                  fontSize=7, textColor=self.GRAY_TEXT,
+                                  alignment=TA_LEFT)
 
         sig_line = '________________________________'
+        page_width = LETTER[0] - 36 * mm
+        half = page_width / 2
 
-        left_content = [
-            Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
-            Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
-        ]
-        mid_content = [
+        # Left cell — patient signature
+        left_cell = [
             Paragraph(sig_line, small),
             Paragraph('Firma del Paciente', small_b),
             Paragraph(html.escape(paciente) if paciente else '', small),
         ]
-        right_content = [
+
+        # Right cell — doctor signature
+        right_cell = [
             Paragraph(sig_line, small),
             Paragraph('Firma y Sello del Médico', small_b),
-            Paragraph(html.escape(medico) if medico else 'Médico Tratante', small),
+            Paragraph(html.escape(medico), small),
+        ]
+        if doctor_cedula:
+            right_cell.append(
+                Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', small)
+            )
+
+        # Branding cell — spans full width
+        branding_cell = [
+            Paragraph('Generado por Clin.IA — clinianotes.com', small_i),
+            Paragraph('Nota de Evolución conforme a NOM-004-SSA3-2012', small_i),
         ]
 
-        page_width = LETTER[0] - 36 * mm
         t = Table(
-            [[left_content, mid_content, right_content]],
-            colWidths=[page_width * 0.35, page_width * 0.32, page_width * 0.33]
+            [
+                [left_cell, right_cell],       # Row 1: two signature columns
+                [branding_cell, ''],           # Row 2: branding spans full width
+            ],
+            colWidths=[half, half],
         )
         t.setStyle(TableStyle([
-            ('VALIGN',        (0, 0), (-1, -1), 'BOTTOM'),
-            ('ALIGN',         (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
+            ('ALIGN',         (0, 0), (-1, 0),  'CENTER'),
+            ('ALIGN',         (0, 1), (-1, 1),  'LEFT'),
+            ('SPAN',          (0, 1), (1, 1)),   # branding spans both columns
             ('LEFTPADDING',   (0, 0), (-1, -1), 0),
             ('RIGHTPADDING',  (0, 0), (-1, -1), 0),
-            ('TOPPADDING',    (0, 0), (-1, -1), 0),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING',    (0, 0), (-1, 0),  4),
+            ('BOTTOMPADDING', (0, 0), (-1, 0),  4),
+            ('TOPPADDING',    (0, 1), (-1, 1),  8),
         ]))
         return [Spacer(1, 8 * mm), t]
 

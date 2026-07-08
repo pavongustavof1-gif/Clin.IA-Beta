@@ -729,7 +729,7 @@ body {
     flex: 1;
     min-width: 0;
     overflow-y: auto;
-    max-height: 80vh;
+    max-height: calc(100vh - 280px);
 }
 
 .review-transcript-panel {
@@ -785,7 +785,7 @@ body {
 
 .review-form-panel {
     overflow-y: auto;
-    max-height: 80vh;
+    max-height: calc(100vh - 280px);
     display: flex;
     flex-direction: column;
 }

@@ -179,13 +179,18 @@ def _sb_patch(path: str, body: dict) -> bool:
 def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
     """Upsert a session to Supabase sesiones table. Silently logs on failure — never raises."""
     try:
+        def _ts(val):
+            if not val or str(val).strip() == '':
+                return None
+            return val
+
         transcript = data.get('transcript') or {}
         doc        = data.get('document')  or {}
         body = {
             'session_id':           session_id,
             'usuario_id':           usuario_id,
             'clinica_id':           clinica_id,
-            'timestamp':            data.get('timestamp', datetime.now().isoformat()),
+            'timestamp':            _ts(data.get('timestamp', datetime.now().isoformat())),
             'status':               data.get('status', 'pending_review'),
             'structured_data':      data.get('structured_data', {}),
             'transcript_text':      transcript.get('text'),
@@ -195,11 +200,11 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
             'doc_link':             doc.get('link') if doc else None,
             'doc_title':            doc.get('title') if doc else None,
             'consent_given':        bool(data.get('consent_given')),
-            'consent_timestamp':    data.get('consent_timestamp'),
+            'consent_timestamp':    _ts(data.get('consent_timestamp')),
             'consent_tratamiento':  data.get('consent_tratamiento'),
             'addenda':              data.get('addenda', []),
-            'locked_at':            data.get('locked_at'),
-            'cancelled_at':         data.get('cancelled_at'),
+            'locked_at':            _ts(data.get('locked_at')),
+            'cancelled_at':         _ts(data.get('cancelled_at')),
             'cancellation_reason':  data.get('cancellation_reason'),
             'full_response':        data,
         }
@@ -233,6 +238,25 @@ def load_structured_data(session_id: str) -> dict | None:
     if not rows:
         return None
     return rows[0].get('structured_data')
+
+
+def get_clinica_context(clinica_id: str) -> dict:
+    """Fetch clinic name and primary color from Supabase. Returns defaults on error."""
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario&limit=1')
+    if rows:
+        return {
+            'nombre':         rows[0].get('nombre') or 'Consultorio Médico',
+            'color_primario': rows[0].get('color_primario') or '#0F6E56',
+        }
+    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56'}
+
+
+def get_usuario_cedula(usuario_id: str) -> str:
+    """Fetch doctor's cédula professional from Supabase. Returns empty string on error."""
+    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{usuario_id}&select=cedula&limit=1')
+    if rows:
+        return rows[0].get('cedula') or ''
+    return ''
 
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -484,7 +508,17 @@ def confirm_and_generate():
         if create_pdf:
             logger.info("Orchestrator: PHASE C2 — PDF Generation")
             try:
-                pdf_bytes = pdf_generator.generate_pdf(structured_data, session_id=session_id)
+                clinica  = get_clinica_context(g.usuario['clinica_id'])
+                cedula   = get_usuario_cedula(g.usuario['usuario_id'])
+                doctor_info = {
+                    'nombre':         g.usuario.get('nombre', ''),
+                    'cedula':         cedula,
+                    'clinica_nombre': clinica['nombre'],
+                    'clinica_color':  clinica['color_primario'],
+                }
+                pdf_bytes = pdf_generator.generate_pdf(
+                    structured_data, session_id=session_id, doctor_info=doctor_info
+                )
                 logger.info(f"PDF: Generated successfully — {len(pdf_bytes)} bytes")
             except Exception as e:
                 logger.warning(f"PDF: Generation failed: {str(e)}")
@@ -499,7 +533,7 @@ def confirm_and_generate():
             'transcript': session.get('transcript'),
             'structured_data': structured_data,
             'document': doc_info,
-            'pdf_available': False,  # PDF storage migrated to Supabase Storage in Sprint 6
+            'pdf_available': True,
             'consent_grabacion': session.get('consent', {}),
             'consent_tratamiento': consent_tratamiento
         }
@@ -759,11 +793,40 @@ def export_json(session_id):
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
 @require_auth
 def download_pdf(session_id):
-    """PDF download — temporarily unavailable during Supabase Storage migration (Sprint 6)."""
+    """Regenerate and stream PDF for a confirmed session."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    return jsonify({
-        'error': 'Descarga de PDF no disponible temporalmente — en migración a Supabase Storage. Disponible en Sprint 6.'
-    }), 501
+    try:
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,status&limit=1')
+        if not rows:
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+        if rows[0].get('usuario_id') != g.usuario['usuario_id']:
+            return jsonify({'error': 'No autorizado'}), 403
+
+        structured_data = load_structured_data(session_id)
+        if not structured_data:
+            return jsonify({'error': 'Datos de sesión no disponibles'}), 404
+
+        clinica      = get_clinica_context(g.usuario['clinica_id'])
+        cedula       = get_usuario_cedula(g.usuario['usuario_id'])
+        doctor_info  = {
+            'nombre':         g.usuario.get('nombre', ''),
+            'cedula':         cedula,
+            'clinica_nombre': clinica['nombre'],
+            'clinica_color':  clinica['color_primario'],
+        }
+
+        pdf_bytes = pdf_generator.generate_pdf(
+            structured_data, session_id=session_id, doctor_info=doctor_info
+        )
+        logger.info(f"PDF: Regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
+
+        response = app.response_class(response=pdf_bytes, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = f'attachment; filename="ClinIA_{session_id}.pdf"'
+        return response
+
+    except Exception as e:
+        logger.error(f"PDF: Download failed for {session_id}: {e}")
+        return jsonify({'error': 'Error al generar el PDF'}), 500
 
 
 # Error handlers
