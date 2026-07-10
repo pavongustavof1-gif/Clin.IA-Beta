@@ -308,6 +308,10 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
 
         transcript = data.get('transcript') or {}
         doc        = data.get('document')  or {}
+        info     = (data.get('structured_data') or {}).get('informacion_paciente') or {}
+        raw_curp = info.get('curp')
+        paciente_curp = raw_curp.strip().upper() if raw_curp and isinstance(raw_curp, str) else None
+
         body = {
             'session_id':           session_id,
             'usuario_id':           usuario_id,
@@ -328,6 +332,7 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
             'locked_at':            _ts(data.get('locked_at')),
             'cancelled_at':         _ts(data.get('cancelled_at')),
             'cancellation_reason':  data.get('cancellation_reason'),
+            'paciente_curp':        paciente_curp,
             'full_response':        data,
         }
         url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones?on_conflict=session_id'
@@ -900,6 +905,80 @@ def request_entity_too_large(error):
         'error': 'File too large',
         'max_size_mb': 50
     }), 413
+
+
+@app.route('/api/patient-history', methods=['GET'])
+@require_auth
+def patient_history_list():
+    """
+    GET /api/patient-history?curp=<curp>
+    Returns list view of all sessions for a patient, scoped to the authenticated doctor.
+    """
+    raw_curp = request.args.get('curp', '')
+    curp = raw_curp.strip().upper()
+    if not curp:
+        return jsonify({'error': 'curp query parameter is required'}), 400
+
+    usuario_id = g.usuario['usuario_id']
+
+    # Build select with PostgREST JSONB path:
+    # -> for intermediate segments (returns jsonb), ->> only at the final leaf (returns text)
+    # URL-encode > as %3E since urllib won't encode it automatically
+    select = (
+        'session_id,timestamp,status,'
+        'structured_data->informacion_paciente->>motivo_de_consulta'
+        .replace('>', '%3E')
+    )
+    path = (
+        f'/rest/v1/sesiones'
+        f'?paciente_curp=eq.{curp}'
+        f'&usuario_id=eq.{usuario_id}'
+        f'&select={select}'
+        f'&order=timestamp.desc'
+    )
+    rows = _sb_get(path)
+    if rows is None:
+        return jsonify({'error': 'Error al consultar historial'}), 500
+
+    result = [
+        {
+            'session_id':         r.get('session_id'),
+            'timestamp':          r.get('timestamp'),
+            'status':             r.get('status'),
+            'motivo_de_consulta': r.get('motivo_de_consulta'),
+        }
+        for r in rows
+    ]
+    return jsonify(result), 200
+
+
+@app.route('/api/patient-history/<session_id>', methods=['GET'])
+@require_auth
+def patient_history_detail(session_id):
+    """
+    GET /api/patient-history/<session_id>
+    Full read-only detail for one session. 404 if not found or not owned by caller.
+    """
+    usuario_id = g.usuario['usuario_id']
+
+    rows = _sb_get(
+        f'/rest/v1/sesiones'
+        f'?session_id=eq.{session_id}'
+        f'&select=session_id,usuario_id,structured_data,addenda'
+        f'&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('usuario_id') != usuario_id:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    return jsonify({
+        'session_id':     row['session_id'],
+        'structured_data': row['structured_data'],
+        'addenda':         row.get('addenda') or [],
+    }), 200
 
 
 @app.errorhandler(500)
