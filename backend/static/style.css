@@ -1366,30 +1366,50 @@ body {
 }
 
 /* ── Floating Feedback Button ── */
-.feedback-floating {
+/* ── Nav corner containers ──────────────────────────────────────── */
+.nav-corner {
     position: fixed;
-    top: 60px;
-    right: 20px;
+    top: 20px;
     z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.nav-corner--left  { left:  20px; }
+.nav-corner--right { right: 20px; align-items: flex-end; }
+
+.nav-btn {
+    max-width: none;
+    width: auto;
+    white-space: nowrap;
+}
+
+/* feedback-floating is now inside .nav-corner--right — no own positioning needed */
+.feedback-floating {
     box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
     margin-top: 0;
 }
 
 /* Mobile responsive behavior */
 @media (max-width: 600px) {
+    .nav-corner {
+        top: 15px;
+    }
+    .nav-corner--left  { left:  15px; }
+    .nav-corner--right { right: 15px; }
+
     .feedback-floating {
-        top: 55px;
-        right: 15px;
         padding: 0.6rem;
-        width: auto;
         border-radius: 50%;
     }
-    
+
     /* Hide the text, keep the icon */
     .feedback-floating .feedback-text {
         display: none;
     }
-    
+
     /* Remove the margin pushing the icon away from the hidden text */
     .feedback-floating .btn-icon {
         margin-right: 0;
@@ -1419,7 +1439,7 @@ body {
     font-size: var(--font-size-sm, 13px);
     color: var(--text-primary);
     background: var(--bg-card);
-    border: 1px solid var(--border-default, #cbd5e1);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm, 4px);
     padding: 3px 8px;
     flex: 1;
@@ -1529,7 +1549,7 @@ body {
 .toggle-slider {
     position: absolute;
     inset: 0;
-    background: var(--border-default, #ccc);
+    background: var(--border-color);
     border-radius: 999px;
     transition: background 0.2s;
     cursor: pointer;
@@ -1559,7 +1579,7 @@ body {
     font-size: 0.88rem;
     color: var(--text-secondary);
     background: var(--bg-card);
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 2px 6px;
     cursor: pointer;
@@ -1575,7 +1595,7 @@ body {
 }
 
 .historial-row {
-    border: 1px solid var(--border-default);
+    border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 0.75rem 1rem;
     cursor: pointer;
@@ -1631,7 +1651,7 @@ body {
 }
 
 .adenda-entry {
-    border-left: 3px solid var(--border-default);
+    border-left: 3px solid var(--border-color);
     padding: 0.5rem 0 0.5rem 0.85rem;
     margin-bottom: 0.75rem;
 }
