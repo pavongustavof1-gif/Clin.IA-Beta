@@ -189,6 +189,9 @@
     <button id="logoutBtn" class="btn btn-secondary btn-small" style="position: fixed; top: 20px; left: 20px; z-index: 1000; max-width: none; width: auto;">
         Cerrar Sesión
     </button>
+    <button id="historialBtn" class="btn btn-secondary btn-small" style="position: fixed; top: 20px; right: 20px; z-index: 1000; max-width: none; width: auto;">
+        Historial
+    </button>
 
     <div class="container">
         <!-- Header -->
@@ -683,6 +686,33 @@
                 </div>
             </section>
             
+            <!-- Historial de Paciente -->
+            <section id="historialSection" style="display: none;">
+
+                <!-- Search state -->
+                <div id="historialSearch" class="card">
+                    <h3>Historial del Paciente</h3>
+                    <p class="section-subtitle">Ingrese el CURP del paciente para consultar sus notas anteriores.</p>
+                    <div style="display: flex; gap: 0.75rem; align-items: flex-end; flex-wrap: wrap;">
+                        <div style="flex: 1; min-width: 220px;">
+                            <label class="review-label" for="historialCurpInput">CURP</label>
+                            <input id="historialCurpInput" class="review-input" type="text" placeholder="Ej. LOAM980101HDFPNR09" autocomplete="off" style="text-transform: uppercase;">
+                        </div>
+                        <button id="historialBuscarBtn" class="btn btn-primary" style="max-width: none; width: auto;" onclick="searchPatientHistory()">Buscar</button>
+                    </div>
+                    <div id="historialResults" style="margin-top: 1.25rem;"></div>
+                </div>
+
+                <!-- Detail state -->
+                <div id="historialDetail" style="display: none;">
+                    <div style="margin-bottom: 1rem;">
+                        <button class="btn btn-secondary btn-small" style="max-width: none; width: auto;" onclick="showHistorialSearch()">← Volver al historial</button>
+                    </div>
+                    <div id="historialDetailContent" class="card"></div>
+                </div>
+
+            </section>
+
             <!-- Error Section -->
             <section id="errorSection" class="card error-section" style="display: none;">
                 <h3>

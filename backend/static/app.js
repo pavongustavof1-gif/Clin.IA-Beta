@@ -134,7 +134,14 @@ const elements = {
     errorSection: document.getElementById('errorSection'),
     errorMessage: document.getElementById('errorMessage'),
     retryBtn: document.getElementById('retryBtn'),
-    logoutBtn: document.getElementById('logoutBtn')
+    logoutBtn: document.getElementById('logoutBtn'),
+    historialBtn: document.getElementById('historialBtn'),
+    historialSection: document.getElementById('historialSection'),
+    historialSearch: document.getElementById('historialSearch'),
+    historialCurpInput: document.getElementById('historialCurpInput'),
+    historialResults: document.getElementById('historialResults'),
+    historialDetail: document.getElementById('historialDetail'),
+    historialDetailContent: document.getElementById('historialDetailContent'),
 };
 
 // ─────────────────────────────────────────────
@@ -251,6 +258,20 @@ function init() {
             });
         });
     }
+
+    // Historial button
+    elements.historialBtn.addEventListener('click', () => {
+        if (elements.historialSection.style.display === 'none') {
+            showHistorialView();
+        } else {
+            hideHistorialView();
+        }
+    });
+
+    // Enter key in CURP input triggers search
+    elements.historialCurpInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') searchPatientHistory();
+    });
 
     // Resume polling if a job was in progress before a page reload
     const savedJobId = sessionStorage.getItem('clinia_job_id');
@@ -1294,6 +1315,133 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
 });
+
+// ─────────────────────────────────────────────
+// Patient history (Item 24)
+// ─────────────────────────────────────────────
+
+const MAIN_SECTIONS = [
+    'consentCard', 'progressSection', 'reviewSection', 'reviewActionsSection',
+    'resultsSection', 'errorSection'
+];
+
+function _mainSections() {
+    return [
+        ...MAIN_SECTIONS.map(id => document.getElementById(id)),
+        document.querySelector('.recording-section'),
+        document.querySelector('.options-section'),
+    ].filter(Boolean);
+}
+
+function showHistorialView() {
+    _mainSections().forEach(el => { el._histSavedDisplay = el.style.display; el.style.display = 'none'; });
+    elements.historialSection.style.display = 'block';
+    elements.historialBtn.textContent = '← Volver';
+    showHistorialSearch();
+}
+
+function hideHistorialView() {
+    elements.historialSection.style.display = 'none';
+    _mainSections().forEach(el => { el.style.display = el._histSavedDisplay ?? ''; });
+    elements.historialBtn.textContent = 'Historial';
+}
+
+function showHistorialSearch() {
+    elements.historialSearch.style.display = 'block';
+    elements.historialDetail.style.display = 'none';
+}
+
+async function searchPatientHistory() {
+    const raw = elements.historialCurpInput.value;
+    const curp = raw.trim().toUpperCase();
+    if (!curp) return;
+
+    elements.historialResults.innerHTML = '<p style="color: var(--text-secondary);">Buscando...</p>';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/patient-history?curp=${encodeURIComponent(curp)}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) throw new Error('Error al buscar historial');
+
+        const sessions = await res.json();
+
+        if (!sessions.length) {
+            elements.historialResults.innerHTML = '<p style="color: var(--text-secondary);">No se encontraron consultas para este CURP.</p>';
+            return;
+        }
+
+        const hasMissingMotivo = sessions.some(s => !s.motivo_de_consulta);
+        if (hasMissingMotivo) {
+            console.warn('[ClinIA] motivo_de_consulta vacío en uno o más resultados — verificar ruta JSONB en backend');
+        }
+
+        const rows = sessions.map(s => {
+            const fecha = s.timestamp ? new Date(s.timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
+            const statusLabel = s.status === 'confirmed' ? 'Confirmada' : s.status === 'cancelled' ? 'Cancelada' : s.status ?? '—';
+            const statusClass = s.status === 'confirmed' ? 'status-confirmed' : s.status === 'cancelled' ? 'status-cancelled' : 'status-other';
+            const motivo = s.motivo_de_consulta || '—';
+            return `<div class="historial-row" onclick="openHistoryDetail('${s.session_id}')">
+                <div class="historial-row-main">
+                    <span class="historial-fecha">${fecha}</span>
+                    <span class="historial-status ${statusClass}">${statusLabel}</span>
+                </div>
+                <div class="historial-motivo">${motivo}</div>
+            </div>`;
+        }).join('');
+
+        elements.historialResults.innerHTML = `<div class="historial-list">${rows}</div>`;
+
+    } catch (err) {
+        console.error('[ClinIA] searchPatientHistory error:', err);
+        elements.historialResults.innerHTML = '<p style="color: var(--text-secondary);">Error al cargar el historial. Intente de nuevo.</p>';
+    }
+}
+
+async function openHistoryDetail(sessionId) {
+    elements.historialSearch.style.display = 'none';
+    elements.historialDetail.style.display = 'block';
+    elements.historialDetailContent.innerHTML = '<p style="color: var(--text-secondary);">Cargando...</p>';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/patient-history/${sessionId}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (res.status === 404) {
+            elements.historialDetailContent.innerHTML = '<p>Sesión no encontrada.</p>';
+            return;
+        }
+        if (!res.ok) throw new Error('Error al cargar sesión');
+
+        const data = await res.json();
+        const sd   = data.structured_data || {};
+
+        let html = `<h3 style="margin-bottom: 1rem;">Nota de Consulta</h3>`;
+        html += generateFormattedHTML(sd);
+
+        const addenda = data.addenda || [];
+        if (addenda.length) {
+            html += '<div class="soap-section" style="margin-top: 1.5rem;">';
+            html += '<h5>📝 ADENDA</h5>';
+            addenda.forEach(a => {
+                const fecha = a.timestamp ? new Date(a.timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+                html += `<div class="adenda-entry">
+                    <div class="adenda-meta"><strong>${a.author || 'Médico'}</strong> · ${fecha}</div>
+                    <p class="adenda-text">${a.text || ''}</p>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        elements.historialDetailContent.innerHTML = html;
+
+    } catch (err) {
+        console.error('[ClinIA] openHistoryDetail error:', err);
+        elements.historialDetailContent.innerHTML = '<p>Error al cargar la nota. Intente de nuevo.</p>';
+    }
+}
 
 // ─────────────────────────────────────────────
 // Initialize on page load
