@@ -194,6 +194,16 @@ def _sb_post_job(body: dict) -> str | None:
         return None
 
 
+def _sb_log_lectura(session_id: str, usuario_id: str) -> None:
+    """Append a row to lecturas_sesion. Caller catches and logs on failure."""
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/lecturas_sesion'
+    payload = json.dumps({'session_id': session_id, 'usuario_id': usuario_id},
+                         ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='POST')
+    with urllib.request.urlopen(req, timeout=5) as resp:
+        resp.read()
+
+
 def _sb_patch_job(job_id: str, body: dict) -> None:
     """PATCH a trabajos row. Logs silently on failure."""
     body['updated_at'] = datetime.now().isoformat()
@@ -974,8 +984,14 @@ def patient_history_detail(session_id):
     if row.get('usuario_id') != usuario_id:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
+    # Log the read — fire-and-forget, never fails the request
+    try:
+        _sb_log_lectura(session_id, usuario_id)
+    except Exception as e:
+        logger.warning(f"DB: Could not log lectura for session {session_id}: {e}")
+
     return jsonify({
-        'session_id':     row['session_id'],
+        'session_id':      row['session_id'],
         'structured_data': row['structured_data'],
         'addenda':         row.get('addenda') or [],
     }), 200
