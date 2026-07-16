@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ClinIA - Asistente de Notas Médicas</title>
+    <title>ClinIA™ - Asistente de Notas Médicas</title>
 
     <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
     <meta http-equiv="Pragma" content="no-cache">
@@ -179,21 +179,21 @@
 </head>
 <body>
 
-    <!-- Top-left nav -->
-    <div class="nav-corner nav-corner--left">
-        <button id="logoutBtn" class="btn btn-secondary btn-small nav-btn">Cerrar Sesión</button>
-    </div>
-
-    <!-- Top-right nav -->
-    <div class="nav-corner nav-corner--right">
-        <button id="historialBtn" class="btn btn-secondary btn-small nav-btn">Historial</button>
-        <a href="https://forms.gle/rrnsH2h14YpU8bhA8" class="btn btn-secondary btn-small nav-btn feedback-floating" target="_blank" rel="noopener noreferrer">
-            <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="fill: none !important;">
-                <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
-            </svg>
-            <span class="feedback-text">Reporta un problema o mejora</span>
-        </a>
-    </div>
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions">
+                <button id="historialBtn" class="btn btn-secondary btn-small nav-btn">Historial</button>
+                <a href="https://forms.gle/rrnsH2h14YpU8bhA8" class="btn btn-secondary btn-small nav-btn feedback-floating" target="_blank" rel="noopener noreferrer">
+                    <svg class="btn-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="fill: none !important;">
+                        <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+                    </svg>
+                    <span class="feedback-text">Reporta un problema o mejora</span>
+                </a>
+                <button id="logoutBtn" class="btn btn-secondary btn-small nav-btn">Cerrar Sesión</button>
+            </div>
+        </div>
+    </nav>
 
     <div class="container">
         <!-- Header -->
@@ -201,7 +201,7 @@
             <div class="header-logo">
                 <svg class="logo-icon" width="52" height="52" aria-hidden="true"><use href="#icon-hospital"/></svg>
             </div>
-            <h1>Clin.IA</h1>
+            <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
             <div class="version-badge">Beta v0.3</div>
         </header>
@@ -221,7 +221,7 @@
                         <input type="checkbox" id="consentCheckbox">
                         <span>El paciente ha sido informado y otorga su consentimiento para la
                         <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
-                        mediante ClinIA, de conformidad con la LFPDPPP.
+                        mediante ClinIA™, de conformidad con la LFPDPPP.
                         <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
                     </label>
                 </div>
@@ -733,7 +733,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA Beta v0.3 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.3 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" class="footer-link" onclick="showAvisoModal(); return false;">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
@@ -749,7 +749,7 @@
             <div class="aviso-header">
                 <div>
                     <h2 id="avisoModalTitle" class="aviso-title">Aviso de Privacidad</h2>
-                    <p class="aviso-subtitle">Clin.IA — Asistente Inteligente de Notas Médicas</p>
+                    <p class="aviso-subtitle">Clin.IA™ — Asistente Inteligente de Notas Médicas</p>
                 </div>
                 <span class="aviso-draft-badge">BORRADOR — Pendiente de revisión legal</span>
             </div>
@@ -757,7 +757,7 @@
             <div class="aviso-body">
 
                 <h3 class="aviso-section-title">1. Identidad y domicilio del Responsable</h3>
-                <p>El presente Aviso de Privacidad es emitido por el médico o institución de salud que utiliza la plataforma Clin.IA para la generación de notas clínicas ("el Responsable"). El Responsable es la persona física o moral que contrata el servicio de Clin.IA y en cuyo consultorio o clínica se lleva a cabo la consulta médica. Los datos de identificación del Responsable (nombre completo, cédula profesional, domicilio y correo electrónico de contacto) se encuentran disponibles en el perfil del médico registrado en la plataforma.</p>
+                <p>El presente Aviso de Privacidad es emitido por el médico o institución de salud que utiliza la plataforma Clin.IA™ para la generación de notas clínicas ("el Responsable"). El Responsable es la persona física o moral que contrata el servicio de Clin.IA™ y en cuyo consultorio o clínica se lleva a cabo la consulta médica. Los datos de identificación del Responsable (nombre completo, cédula profesional, domicilio y correo electrónico de contacto) se encuentran disponibles en el perfil del médico registrado en la plataforma.</p>
 
                 <h3 class="aviso-section-title">2. Datos personales que se recaban</h3>
                 <p><strong>Datos de identificación:</strong> nombre completo, CURP, fecha de nacimiento, edad, sexo, domicilio, teléfono, número de expediente clínico.</p>
@@ -771,7 +771,7 @@
                 <p>El paciente puede oponerse al tratamiento para finalidades secundarias sin que ello afecte la prestación del servicio médico.</p>
 
                 <h3 class="aviso-section-title">4. Transferencia de datos a terceros</h3>
-                <p><strong>AssemblyAI Inc. (Estados Unidos):</strong> transcripción de audio a texto. El audio es eliminado de sus servidores inmediatamente tras el procesamiento exitoso. La transcripción de texto es eliminada de los servidores de Clin.IA tras la confirmación de la nota clínica. AssemblyAI no utiliza los datos para entrenamiento de modelos (opt-out activo).</p>
+                <p><strong>AssemblyAI Inc. (Estados Unidos):</strong> transcripción de audio a texto. El audio es eliminado de sus servidores inmediatamente tras el procesamiento exitoso. La transcripción de texto es eliminada de los servidores de Clin.IA™ tras la confirmación de la nota clínica. AssemblyAI no utiliza los datos para entrenamiento de modelos (opt-out activo).</p>
                 <p><strong>Google LLC (Estados Unidos):</strong> procesamiento de lenguaje natural mediante Gemini API para extracción de información clínica, y almacenamiento opcional de documentos en Google Drive y Google Docs. Google LLC opera bajo certificaciones ISO 27001 y SOC 2.</p>
                 <p><strong>Resend Inc. (Estados Unidos):</strong> servicio de envío de correo electrónico para la entrega de la nota clínica en PDF al médico Responsable.</p>
                 <p>La transferencia de datos a proveedores en Estados Unidos se realiza al amparo del artículo 37 de la LFPDPPP, bajo acuerdos contractuales que obligan a dichos proveedores a mantener niveles de protección equivalentes a los establecidos por la ley mexicana.</p>
@@ -795,10 +795,10 @@
                 <p><strong>Rectificación:</strong> las correcciones solicitadas se registran mediante adéndum oficial adjunto a la nota clínica original, la cual no puede ser modificada conforme a NOM-004-SSA3-2012.</p>
 
                 <h3 class="aviso-section-title">8. Medidas de seguridad</h3>
-                <p>Clin.IA implementa las siguientes medidas técnicas y organizativas para proteger sus datos personales:</p>
+                <p>Clin.IA™ implementa las siguientes medidas técnicas y organizativas para proteger sus datos personales:</p>
                 <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
                     <li><strong>Cifrado en tránsito:</strong> todas las comunicaciones entre el usuario y la plataforma se realizan mediante protocolo HTTPS con cifrado TLS.</li>
-                    <li><strong>Minimización de datos:</strong> el audio de la consulta es eliminado automáticamente de AssemblyAI tras la transcripción. La transcripción de texto es eliminada de los servidores de Clin.IA tras la confirmación de la nota clínica.</li>
+                    <li><strong>Minimización de datos:</strong> el audio de la consulta es eliminado automáticamente de AssemblyAI tras la transcripción. La transcripción de texto es eliminada de los servidores de Clin.IA™ tras la confirmación de la nota clínica.</li>
                     <li><strong>Inmutabilidad de notas clínicas:</strong> las notas confirmadas no pueden ser modificadas. Las correcciones se realizan exclusivamente mediante adéndum conforme a NOM-004-SSA3-2012.</li>
                     <li><strong>Control de acceso:</strong> acceso a documentos clínicos restringido al médico Responsable.</li>
                     <li><strong>Registro de consentimiento:</strong> marca de tiempo del consentimiento del paciente registrada en cada consulta para fines de auditoría.</li>
@@ -806,11 +806,11 @@
                 <p><em>Nota: el cifrado de datos en reposo (at rest) está programado para implementarse en la siguiente versión de la plataforma.</em></p>
 
                 <h3 class="aviso-section-title">9. Cambios al Aviso de Privacidad</h3>
-                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA. <strong>Fecha de última actualización: Junio 2026.</strong></p>
+                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA™. <strong>Fecha de última actualización: Junio 2026.</strong></p>
 
                 <h3 class="aviso-section-title">10. Contacto</h3>
                 <p>Para ejercer derechos ARCO o dudas sobre el tratamiento de datos personales: <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a></p>
-                <p>Para información general sobre la plataforma Clin.IA: <a href="mailto:info@clinianotes.com" class="aviso-email-link">info@clinianotes.com</a></p>
+                <p>Para información general sobre la plataforma Clin.IA™: <a href="mailto:info@clinianotes.com" class="aviso-email-link">info@clinianotes.com</a></p>
                 <p class="aviso-legal-note">Este Aviso de Privacidad ha sido elaborado de conformidad con la Ley Federal de Protección de Datos Personales en Posesión de Particulares (LFPDPPP), su Reglamento, y los Lineamientos del Aviso de Privacidad emitidos por el INAI. <strong>BORRADOR — Pendiente de revisión legal.</strong></p>
 
             </div><!-- /aviso-body -->
