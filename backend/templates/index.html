@@ -702,6 +702,10 @@
                         </div>
                         <button id="historialBuscarBtn" class="btn btn-primary" style="max-width: none; width: auto;" onclick="searchPatientHistory()">Buscar</button>
                     </div>
+                    <div class="historial-scope-toggle" role="group" aria-label="Alcance de la búsqueda">
+                        <button type="button" id="historialScopeMine" class="historial-scope-btn active" onclick="setHistorialScope('mine')">Mis notas</button>
+                        <button type="button" id="historialScopeClinica" class="historial-scope-btn" onclick="setHistorialScope('clinica')">Notas de la clínica</button>
+                    </div>
                     <div id="historialResults" style="margin-top: 1.25rem;"></div>
                 </div>
 

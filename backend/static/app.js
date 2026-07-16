@@ -1333,10 +1333,22 @@ function _mainSections() {
     ].filter(Boolean);
 }
 
+// Never persisted — always resets to 'mine' whenever the history view opens
+let historialScope = 'mine';
+
+function setHistorialScope(scope) {
+    historialScope = scope;
+    document.getElementById('historialScopeMine').classList.toggle('active', scope === 'mine');
+    document.getElementById('historialScopeClinica').classList.toggle('active', scope === 'clinica');
+    // Re-run the search if there's already a CURP entered, so the toggle feels live
+    if (elements.historialCurpInput.value.trim()) searchPatientHistory();
+}
+
 function showHistorialView() {
     _mainSections().forEach(el => { el._histSavedDisplay = el.style.display; el.style.display = 'none'; });
     elements.historialSection.style.display = 'block';
     elements.historialBtn.textContent = '← Volver';
+    setHistorialScope('mine');
     showHistorialSearch();
 }
 
@@ -1359,9 +1371,8 @@ async function searchPatientHistory() {
     elements.historialResults.innerHTML = '<p style="color: var(--text-secondary);">Buscando...</p>';
 
     try {
-        const res = await fetch(`${API_BASE_URL}/api/patient-history?curp=${encodeURIComponent(curp)}`, {
-            headers: getAuthHeaders()
-        });
+        const url = `${API_BASE_URL}/api/patient-history?curp=${encodeURIComponent(curp)}&scope=${historialScope}`;
+        const res = await fetch(url, { headers: getAuthHeaders() });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) throw new Error('Error al buscar historial');
 
@@ -1382,12 +1393,16 @@ async function searchPatientHistory() {
             const statusLabel = s.status === 'confirmed' ? 'Confirmada' : s.status === 'cancelled' ? 'Cancelada' : s.status ?? '—';
             const statusClass = s.status === 'confirmed' ? 'status-confirmed' : s.status === 'cancelled' ? 'status-cancelled' : 'status-other';
             const motivo = s.motivo_de_consulta || '—';
+            const doctorLine = s.doctor_nombre
+                ? `<div class="historial-doctor">Dr(a). ${s.doctor_nombre}</div>`
+                : '';
             return `<div class="historial-row" onclick="openHistoryDetail('${s.session_id}')">
                 <div class="historial-row-main">
                     <span class="historial-fecha">${fecha}</span>
                     <span class="historial-status ${statusClass}">${statusLabel}</span>
                 </div>
                 <div class="historial-motivo">${motivo}</div>
+                ${doctorLine}
             </div>`;
         }).join('');
 
@@ -1419,6 +1434,9 @@ async function openHistoryDetail(sessionId) {
         const sd   = data.structured_data || {};
 
         let html = `<h3 style="margin-bottom: 1rem;">Nota de Consulta</h3>`;
+        if (data.autor_nombre) {
+            html += `<div class="historial-autor-banner">Nota escrita por Dr(a). ${data.autor_nombre}</div>`;
+        }
         html += generateFormattedHTML(sd);
 
         const addenda = data.addenda || [];

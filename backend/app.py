@@ -395,6 +395,14 @@ def get_usuario_cedula(usuario_id: str) -> str:
         return rows[0].get('cedula') or ''
     return ''
 
+
+def get_usuario_nombre(usuario_id: str) -> str:
+    """Fetch a doctor's display name only — no email/cédula/other fields. Empty string on error."""
+    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{usuario_id}&select=nombre&limit=1')
+    if rows:
+        return rows[0].get('nombre') or ''
+    return ''
+
 # ────────────────────────────────────────────────────────────────────────────
 
 
@@ -921,28 +929,38 @@ def request_entity_too_large(error):
 @require_auth
 def patient_history_list():
     """
-    GET /api/patient-history?curp=<curp>
-    Returns list view of all sessions for a patient, scoped to the authenticated doctor.
+    GET /api/patient-history?curp=<curp>&scope=mine|clinica
+    scope=mine (default): sessions written by the authenticated doctor.
+    scope=clinica: sessions written by anyone in the doctor's clinic; each
+    row includes the authoring doctor's name.
     """
     raw_curp = request.args.get('curp', '')
     curp = raw_curp.strip().upper()
     if not curp:
         return jsonify({'error': 'curp query parameter is required'}), 400
 
+    scope = request.args.get('scope', 'mine')
     usuario_id = g.usuario['usuario_id']
+    clinica_id = g.usuario['clinica_id']
 
     # Build select with PostgREST JSONB path:
     # -> for intermediate segments (returns jsonb), ->> only at the final leaf (returns text)
     # URL-encode > as %3E since urllib won't encode it automatically
     select = (
-        'session_id,timestamp,status,'
+        'session_id,timestamp,status,usuario_id,'
         'structured_data->informacion_paciente->>motivo_de_consulta'
         .replace('>', '%3E')
     )
+
+    if scope == 'clinica':
+        scope_filter = f'clinica_id=eq.{clinica_id}'
+    else:
+        scope_filter = f'usuario_id=eq.{usuario_id}'
+
     path = (
         f'/rest/v1/sesiones'
         f'?paciente_curp=eq.{curp}'
-        f'&usuario_id=eq.{usuario_id}'
+        f'&{scope_filter}'
         f'&select={select}'
         f'&order=timestamp.desc'
     )
@@ -950,15 +968,27 @@ def patient_history_list():
     if rows is None:
         return jsonify({'error': 'Error al consultar historial'}), 500
 
-    result = [
-        {
+    # Resolve authoring doctor names only when needed, one lookup per distinct author
+    nombre_cache = {}
+    if scope == 'clinica':
+        for r in rows:
+            row_usuario_id = r.get('usuario_id')
+            if row_usuario_id and row_usuario_id != usuario_id and row_usuario_id not in nombre_cache:
+                nombre_cache[row_usuario_id] = get_usuario_nombre(row_usuario_id)
+
+    result = []
+    for r in rows:
+        row_usuario_id = r.get('usuario_id')
+        item = {
             'session_id':         r.get('session_id'),
             'timestamp':          r.get('timestamp'),
             'status':             r.get('status'),
             'motivo_de_consulta': r.get('motivo_de_consulta'),
         }
-        for r in rows
-    ]
+        if scope == 'clinica' and row_usuario_id != usuario_id:
+            item['doctor_nombre'] = nombre_cache.get(row_usuario_id) or ''
+        result.append(item)
+
     return jsonify(result), 200
 
 
@@ -967,34 +997,43 @@ def patient_history_list():
 def patient_history_detail(session_id):
     """
     GET /api/patient-history/<session_id>
-    Full read-only detail for one session. 404 if not found or not owned by caller.
+    Full read-only detail for one session. Accessible if the session belongs
+    to the authenticated doctor OR to their clinic. 404 if neither (never 403).
     """
     usuario_id = g.usuario['usuario_id']
+    clinica_id = g.usuario['clinica_id']
 
     rows = _sb_get(
         f'/rest/v1/sesiones'
         f'?session_id=eq.{session_id}'
-        f'&select=session_id,usuario_id,structured_data,addenda'
+        f'&select=session_id,usuario_id,clinica_id,structured_data,addenda'
         f'&limit=1'
     )
     if not rows:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
     row = rows[0]
-    if row.get('usuario_id') != usuario_id:
+    is_owner  = row.get('usuario_id') == usuario_id
+    is_clinic = row.get('clinica_id') == clinica_id
+    if not (is_owner or is_clinic):
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
-    # Log the read — fire-and-forget, never fails the request
+    # Log the read — fire-and-forget, never fails the request. Logs the
+    # READER's usuario_id regardless of which branch (owner/clinic) authorized it.
     try:
         _sb_log_lectura(session_id, usuario_id)
     except Exception as e:
         logger.warning(f"DB: Could not log lectura for session {session_id}: {e}")
 
-    return jsonify({
+    response = {
         'session_id':      row['session_id'],
         'structured_data': row['structured_data'],
         'addenda':         row.get('addenda') or [],
-    }), 200
+    }
+    if not is_owner:
+        response['autor_nombre'] = get_usuario_nombre(row.get('usuario_id'))
+
+    return jsonify(response), 200
 
 
 @app.errorhandler(500)
