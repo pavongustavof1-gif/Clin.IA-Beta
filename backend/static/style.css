@@ -1403,15 +1403,26 @@ body {
     justify-content: flex-end;
 }
 
-.nav-btn {
-    max-width: none;
-    width: auto;
+.nav-link {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    text-decoration: none;
     white-space: nowrap;
-    margin-top: 0;
+    transition: color var(--transition-fast);
 }
 
-.feedback-floating {
-    box-shadow: none;
+.nav-link:hover {
+    color: var(--text-primary);
+}
+
+.nav-sep {
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.feedback-text-short {
+    display: none;
 }
 
 /* Mobile responsive behavior */
@@ -1420,21 +1431,12 @@ body {
         padding: 0.75rem var(--spacing-sm);
     }
 
-    .feedback-floating {
-        padding: 0.6rem;
-        border-radius: 50%;
-    }
-
-    /* Hide the text, keep the icon */
-    .feedback-floating .feedback-text {
+    .feedback-text {
         display: none;
     }
 
-    /* Remove the margin pushing the icon away from the hidden text */
-    .feedback-floating .btn-icon {
-        margin-right: 0;
-        width: 20px;
-        height: 20px;
+    .feedback-text-short {
+        display: inline;
     }
 }
 

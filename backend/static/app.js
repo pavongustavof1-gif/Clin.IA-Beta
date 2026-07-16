@@ -193,7 +193,7 @@ function init() {
     elements.audioFileInput.addEventListener('change', handleFileUpload);
     elements.processBtn.addEventListener('click', processAudio);
     elements.retryBtn.addEventListener('click', resetApplication);
-    if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', logout);
+    if (elements.logoutBtn) elements.logoutBtn.addEventListener('click', (e) => { e.preventDefault(); logout(); });
     elements.downloadJsonBtn.addEventListener('click', downloadJSON);
     elements.downloadPdfBtn.addEventListener('click', async () => {
         if (!state.sessionId) {
@@ -260,7 +260,8 @@ function init() {
     }
 
     // Historial button
-    elements.historialBtn.addEventListener('click', () => {
+    elements.historialBtn.addEventListener('click', (e) => {
+        e.preventDefault();
         if (elements.historialSection.style.display === 'none') {
             showHistorialView();
         } else {
