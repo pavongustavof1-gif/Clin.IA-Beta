@@ -25,11 +25,47 @@ function handleSessionExpired() {
     window.location.href = '/login';
 }
 
-// Auth guard — handles both normal load and back/forward cache restore
+// Auth guard — handles both normal load and back/forward cache restore.
+// Runs on EVERY pageshow (including bfcache restores where scripts don't
+// re-execute) because a bfcache-restored page can already have a visible,
+// previously-rendered body from before the token went stale — presence
+// alone isn't enough at that point, we need to re-validate every time.
+let _appInitialized = false;
+
 window.addEventListener('pageshow', function(event) {
-    if (!sessionStorage.getItem('clinia_token')) {
+    const token = sessionStorage.getItem('clinia_token');
+    if (!token) {
         window.location.href = '/login';
+        return;
     }
+
+    // If restoring from bfcache, re-hide the body while we re-check —
+    // it may already be visible from before this tab was backgrounded.
+    if (event.persisted) {
+        document.body.classList.add('auth-pending');
+    }
+
+    fetch(`${window.location.origin}/api/session-check`, {
+        headers: getAuthHeaders()
+    }).then(res => {
+        if (res.status === 401) {
+            handleSessionExpired();
+            return;
+        }
+        document.body.classList.remove('auth-pending');
+        if (!_appInitialized) {
+            _appInitialized = true;
+            init();
+        }
+    }).catch(() => {
+        // Network hiccup — fail open rather than lock the doctor out over
+        // a flaky connection; this is a validity check, not a connectivity gate.
+        document.body.classList.remove('auth-pending');
+        if (!_appInitialized) {
+            _appInitialized = true;
+            init();
+        }
+    });
 });
 
 // ─────────────────────────────────────────────
@@ -1463,10 +1499,8 @@ async function openHistoryDetail(sessionId) {
 }
 
 // ─────────────────────────────────────────────
-// Initialize on page load
+// Initialization is now driven entirely by the pageshow handler above —
+// it fires on both the initial load and bfcache restores, and calls
+// init() itself (guarded by _appInitialized) once the session-check
+// validity fetch resolves.
 // ─────────────────────────────────────────────
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}

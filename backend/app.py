@@ -1036,6 +1036,14 @@ def patient_history_detail(session_id):
     return jsonify(response), 200
 
 
+@app.route('/api/session-check', methods=['GET'])
+@require_auth
+def session_check():
+    """Lightweight validity check — reload/bfcache-restore guard against a
+    stale token that's present but expired. No session data, no side effects."""
+    return jsonify({'valid': True}), 200
+
+
 @app.errorhandler(500)
 def internal_server_error(error):
     return jsonify({
