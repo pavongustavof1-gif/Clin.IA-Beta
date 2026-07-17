@@ -8,7 +8,7 @@ from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email
-from auth import require_auth
+from auth import require_auth, require_admin
 from concurrent.futures import ThreadPoolExecutor
 import os
 import re
@@ -417,6 +417,14 @@ def login():
         supabase_url=Config.SUPABASE_URL,
         supabase_anon_key=Config.SUPABASE_ANON_KEY
     )
+
+@app.route('/admin')
+def admin():
+    # Unconditional shell, same pattern as index() — there is no server-side
+    # session to gate on for a plain page GET. Role-gating happens client-side
+    # (admin.js checks /api/session-check) and the real boundary is
+    # @require_admin on /api/admin/* below.
+    return render_template('admin.html')
 
 @app.route('/api/health', methods=['GET'])
 def health_check():
@@ -1040,8 +1048,31 @@ def patient_history_detail(session_id):
 @require_auth
 def session_check():
     """Lightweight validity check — reload/bfcache-restore guard against a
-    stale token that's present but expired. No session data, no side effects."""
-    return jsonify({'valid': True}), 200
+    stale token that's present but expired. Also returns rol/clinica_id so
+    the frontend can conditionally reveal admin-only UI without a second
+    round-trip — no session data beyond that, no side effects."""
+    return jsonify({
+        'valid':      True,
+        'rol':        g.usuario['rol'],
+        'clinica_id': g.usuario['clinica_id'],
+    }), 200
+
+
+@app.route('/api/admin/usuarios', methods=['GET'])
+@require_auth
+@require_admin
+def admin_usuarios():
+    """List doctors in the admin's own clinic. Read-only — no add/deactivate yet."""
+    clinica_id = g.usuario['clinica_id']
+    rows = _sb_get(
+        f'/rest/v1/usuarios'
+        f'?clinica_id=eq.{clinica_id}'
+        f'&select=id,nombre,email,especialidad,cedula,rol,activo'
+        f'&order=nombre'
+    )
+    if rows is None:
+        return jsonify({'error': 'Error al consultar usuarios'}), 500
+    return jsonify(rows), 200
 
 
 @app.errorhandler(500)

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Clin.IA™</title>
+
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon/favicon-16.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon/android-chrome-192x192.png') }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon/android-chrome-512x512.png') }}">
+
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        /* Hidden until session-check confirms the token is valid AND rol === 'admin' */
+        body.auth-pending { visibility: hidden; }
+
+        .admin-container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: var(--spacing-lg) var(--spacing-md);
+        }
+
+        .admin-title {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-style: italic;
+            font-size: 1.8rem;
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .admin-table-wrap {
+            overflow-x: auto;
+        }
+
+        .admin-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .admin-table th {
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.78rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            padding: 0.6rem 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            white-space: nowrap;
+        }
+
+        .admin-table td {
+            padding: 0.7rem 0.9rem;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
+            white-space: nowrap;
+        }
+
+        .admin-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .admin-status-badge {
+            font-size: 0.75rem;
+            font-weight: 500;
+            padding: 2px 10px;
+            border-radius: 999px;
+        }
+
+        .admin-status-badge.activo {
+            background: rgba(15, 110, 86, 0.1);
+            color: #0F6E56;
+        }
+
+        .admin-status-badge.inactivo {
+            background: rgba(148, 163, 184, 0.15);
+            color: var(--text-secondary);
+        }
+
+        .admin-empty, .admin-loading {
+            color: var(--text-secondary);
+            padding: 1rem 0;
+        }
+    </style>
+</head>
+<body class="auth-pending">
+
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions">
+                <a href="/" class="nav-link">← Volver a la app</a>
+                <span class="nav-sep">|</span>
+                <a href="#" id="logoutBtn" class="nav-link">Cerrar sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="admin-container">
+        <h1 class="admin-title">Administración de la Clínica</h1>
+
+        <div class="card">
+            <h3>Médicos</h3>
+            <div id="adminLoading" class="admin-loading">Cargando...</div>
+            <div id="adminEmpty" class="admin-empty" style="display: none;">No hay médicos registrados en esta clínica.</div>
+            <div id="adminTableWrap" class="admin-table-wrap" style="display: none;">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Especialidad</th>
+                            <th>Cédula</th>
+                            <th>Rol</th>
+                            <th>Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
+</body>
+</html>

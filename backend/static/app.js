@@ -47,11 +47,24 @@ window.addEventListener('pageshow', function(event) {
 
     fetch(`${window.location.origin}/api/session-check`, {
         headers: getAuthHeaders()
-    }).then(res => {
+    }).then(async res => {
         if (res.status === 401) {
             handleSessionExpired();
             return;
         }
+
+        try {
+            const data = await res.json();
+            if (data.rol === 'admin') {
+                const adminBtn = document.getElementById('adminBtn');
+                const adminSep = document.getElementById('adminSep');
+                if (adminBtn) adminBtn.style.display = '';
+                if (adminSep) adminSep.style.display = '';
+            }
+        } catch (e) {
+            // Non-JSON or malformed response — admin link just stays hidden
+        }
+
         document.body.classList.remove('auth-pending');
         if (!_appInitialized) {
             _appInitialized = true;

@@ -103,3 +103,14 @@ def require_auth(f):
         return f(*args, **kwargs)
 
     return decorated
+
+
+def require_admin(f):
+    """Decorator that gates on g.usuario['rol'] == 'admin'. Stack after @require_auth."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if g.usuario.get('rol') != 'admin':
+            return jsonify({"error": "No autorizado"}), 403
+        return f(*args, **kwargs)
+
+    return decorated
