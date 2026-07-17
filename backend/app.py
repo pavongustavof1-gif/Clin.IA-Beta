@@ -1072,7 +1072,12 @@ def admin_usuarios():
     )
     if rows is None:
         return jsonify({'error': 'Error al consultar usuarios'}), 500
-    return jsonify(rows), 200
+
+    clinica = get_clinica_context(clinica_id)
+    return jsonify({
+        'clinica_nombre': clinica['nombre'],
+        'doctores':       rows,
+    }), 200
 
 
 @app.errorhandler(500)

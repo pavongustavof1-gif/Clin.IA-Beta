@@ -81,8 +81,14 @@ async function loadUsuarios() {
         }
         if (!res.ok) throw new Error('Error al cargar usuarios');
 
-        const usuarios = await res.json();
+        const data = await res.json();
+        const usuarios = data.doctores || [];
         loadingEl.style.display = 'none';
+
+        const clinicaNameEl = document.getElementById('adminClinicaNombre');
+        if (clinicaNameEl && data.clinica_nombre) {
+            clinicaNameEl.textContent = ` — ${data.clinica_nombre}`;
+        }
 
         if (!usuarios.length) {
             emptyEl.style.display = 'block';
