@@ -45,13 +45,28 @@ def verify_jwt(token: str) -> dict | None:
         return None
 
 
+class UsuarioInactivoError(Exception):
+    """Raised by get_usuario_context when the usuario row exists but activo=false.
+    Distinguished from a plain None return (not-found) so require_auth can map
+    this to 401 specifically, not the generic 403 used for "no usuarios row"."""
+    pass
+
+
 def get_usuario_context(user_id: str) -> dict | None:
+    """
+    Per-request DB lookup (not cached) — this is deliberate: it's what lets a
+    deactivation take effect on the doctor's very next API call rather than
+    waiting for their JWT to expire naturally (up to ~1h). Supabase's own ban
+    mechanism only blocks future logins; it does not invalidate an
+    already-issued token, so this check is the layer that actually cuts off
+    an active session immediately.
+    """
     import urllib.error
     url = (
         Config.SUPABASE_URL.rstrip('/')
         + '/rest/v1/usuarios'
         + f'?id=eq.{user_id}'
-        + '&select=id,clinica_id,rol,nombre,email'
+        + '&select=id,clinica_id,rol,nombre,email,activo'
         + '&limit=1'
     )
     req = urllib.request.Request(url, headers={
@@ -65,6 +80,8 @@ def get_usuario_context(user_id: str) -> dict | None:
         if not rows:
             return None
         row = rows[0]
+        if row.get('activo') is False:
+            raise UsuarioInactivoError()
         return {
             'usuario_id': row['id'],
             'clinica_id': row['clinica_id'],
@@ -72,6 +89,8 @@ def get_usuario_context(user_id: str) -> dict | None:
             'nombre':     row['nombre'],
             'email':      row['email'],
         }
+    except UsuarioInactivoError:
+        raise
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         logger.warning(f'Auth: Supabase REST error {e.code} for {user_id}: {body}')
@@ -95,7 +114,11 @@ def require_auth(f):
             return jsonify({"error": "No autorizado"}), 401
 
         user_id = payload.get("sub")
-        usuario = get_usuario_context(user_id)
+        try:
+            usuario = get_usuario_context(user_id)
+        except UsuarioInactivoError:
+            return jsonify({"error": "No autorizado"}), 401
+
         if usuario is None:
             return jsonify({"error": "Usuario no registrado en ninguna clínica"}), 403
 

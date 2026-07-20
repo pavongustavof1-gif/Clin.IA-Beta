@@ -227,6 +227,34 @@ def _sb_generate_invite_link(email: str) -> tuple[str, str]:
     return data['id'], data['action_link']
 
 
+def _sb_set_user_ban(user_id: str, banned: bool) -> None:
+    """
+    Ban/unban a Supabase auth user via the Admin API.
+    Endpoint/method confirmed directly from auth-js source
+    (GoTrueAdminApi.ts, updateUserById): PUT {SUPABASE_URL}/auth/v1/admin/users/{user_id}.
+    ban_duration is a Go duration string (units ns/us/ms/s/m/h); there is no
+    literal "permanent" value, so "876000h" (~100 years) is the documented
+    community convention for an effectively indefinite ban. "none" lifts it.
+
+    IMPORTANT: this only blocks FUTURE sign-in attempts — it does not
+    invalidate a JWT already issued before the ban. An already-logged-in
+    user keeps a valid token until it expires (up to ~1h) unless the
+    activo check in auth.get_usuario_context catches it first on their
+    next request. Both layers are required; this one is not sufficient
+    alone for immediate cutoff.
+
+    Raises on failure — caller applies the same partial-failure handling
+    used elsewhere in this project (log which side succeeded/failed).
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + f'/auth/v1/admin/users/{user_id}'
+    payload = json.dumps({
+        'ban_duration': '876000h' if banned else 'none',
+    }, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='PUT')
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+
 def _sb_insert_usuario(body: dict) -> dict | None:
     """Insert a usuarios row. Returns the created row or None on error."""
     url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/usuarios'
@@ -1221,6 +1249,7 @@ def admin_create_usuario():
     email_sent = send_invite_email(email, nombre, clinica['nombre'], action_link)
 
     response = {
+        'id':           nuevo_usuario['id'],
         'nombre':       nuevo_usuario['nombre'],
         'email':        nuevo_usuario['email'],
         'especialidad': nuevo_usuario['especialidad'],
@@ -1233,6 +1262,71 @@ def admin_create_usuario():
         response['warning'] = 'Doctor creado pero el correo de invitación no pudo enviarse.'
 
     return jsonify(response), 200
+
+
+@app.route('/api/admin/usuarios/<usuario_id>/activo', methods=['PATCH'])
+@require_auth
+@require_admin
+def admin_set_usuario_activo(usuario_id):
+    """
+    Deactivate/reactivate a doctor within the admin's own clinic.
+
+    Two independent enforcement layers, both required:
+    1. Supabase ban (_sb_set_user_ban) — blocks future login attempts.
+    2. usuarios.activo — checked on every @require_auth request via
+       get_usuario_context, which is what actually cuts off an
+       ALREADY-ISSUED session immediately. The Supabase ban alone would
+       leave a currently-logged-in doctor with a working token for up to
+       ~1h after deactivation, since banning does not invalidate a JWT
+       already issued.
+    """
+    data = request.get_json(silent=True) or {}
+    if 'activo' not in data or not isinstance(data['activo'], bool):
+        return jsonify({'error': 'El campo activo (booleano) es obligatorio'}), 400
+    nuevo_activo = data['activo']
+
+    if usuario_id == g.usuario['usuario_id']:
+        return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 403
+
+    rows = _sb_get(
+        f'/rest/v1/usuarios?id=eq.{usuario_id}'
+        f'&select=id,clinica_id&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+    if rows[0].get('clinica_id') != g.usuario['clinica_id']:
+        return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    # Layer 1: Supabase ban/unban
+    try:
+        _sb_set_user_ban(usuario_id, banned=not nuevo_activo)
+    except Exception as e:
+        logger.error(
+            f"Admin: Supabase ban update failed for usuario_id={usuario_id} "
+            f"(target activo={nuevo_activo}): {e}. usuarios.activo was NOT "
+            f"changed — no partial state applied."
+        )
+        return jsonify({'error': 'No se pudo actualizar el estado de autenticación del usuario. Intente de nuevo.'}), 500
+
+    # Layer 2: usuarios.activo — the layer that cuts off an already-issued
+    # session on the doctor's next request, not just future logins.
+    updated = _sb_patch(f'/rest/v1/usuarios?id=eq.{usuario_id}', {'activo': nuevo_activo})
+    if not updated:
+        logger.error(
+            f"Admin: INCONSISTENT STATE — Supabase ban succeeded (banned={not nuevo_activo}) "
+            f"for usuario_id={usuario_id}, but the usuarios.activo UPDATE failed. "
+            f"The Supabase auth side reflects activo={nuevo_activo} but the usuarios "
+            f"table does not — this needs manual reconciliation."
+        )
+        return jsonify({
+            'error': (
+                'El estado de autenticación se actualizó correctamente, pero no se '
+                'pudo guardar el cambio en la base de datos. El sistema quedó en un '
+                'estado inconsistente y requiere revisión manual.'
+            )
+        }), 500
+
+    return jsonify({'id': usuario_id, 'activo': nuevo_activo}), 200
 
 
 @app.errorhandler(500)

@@ -126,15 +126,83 @@ function doctorRowHtml(u) {
     const activo = u.activo !== false;
     const badgeClass = activo ? 'activo' : 'inactivo';
     const badgeLabel = activo ? 'Activo' : 'Inactivo';
-    return `<tr>
+    const actionLabel = activo ? 'Desactivar' : 'Reactivar';
+    const actionClass = activo ? 'btn-danger' : 'btn-secondary';
+    return `<tr data-usuario-id="${u.id}">
         <td>${u.nombre || '—'}</td>
         <td>${u.email || '—'}</td>
         <td>${u.especialidad || '—'}</td>
         <td>${u.cedula || '—'}</td>
         <td>${u.rol || '—'}</td>
         <td><span class="admin-status-badge ${badgeClass}">${badgeLabel}</span></td>
+        <td>
+            <button class="btn ${actionClass} btn-small toggle-activo-btn"
+                    style="max-width: none; width: auto;"
+                    data-usuario-id="${u.id}"
+                    data-nombre="${(u.nombre || '').replace(/"/g, '&quot;')}"
+                    data-target-activo="${!activo}">
+                ${actionLabel}
+            </button>
+        </td>
     </tr>`;
 }
+
+document.addEventListener('click', async (e) => {
+    const btn = e.target.closest('.toggle-activo-btn');
+    if (!btn) return;
+
+    const usuarioId = btn.dataset.usuarioId;
+    const nombre = btn.dataset.nombre || 'este doctor';
+    const targetActivo = btn.dataset.targetActivo === 'true';
+    const actionWord = targetActivo ? 'reactivar' : 'desactivar';
+
+    const confirmed = window.confirm(
+        `¿Seguro que deseas ${actionWord} a ${nombre}?` +
+        (targetActivo ? '' : ' Perderá acceso a la aplicación de inmediato.')
+    );
+    if (!confirmed) return;
+
+    btn.disabled = true;
+    const originalText = btn.textContent;
+    btn.textContent = 'Procesando...';
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/usuarios/${usuarioId}/activo`, {
+            method: 'PATCH',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ activo: targetActivo })
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            alert(data.error || 'No se pudo actualizar el estado del usuario.');
+            btn.disabled = false;
+            btn.textContent = originalText;
+            return;
+        }
+
+        const row = btn.closest('tr');
+        const badge = row.querySelector('.admin-status-badge');
+        badge.className = `admin-status-badge ${data.activo ? 'activo' : 'inactivo'}`;
+        badge.textContent = data.activo ? 'Activo' : 'Inactivo';
+
+        btn.dataset.targetActivo = String(!data.activo);
+        btn.className = `btn ${data.activo ? 'btn-danger' : 'btn-secondary'} btn-small toggle-activo-btn`;
+        btn.style.maxWidth = 'none';
+        btn.style.width = 'auto';
+        btn.disabled = false;
+        btn.textContent = data.activo ? 'Desactivar' : 'Reactivar';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] toggle activo error:', err);
+        alert('Error de red. Intente de nuevo.');
+        btn.disabled = false;
+        btn.textContent = originalText;
+    }
+});
 
 function addDoctorRow(u) {
     const tbody = document.getElementById('adminTableBody');
