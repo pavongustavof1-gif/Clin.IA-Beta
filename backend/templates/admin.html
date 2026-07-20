@@ -121,7 +121,38 @@
         <h1 class="admin-title">Administración de la Clínica<span id="adminClinicaNombre"></span></h1>
 
         <div class="card">
-            <h3>Médicos</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-sm);">
+                <h3 style="margin-bottom: 0;">Médicos</h3>
+                <button id="showAddDoctorBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Agregar doctor</button>
+            </div>
+
+            <div id="addDoctorForm" style="display: none; margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 1px solid var(--border-color);">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem;">
+                    <div>
+                        <label class="review-label" for="newDoctorNombre">Nombre</label>
+                        <input id="newDoctorNombre" class="review-input" type="text" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="review-label" for="newDoctorEmail">Correo electrónico</label>
+                        <input id="newDoctorEmail" class="review-input" type="email" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="review-label" for="newDoctorEspecialidad">Especialidad</label>
+                        <input id="newDoctorEspecialidad" class="review-input" type="text" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="review-label" for="newDoctorCedula">Cédula profesional</label>
+                        <input id="newDoctorCedula" class="review-input" type="text" autocomplete="off">
+                    </div>
+                </div>
+                <div id="addDoctorError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                <div id="addDoctorSuccess" style="display: none; color: #0F6E56; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 1rem;">
+                    <button id="submitAddDoctorBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Enviar invitación</button>
+                    <button id="cancelAddDoctorBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Cancelar</button>
+                </div>
+            </div>
+
             <div id="adminLoading" class="admin-loading">Cargando...</div>
             <div id="adminEmpty" class="admin-empty" style="display: none;">No hay médicos registrados en esta clínica.</div>
             <div id="adminTableWrap" class="admin-table-wrap" style="display: none;">

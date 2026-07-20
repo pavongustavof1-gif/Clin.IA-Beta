@@ -24,7 +24,127 @@ document.addEventListener('DOMContentLoaded', () => {
             logout();
         });
     }
+
+    const showBtn = document.getElementById('showAddDoctorBtn');
+    const cancelBtn = document.getElementById('cancelAddDoctorBtn');
+    const submitBtn = document.getElementById('submitAddDoctorBtn');
+    const form = document.getElementById('addDoctorForm');
+
+    if (showBtn) {
+        showBtn.addEventListener('click', () => {
+            form.style.display = 'block';
+            showBtn.style.display = 'none';
+        });
+    }
+
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', () => {
+            resetAddDoctorForm();
+        });
+    }
+
+    if (submitBtn) {
+        submitBtn.addEventListener('click', submitAddDoctor);
+    }
 });
+
+function resetAddDoctorForm() {
+    document.getElementById('addDoctorForm').style.display = 'none';
+    document.getElementById('showAddDoctorBtn').style.display = '';
+    document.getElementById('newDoctorNombre').value = '';
+    document.getElementById('newDoctorEmail').value = '';
+    document.getElementById('newDoctorEspecialidad').value = '';
+    document.getElementById('newDoctorCedula').value = '';
+    hideAddDoctorMessages();
+}
+
+function hideAddDoctorMessages() {
+    document.getElementById('addDoctorError').style.display = 'none';
+    document.getElementById('addDoctorSuccess').style.display = 'none';
+}
+
+async function submitAddDoctor() {
+    const nombre = document.getElementById('newDoctorNombre').value.trim();
+    const email = document.getElementById('newDoctorEmail').value.trim();
+    const especialidad = document.getElementById('newDoctorEspecialidad').value.trim();
+    const cedula = document.getElementById('newDoctorCedula').value.trim();
+
+    const errorEl = document.getElementById('addDoctorError');
+    const successEl = document.getElementById('addDoctorSuccess');
+    hideAddDoctorMessages();
+
+    if (!nombre || !email || !especialidad || !cedula) {
+        errorEl.textContent = 'Todos los campos son obligatorios.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    const submitBtn = document.getElementById('submitAddDoctorBtn');
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Enviando...';
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/usuarios`, {
+            method: 'POST',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nombre, email, especialidad, cedula })
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Error al invitar al doctor.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        addDoctorRow(data);
+
+        successEl.textContent = data.warning
+            ? `Doctor creado, pero: ${data.warning}`
+            : `Invitación enviada a ${data.email}`;
+        successEl.style.display = 'block';
+
+        document.getElementById('newDoctorNombre').value = '';
+        document.getElementById('newDoctorEmail').value = '';
+        document.getElementById('newDoctorEspecialidad').value = '';
+        document.getElementById('newDoctorCedula').value = '';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] submitAddDoctor error:', err);
+        errorEl.textContent = 'Error de red. Intente de nuevo.';
+        errorEl.style.display = 'block';
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Enviar invitación';
+    }
+}
+
+function doctorRowHtml(u) {
+    const activo = u.activo !== false;
+    const badgeClass = activo ? 'activo' : 'inactivo';
+    const badgeLabel = activo ? 'Activo' : 'Inactivo';
+    return `<tr>
+        <td>${u.nombre || '—'}</td>
+        <td>${u.email || '—'}</td>
+        <td>${u.especialidad || '—'}</td>
+        <td>${u.cedula || '—'}</td>
+        <td>${u.rol || '—'}</td>
+        <td><span class="admin-status-badge ${badgeClass}">${badgeLabel}</span></td>
+    </tr>`;
+}
+
+function addDoctorRow(u) {
+    const tbody = document.getElementById('adminTableBody');
+    const tableWrap = document.getElementById('adminTableWrap');
+    const emptyEl = document.getElementById('adminEmpty');
+
+    tbody.insertAdjacentHTML('beforeend', doctorRowHtml(u));
+    emptyEl.style.display = 'none';
+    tableWrap.style.display = 'block';
+}
 
 // Same token-presence + validity-check pattern as app.js, but this page
 // additionally requires rol === 'admin' — anything else bounces silently
@@ -95,19 +215,7 @@ async function loadUsuarios() {
             return;
         }
 
-        tbody.innerHTML = usuarios.map(u => {
-            const activo = u.activo !== false;
-            const badgeClass = activo ? 'activo' : 'inactivo';
-            const badgeLabel = activo ? 'Activo' : 'Inactivo';
-            return `<tr>
-                <td>${u.nombre || '—'}</td>
-                <td>${u.email || '—'}</td>
-                <td>${u.especialidad || '—'}</td>
-                <td>${u.cedula || '—'}</td>
-                <td>${u.rol || '—'}</td>
-                <td><span class="admin-status-badge ${badgeClass}">${badgeLabel}</span></td>
-            </tr>`;
-        }).join('');
+        tbody.innerHTML = usuarios.map(doctorRowHtml).join('');
 
         tableWrap.style.display = 'block';
 

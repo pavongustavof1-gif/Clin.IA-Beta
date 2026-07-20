@@ -7,7 +7,7 @@ from llm_processor import LLMProcessor
 from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
-from email_service import send_pdf_email
+from email_service import send_pdf_email, send_invite_email
 from auth import require_auth, require_admin
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -202,6 +202,43 @@ def _sb_log_lectura(session_id: str, usuario_id: str) -> None:
     req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='POST')
     with urllib.request.urlopen(req, timeout=5) as resp:
         resp.read()
+
+
+def _sb_generate_invite_link(email: str) -> tuple[str, str]:
+    """
+    Calls Supabase Admin API to create the auth identity and generate an
+    invite action_link, WITHOUT Supabase sending its own email (we send via
+    Resend instead). Returns (user_id, action_link). Raises on failure —
+    caller is responsible for treating this as a generic failure, NOT as
+    evidence of a duplicate email (duplicate-email detection happens
+    entirely via our own usuarios-table check, before this is ever called —
+    generate_link's own error behavior for duplicates is not reliably
+    consistent across Supabase versions/modes, so we don't lean on it).
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + '/auth/v1/admin/generate_link'
+    payload = json.dumps({'type': 'invite', 'email': email}, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='POST')
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+    return data['id'], data['action_link']
+
+
+def _sb_insert_usuario(body: dict) -> dict | None:
+    """Insert a usuarios row. Returns the created row or None on error."""
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/usuarios'
+    payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers=_sb_headers(extra={'Prefer': 'return=representation'}),
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read())
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.error(f"DB: Could not insert usuarios row: {e}")
+        return None
 
 
 def _sb_patch_job(job_id: str, body: dict) -> None:
@@ -1078,6 +1115,108 @@ def admin_usuarios():
         'clinica_nombre': clinica['nombre'],
         'doctores':       rows,
     }), 200
+
+
+@app.route('/api/admin/usuarios', methods=['POST'])
+@require_auth
+@require_admin
+def admin_create_usuario():
+    """
+    Invite a new doctor into the admin's own clinic. Creates the Supabase
+    auth identity via generate_link (invite type), inserts the usuarios
+    row, and emails the invite link via Resend.
+
+    rol is ALWAYS forced to 'medico' and clinica_id ALWAYS taken from
+    g.usuario — neither is ever read from the request body, so a tampered
+    request cannot create an admin or a cross-clinic user.
+    """
+    data = request.get_json(silent=True) or {}
+    nombre       = (data.get('nombre') or '').strip()
+    email        = (data.get('email') or '').strip().lower()
+    especialidad = (data.get('especialidad') or '').strip()
+    cedula       = (data.get('cedula') or '').strip()
+
+    if not nombre or not email or not especialidad or not cedula:
+        return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+    if '@' not in email or '.' not in email.split('@')[-1]:
+        return jsonify({'error': 'Correo electrónico inválido'}), 400
+
+    clinica_id = g.usuario['clinica_id']
+
+    # Security boundary: check OUR OWN usuarios table for this email,
+    # system-wide, BEFORE ever calling generate_link. We deliberately do
+    # NOT rely on generate_link's own duplicate-email error behavior —
+    # it isn't consistently reliable across Supabase versions/modes.
+    #
+    # Known limitation: this only catches emails that already have a
+    # usuarios row. An email could theoretically exist in Supabase's
+    # auth.users without a matching usuarios row (e.g. left over from a
+    # prior orphaned-user failure below) and would not be caught here.
+    # Acceptable gap: this app has no open registration — every real
+    # account is created through this exact endpoint or manual seeding,
+    # so that scenario should only ever arise from a previous failed
+    # invite attempt, which is already flagged for manual cleanup when it
+    # happens (see the orphaned-user handling further down).
+    existing = _sb_get(f"/rest/v1/usuarios?email=ilike.{email}&select=id&limit=1")
+    if existing is None:
+        return jsonify({'error': 'Error al validar el correo electrónico'}), 500
+    if existing:
+        return jsonify({'error': 'Este correo ya está registrado'}), 409
+
+    # Step (a): create the auth identity + invite link
+    try:
+        user_id, action_link = _sb_generate_invite_link(email)
+    except Exception as e:
+        logger.error(f"Admin: generate_link failed for {email}: {e}")
+        return jsonify({'error': 'No se pudo crear la invitación. Intente de nuevo.'}), 500
+
+    # Step (c): insert the usuarios row
+    nuevo_usuario = _sb_insert_usuario({
+        'id':           user_id,
+        'nombre':       nombre,
+        'email':        email,
+        'especialidad': especialidad,
+        'cedula':       cedula,
+        'rol':          'medico',
+        'clinica_id':   clinica_id,
+        'activo':       True,
+    })
+    if nuevo_usuario is None:
+        logger.error(
+            f"Admin: ORPHANED AUTH USER — generate_link succeeded for {email} "
+            f"(auth user_id={user_id}) but the usuarios insert failed. This "
+            f"auth user now exists in Supabase with no matching usuarios row "
+            f"and needs manual cleanup in the Supabase dashboard (Authentication "
+            f"> Users) before this email can be invited again."
+        )
+        return jsonify({
+            'error': (
+                'La invitación se creó en el sistema de autenticación pero no '
+                'se pudo guardar el registro del médico. Un usuario huérfano '
+                'puede existir y requiere limpieza manual en el panel de '
+                'Supabase antes de reintentar con este correo.'
+            )
+        }), 500
+
+    # Step (d): send the invite email via Resend — failure here is less
+    # severe than the orphaned-auth-user case above, since the usuarios
+    # row already exists; just needs a manual resend, not dashboard cleanup.
+    clinica = get_clinica_context(clinica_id)
+    email_sent = send_invite_email(email, nombre, clinica['nombre'], action_link)
+
+    response = {
+        'nombre':       nuevo_usuario['nombre'],
+        'email':        nuevo_usuario['email'],
+        'especialidad': nuevo_usuario['especialidad'],
+        'cedula':       nuevo_usuario['cedula'],
+        'rol':          nuevo_usuario['rol'],
+        'activo':       nuevo_usuario['activo'],
+    }
+    if not email_sent:
+        logger.warning(f"Admin: doctor {email} created but invite email failed to send.")
+        response['warning'] = 'Doctor creado pero el correo de invitación no pudo enviarse.'
+
+    return jsonify(response), 200
 
 
 @app.errorhandler(500)
