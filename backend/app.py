@@ -216,7 +216,11 @@ def _sb_generate_invite_link(email: str) -> tuple[str, str]:
     consistent across Supabase versions/modes, so we don't lean on it).
     """
     url = Config.SUPABASE_URL.rstrip('/') + '/auth/v1/admin/generate_link'
-    payload = json.dumps({'type': 'invite', 'email': email}, ensure_ascii=False).encode()
+    payload = json.dumps({
+        'type': 'invite',
+        'email': email,
+        'redirect_to': 'https://app.clinianotes.com/set-password',
+    }, ensure_ascii=False).encode()
     req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='POST')
     with urllib.request.urlopen(req, timeout=10) as resp:
         data = json.loads(resp.read())
@@ -451,6 +455,18 @@ def index():
 def login():
     return render_template(
         'login.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
+
+@app.route('/set-password')
+def set_password():
+    # Unconditional shell, same pattern as login() — no server-side session
+    # to gate on. The invite token itself (in the URL hash, processed
+    # client-side by supabase-js) is the credential; there's nothing for
+    # Flask to check on a plain page GET here.
+    return render_template(
+        'set-password.html',
         supabase_url=Config.SUPABASE_URL,
         supabase_anon_key=Config.SUPABASE_ANON_KEY
     )
