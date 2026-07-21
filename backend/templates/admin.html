@@ -218,6 +218,45 @@
                 </table>
             </div>
         </div>
+
+        <div class="card">
+            <h3 style="margin-bottom: var(--spacing-sm);">Búsqueda de Sesiones (ARCO)</h3>
+
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.85rem; align-items: end;">
+                <div>
+                    <label class="review-label" for="sessionSearchDesde">Desde</label>
+                    <input id="sessionSearchDesde" class="review-input" type="date">
+                </div>
+                <div>
+                    <label class="review-label" for="sessionSearchHasta">Hasta</label>
+                    <input id="sessionSearchHasta" class="review-input" type="date">
+                </div>
+                <div>
+                    <label class="review-label" for="sessionSearchDoctor">Doctor</label>
+                    <select id="sessionSearchDoctor" class="review-input">
+                        <option value="">Todos los doctores</option>
+                    </select>
+                </div>
+                <button id="sessionSearchBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Buscar</button>
+            </div>
+
+            <div id="sessionSearchLoading" class="admin-loading" style="display: none;">Buscando...</div>
+            <div id="sessionSearchEmpty" class="admin-empty" style="display: none;">No se encontraron sesiones para estos filtros.</div>
+            <div id="sessionSearchTableWrap" class="admin-table-wrap" style="display: none; margin-top: var(--spacing-md);">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>ID de sesión</th>
+                            <th>Fecha y hora</th>
+                            <th>Doctor</th>
+                            <th>Estado</th>
+                            <th>Adenda</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sessionSearchTableBody"></tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='admin.js') }}"></script>

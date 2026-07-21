@@ -46,7 +46,100 @@ document.addEventListener('DOMContentLoaded', () => {
     if (submitBtn) {
         submitBtn.addEventListener('click', submitAddDoctor);
     }
+
+    const sessionSearchBtn = document.getElementById('sessionSearchBtn');
+    if (sessionSearchBtn) {
+        sessionSearchBtn.addEventListener('click', searchSessions);
+    }
 });
+
+function populateDoctorFilter(usuarios) {
+    const select = document.getElementById('sessionSearchDoctor');
+    if (!select) return;
+    // Keep the existing "Todos los doctores" default option, append the rest
+    const existingOptions = new Set(Array.from(select.options).map(o => o.value));
+    usuarios.forEach(u => {
+        if (!existingOptions.has(u.id)) {
+            const opt = document.createElement('option');
+            opt.value = u.id;
+            opt.textContent = u.nombre;
+            select.appendChild(opt);
+        }
+    });
+}
+
+function sessionStatusLabel(status) {
+    if (status === 'confirmed') return 'Confirmada';
+    if (status === 'cancelled') return 'Cancelada';
+    if (status === 'pending_review') return 'Pendiente';
+    return status || '—';
+}
+
+async function searchSessions() {
+    const desde = document.getElementById('sessionSearchDesde').value;
+    const hasta = document.getElementById('sessionSearchHasta').value;
+    const usuarioId = document.getElementById('sessionSearchDoctor').value;
+
+    const loadingEl = document.getElementById('sessionSearchLoading');
+    const emptyEl = document.getElementById('sessionSearchEmpty');
+    const tableWrap = document.getElementById('sessionSearchTableWrap');
+    const tbody = document.getElementById('sessionSearchTableBody');
+
+    loadingEl.style.display = 'block';
+    emptyEl.style.display = 'none';
+    tableWrap.style.display = 'none';
+
+    const params = new URLSearchParams();
+    if (desde) params.set('desde', desde);
+    if (hasta) params.set('hasta', hasta);
+    if (usuarioId) params.set('usuario_id', usuarioId);
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/sessions?${params.toString()}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+        if (res.status === 403) {
+            loadingEl.textContent = 'No autorizado.';
+            return;
+        }
+        if (!res.ok) throw new Error('Error al buscar sesiones');
+
+        const sessions = await res.json();
+        loadingEl.style.display = 'none';
+
+        if (!sessions.length) {
+            emptyEl.textContent = 'No se encontraron sesiones para estos filtros.';
+            emptyEl.style.display = 'block';
+            return;
+        }
+
+        tbody.innerHTML = sessions.map(s => {
+            const fecha = s.timestamp
+                ? new Date(s.timestamp).toLocaleString('es-MX', {
+                    day: '2-digit', month: 'short', year: 'numeric',
+                    hour: '2-digit', minute: '2-digit'
+                  })
+                : '—';
+            return `<tr>
+                <td>${s.session_id || '—'}</td>
+                <td>${fecha}</td>
+                <td>${s.doctor_nombre || '—'}</td>
+                <td>${sessionStatusLabel(s.status)}</td>
+                <td>${s.tiene_adenda ? 'Sí' : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        tableWrap.style.display = 'block';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] searchSessions error:', err);
+        loadingEl.style.display = 'none';
+        emptyEl.textContent = 'Error al buscar sesiones. Intente de nuevo.';
+        emptyEl.style.display = 'block';
+    }
+}
 
 function resetAddDoctorForm() {
     document.getElementById('addDoctorForm').style.display = 'none';
@@ -286,6 +379,7 @@ async function loadUsuarios() {
         tbody.innerHTML = usuarios.map(doctorRowHtml).join('');
 
         tableWrap.style.display = 'block';
+        populateDoctorFilter(usuarios);
 
     } catch (err) {
         console.error('[ClinIA Admin] loadUsuarios error:', err);

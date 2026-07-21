@@ -16,7 +16,7 @@ import tempfile
 import json
 import urllib.request
 import urllib.error
-from datetime import datetime
+from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 
 
@@ -1327,6 +1327,72 @@ def admin_set_usuario_activo(usuario_id):
         }), 500
 
     return jsonify({'id': usuario_id, 'activo': nuevo_activo}), 200
+
+
+@app.route('/api/admin/sessions', methods=['GET'])
+@require_auth
+@require_admin
+def admin_sessions():
+    """
+    ADM-1 Stage D — ARCO session search, list-only. Returns session_id,
+    timestamp, doctor_nombre, status, tiene_adenda for each matching
+    session. Does NOT return structured_data or full note content —
+    that's Stage E (detail view).
+    """
+    clinica_id = g.usuario['clinica_id']
+
+    desde = request.args.get('desde', '').strip()
+    hasta = request.args.get('hasta', '').strip()
+    usuario_id_filter = request.args.get('usuario_id', '').strip()
+
+    # Default to the last 30 days rather than an unbounded clinic-wide
+    # history query when no range is given.
+    if not desde and not hasta:
+        hasta_dt = datetime.now()
+        desde_dt = hasta_dt - timedelta(days=30)
+        desde = desde_dt.strftime('%Y-%m-%d')
+        hasta = hasta_dt.strftime('%Y-%m-%d')
+
+    filters = [f'clinica_id=eq.{clinica_id}']
+    if desde:
+        filters.append(f'timestamp=gte.{desde}')
+    if hasta:
+        # hasta is a date (YYYY-MM-DD); make it inclusive of the whole day
+        filters.append(f'timestamp=lte.{hasta}T23:59:59.999')
+    if usuario_id_filter:
+        filters.append(f'usuario_id=eq.{usuario_id_filter}')
+
+    path = (
+        f'/rest/v1/sesiones'
+        f'?{"&".join(filters)}'
+        f'&select=session_id,timestamp,usuario_id,status,addenda'
+        f'&order=timestamp.desc'
+    )
+    rows = _sb_get(path)
+    if rows is None:
+        return jsonify({'error': 'Error al consultar sesiones'}), 500
+
+    # Resolve doctor names via a plain second query per DISTINCT usuario_id
+    # (not a PostgREST embed — same reasoning as item 24 Stage 4: embeds
+    # couldn't be verified reliably). This is new caching logic for this
+    # stage, not reused/tested code from elsewhere.
+    nombre_cache = {}
+    for r in rows:
+        uid = r.get('usuario_id')
+        if uid and uid not in nombre_cache:
+            nombre_cache[uid] = get_usuario_nombre(uid)
+
+    result = [
+        {
+            'session_id':    r.get('session_id'),
+            'timestamp':     r.get('timestamp'),
+            'doctor_nombre': nombre_cache.get(r.get('usuario_id'), ''),
+            'status':        r.get('status'),
+            'tiene_adenda':  bool(r.get('addenda')) and len(r.get('addenda')) > 0,
+        }
+        for r in rows
+    ]
+    return jsonify(result), 200
 
 
 @app.errorhandler(500)
