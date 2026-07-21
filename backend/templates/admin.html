@@ -99,14 +99,11 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            /* Measured total sticky width (Estado + Adenda) = 269.9px in
-               the engine measured — 6px more than the doctor table's,
-               because "Confirmada"/"Cancelada"/"Pendiente" render
-               slightly wider than the doctor table's Estado content once
-               padding is included. +15px safety margin on top of that
-               (see note above) — this is what actually closes the bug,
-               not the exact measured value alone. */
-            right: 285px;
+            /* Updated alongside the Adenda min-width correction below
+               (164px -> 90px): new measured total sticky width (Estado
+               105.9px + Adenda 84.6px) ≈ 191px, +15px safety margin
+               (see note above) = ~206px, rounded to 210px. */
+            right: 210px;
             width: 24px;
             background: linear-gradient(to right, transparent, var(--bg-card));
             pointer-events: none;
@@ -140,6 +137,26 @@
 
         .admin-table tr:last-child td {
             border-bottom: none;
+        }
+
+        /* SESSIONS TABLE ONLY: table-layout: fixed + explicit <colgroup>
+           widths + a fixed pixel table width (NOT 100%). This is the
+           documented workaround for a WebKit/Safari-specific bug where
+           position: sticky on table cells combined with the default
+           table-layout: auto can cause OTHER cells in the same row to be
+           mis-sized (reported: Doctor column "almost invisible", Fecha y
+           hora truncated) — this did not reproduce in every engine tested,
+           consistent with it being a Safari-specific rendering quirk
+           rather than a pure CSS logic error.
+           IMPORTANT: width is a fixed px sum (260+190+220+106+90=866px),
+           not 100% — with table-layout: fixed, a 100%-width table would
+           always exactly fit the container, silently defeating the
+           overflow-x: auto / horizontal-scroll reachability design this
+           table depends on at narrow viewports. Keeping an explicit pixel
+           total preserves "wider than container -> scrolls" behavior. */
+        #sessionSearchTableWrap .admin-table {
+            table-layout: fixed;
+            width: 866px;
         }
 
         /* Sticky Estado/Acciones (DOCTOR TABLE ONLY — scoped to #adminTableWrap,
@@ -178,20 +195,27 @@
         }
 
         /* Sticky Estado/Adenda (SESSIONS TABLE ONLY — scoped to
-           #sessionSearchTableWrap). Values happen to equal the doctor
-           table's today (both columns' content is short enough that the
-           doctor table's offsets left slack rather than overlap when this
-           was still a shared rule — verified by measurement, not
-           assumed), but this is now an independent rule specifically for
-           THIS table's own content. Stage E is expected to add an
-           Acciones column here (PDF download/addendum/cancellation on
-           clickable rows) — when that happens, re-measure THIS table's
-           actual rendered widths and update only this rule; it can no
-           longer affect or be affected by the doctor table's offsets. */
+           #sessionSearchTableWrap). Independent rule for THIS table's
+           own content — do not copy the doctor table's values.
+           CORRECTED: Adenda previously used 164px (copied from the
+           doctor table's Acciones button width) without checking it
+           against Adenda's actual content ("Sí"/"—", header "Adenda").
+           Measured directly: Adenda's real natural width is 84.6px
+           (the header text itself, not the short cell values) —
+           reserving 164px wasted ~80px of sticky-column space that was
+           squeezing the non-sticky columns (Doctor, Fecha y hora) into
+           too little room on narrower viewports (reported: Doctor
+           "almost invisible", Fecha y hora truncated). Estado's real
+           width (105.9px, "Confirmada"/"Cancelada") was already
+           reasonably matched by the prior 100px min-width — left as-is.
+           Stage E is expected to add an Acciones column here (PDF
+           download/addendum/cancellation) — when that happens,
+           re-measure THIS table's actual rendered widths again; it can
+           no longer affect or be affected by the doctor table's offsets. */
         #sessionSearchTableWrap .admin-table th:nth-last-child(2),
         #sessionSearchTableWrap .admin-table td:nth-last-child(2) {
             position: sticky;
-            right: 164px;
+            right: 90px;
             min-width: 100px;
             background: var(--bg-card);
             z-index: 2;
@@ -201,7 +225,7 @@
         #sessionSearchTableWrap .admin-table td:last-child {
             position: sticky;
             right: 0;
-            min-width: 164px;
+            min-width: 90px;
             background: var(--bg-card);
             z-index: 2;
         }
@@ -323,6 +347,13 @@
             <div id="sessionSearchEmpty" class="admin-empty" style="display: none;">No se encontraron sesiones para estos filtros.</div>
             <div id="sessionSearchTableWrap" class="admin-table-wrap" style="display: none; margin-top: var(--spacing-md);">
                 <table class="admin-table">
+                    <colgroup>
+                        <col style="width: 260px;">
+                        <col style="width: 190px;">
+                        <col style="width: 220px;">
+                        <col style="width: 106px;">
+                        <col style="width: 90px;">
+                    </colgroup>
                     <thead>
                         <tr>
                             <th>ID de sesión</th>
