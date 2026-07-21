@@ -1303,11 +1303,43 @@ async function openHistoryDetail(sessionId) {
         if (!res.ok) throw new Error('Error al cargar sesión');
 
         const data = await res.json();
-        renderSessionDetail(elements.historialDetailContent, data, { isAdmin: false });
+        renderSessionDetail(elements.historialDetailContent, data, {
+            isAdmin: false,
+            canDownloadPdf: true,
+            onDownloadPdf: () => downloadHistorialSessionPdf(sessionId)
+        });
 
     } catch (err) {
         console.error('[ClinIA] openHistoryDetail error:', err);
         elements.historialDetailContent.innerHTML = '<p>Error al cargar la nota. Intente de nuevo.</p>';
+    }
+}
+
+async function downloadHistorialSessionPdf(sessionId) {
+    // Same owner-only GET /api/download-pdf/<id> endpoint and blob-download
+    // pattern already used by the main downloadPdfBtn handler above — no
+    // new backend route, just reused for a session opened via Historial.
+    try {
+        const response = await fetch(`${API_BASE_URL}/api/download-pdf/${sessionId}`, {
+            headers: getAuthHeaders()
+        });
+        if (response.status === 401) return handleSessionExpired();
+        if (!response.ok) {
+            showError('Error al descargar el PDF');
+            return;
+        }
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ClinIA_${sessionId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (error) {
+        console.error('[ClinIA] Historial PDF download error:', error);
+        showError('Error al descargar el PDF');
     }
 }
 

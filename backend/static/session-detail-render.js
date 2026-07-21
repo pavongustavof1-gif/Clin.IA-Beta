@@ -1,7 +1,12 @@
 // frontend/session-detail-render.js
 // Shared read-only session detail rendering, used by both:
-//   - index.html's Historial view (item 24) — options: { isAdmin: false }
-//   - admin.html's ARCO session detail (ADM-1 Stage E) — { isAdmin: true, onDownloadPdf }
+//   - index.html's Historial view (item 24) — { isAdmin: false, canDownloadPdf: true, onDownloadPdf }
+//   - admin.html's ARCO session detail (ADM-1 Stage E) — { isAdmin: true, canDownloadPdf: true, onDownloadPdf }
+// isAdmin and canDownloadPdf are independent: isAdmin gates admin-only
+// actions (Stage F/G), canDownloadPdf gates the PDF button regardless of
+// caller role — a doctor viewing their own session and an admin viewing
+// any clinic session both want that button, via two different backend
+// authorization paths (owner-only vs clinic-wide admin route).
 //
 // generateFormattedHTML() extracted from app.js unchanged — confirmed pure
 // display markup (no inputs/textareas/listeners), safe to reuse verbatim.
@@ -191,11 +196,17 @@ function generateFormattedHTML(data) {
  *
  * @param {HTMLElement} container - element to render into (innerHTML replaced)
  * @param {object} sessionData - response from GET /api/patient-history/<id>
- *   ({ session_id, structured_data, addenda, autor_nombre? })
+ *   ({ session_id, timestamp, structured_data, addenda, autor_nombre? })
  * @param {object} options
- * @param {boolean} [options.isAdmin=false] - when true, shows admin-only actions
- * @param {function} [options.onDownloadPdf] - called when "Descargar PDF" is
- *   clicked (isAdmin only). Not implemented if isAdmin is false.
+ * @param {boolean} [options.isAdmin=false] - gates admin-only actions
+ *   (Stage F/G's addendum-write and cancel buttons, when built). Does
+ *   NOT gate PDF download — see canDownloadPdf, a separate authorization
+ *   path (doctor-owner vs admin-clinic-wide) that happens to want the
+ *   same button.
+ * @param {boolean} [options.canDownloadPdf=false] - independently gates
+ *   the "Descargar PDF" button's visibility, regardless of isAdmin.
+ * @param {function} [options.onDownloadPdf] - called when "Descargar PDF"
+ *   is clicked. Only wired up if canDownloadPdf is true.
  * @param {function} [options.onAddAddendum] - extension point for Stage F
  *   (addendum-writing). Not implemented this stage — reserved so this
  *   function's shape doesn't need reworking again when Stage F lands.
@@ -203,16 +214,30 @@ function generateFormattedHTML(data) {
  *   (session cancellation). Not implemented this stage.
  */
 function renderSessionDetail(container, sessionData, options = {}) {
-    const { isAdmin = false, onDownloadPdf, onAddAddendum, onCancel } = options;
+    const { isAdmin = false, canDownloadPdf = false, onDownloadPdf, onAddAddendum, onCancel } = options;
     const sd = sessionData.structured_data || {};
 
-    let html = `<h3 style="margin-bottom: 1rem;">Nota de Consulta</h3>`;
+    let html = `<h3 style="margin-bottom: 0.25rem;">Nota de Consulta</h3>`;
+
+    // Session identifier + fully-formatted date/time — renders for every
+    // caller regardless of isAdmin/canDownloadPdf, since this is plain
+    // information display (closes the gap where a doctor had no way to
+    // reference a specific session's identifier for ARCO purposes).
+    const fechaCompleta = sessionData.timestamp
+        ? new Date(sessionData.timestamp).toLocaleString('es-MX', {
+            day: '2-digit', month: 'long', year: 'numeric',
+            hour: '2-digit', minute: '2-digit', second: '2-digit'
+          })
+        : '—';
+    html += `<p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
+        ID de sesión: <strong>${sessionData.session_id || '—'}</strong> · ${fechaCompleta}
+    </p>`;
 
     if (sessionData.autor_nombre) {
         html += `<div class="historial-autor-banner">Nota escrita por Dr(a). ${sessionData.autor_nombre}</div>`;
     }
 
-    if (isAdmin) {
+    if (canDownloadPdf) {
         html += `<div class="admin-detail-actions" style="margin-bottom: 1rem; display: flex; gap: 0.5rem;">
             <button id="adminDetailDownloadPdfBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Descargar PDF</button>
         </div>`;
@@ -236,7 +261,7 @@ function renderSessionDetail(container, sessionData, options = {}) {
 
     container.innerHTML = html;
 
-    if (isAdmin && typeof onDownloadPdf === 'function') {
+    if (canDownloadPdf && typeof onDownloadPdf === 'function') {
         const btn = container.querySelector('#adminDetailDownloadPdfBtn');
         if (btn) btn.addEventListener('click', onDownloadPdf);
     }

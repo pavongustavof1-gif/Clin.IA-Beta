@@ -1095,7 +1095,7 @@ def patient_history_detail(session_id):
     rows = _sb_get(
         f'/rest/v1/sesiones'
         f'?session_id=eq.{session_id}'
-        f'&select=session_id,usuario_id,clinica_id,structured_data,addenda'
+        f'&select=session_id,usuario_id,clinica_id,timestamp,structured_data,addenda'
         f'&limit=1'
     )
     if not rows:
@@ -1116,6 +1116,7 @@ def patient_history_detail(session_id):
 
     response = {
         'session_id':      row['session_id'],
+        'timestamp':       row.get('timestamp'),
         'structured_data': row['structured_data'],
         'addenda':         row.get('addenda') or [],
     }

@@ -181,6 +181,7 @@ async function openSessionDetail(sessionId) {
         const data = await res.json();
         renderSessionDetail(content, data, {
             isAdmin: true,
+            canDownloadPdf: true,
             onDownloadPdf: () => downloadAdminSessionPdf(sessionId)
         });
 
