@@ -97,8 +97,11 @@
             border-bottom: none;
         }
 
-        /* Sticky Estado/Acciones — stay visible/reachable regardless of
-           viewport width or whether the user discovers horizontal scroll.
+        /* Sticky Estado/Acciones (DOCTOR TABLE ONLY — scoped to #adminTableWrap,
+           deliberately NOT a shared .admin-table rule, so this table's
+           offsets can never silently couple with the sessions table's).
+           Stay visible/reachable regardless of viewport width or whether
+           the user discovers horizontal scroll.
            NOTE: .admin-table has no hover/zebra-striping today, so a flat
            background: var(--bg-card) here matches every row correctly. If
            hover or striping is ever added to this table, these sticky
@@ -111,16 +114,43 @@
            guessed value). If Acciones' content ever changes (longer
            label, added icon, etc.), re-measure and update both this
            min-width and Estado's right offset together. */
-        .admin-table th:nth-last-child(2),
-        .admin-table td:nth-last-child(2) {
+        #adminTableWrap .admin-table th:nth-last-child(2),
+        #adminTableWrap .admin-table td:nth-last-child(2) {
             position: sticky;
             right: 164px;
             min-width: 100px;
             background: var(--bg-card);
         }
 
-        .admin-table th:last-child,
-        .admin-table td:last-child {
+        #adminTableWrap .admin-table th:last-child,
+        #adminTableWrap .admin-table td:last-child {
+            position: sticky;
+            right: 0;
+            min-width: 164px;
+            background: var(--bg-card);
+        }
+
+        /* Sticky Estado/Adenda (SESSIONS TABLE ONLY — scoped to
+           #sessionSearchTableWrap). Values happen to equal the doctor
+           table's today (both columns' content is short enough that the
+           doctor table's offsets left slack rather than overlap when this
+           was still a shared rule — verified by measurement, not
+           assumed), but this is now an independent rule specifically for
+           THIS table's own content. Stage E is expected to add an
+           Acciones column here (PDF download/addendum/cancellation on
+           clickable rows) — when that happens, re-measure THIS table's
+           actual rendered widths and update only this rule; it can no
+           longer affect or be affected by the doctor table's offsets. */
+        #sessionSearchTableWrap .admin-table th:nth-last-child(2),
+        #sessionSearchTableWrap .admin-table td:nth-last-child(2) {
+            position: sticky;
+            right: 164px;
+            min-width: 100px;
+            background: var(--bg-card);
+        }
+
+        #sessionSearchTableWrap .admin-table th:last-child,
+        #sessionSearchTableWrap .admin-table td:last-child {
             position: sticky;
             right: 0;
             min-width: 164px;
