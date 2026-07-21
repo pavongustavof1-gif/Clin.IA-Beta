@@ -27,7 +27,7 @@
         body.auth-pending { visibility: hidden; }
 
         .admin-container {
-            max-width: 960px;
+            max-width: 1200px;
             margin: 0 auto;
             padding: var(--spacing-lg) var(--spacing-md);
         }
@@ -50,6 +50,22 @@
 
         .admin-table-wrap {
             overflow-x: auto;
+            position: relative;
+        }
+
+        /* Scroll-fade cue: sits just left of the sticky Estado/Acciones
+           columns. CSS-only — when the table isn't wide enough to need
+           scrolling, this just sits harmlessly at the table's own edge;
+           when it does scroll, it hints there's more content underneath. */
+        .admin-table-wrap::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            right: 264px; /* Estado (100px) + Acciones (164px, see note below) */
+            width: 24px;
+            background: linear-gradient(to right, transparent, var(--bg-card));
+            pointer-events: none;
         }
 
         .admin-table {
@@ -79,6 +95,36 @@
 
         .admin-table tr:last-child td {
             border-bottom: none;
+        }
+
+        /* Sticky Estado/Acciones — stay visible/reachable regardless of
+           viewport width or whether the user discovers horizontal scroll.
+           NOTE: .admin-table has no hover/zebra-striping today, so a flat
+           background: var(--bg-card) here matches every row correctly. If
+           hover or striping is ever added to this table, these sticky
+           cells will need matching per-state backgrounds too, or they'll
+           show a visible seam against the rest of the row on hover/stripe.
+           NOTE: Estado's `right` offset MUST match Acciones' actual
+           rendered width exactly, or the two sticky columns overlap while
+           stuck (verified by measurement — the "Desactivar"/"Reactivar"
+           button + cell padding renders Acciones at ~163px, not a rounder
+           guessed value). If Acciones' content ever changes (longer
+           label, added icon, etc.), re-measure and update both this
+           min-width and Estado's right offset together. */
+        .admin-table th:nth-last-child(2),
+        .admin-table td:nth-last-child(2) {
+            position: sticky;
+            right: 164px;
+            min-width: 100px;
+            background: var(--bg-card);
+        }
+
+        .admin-table th:last-child,
+        .admin-table td:last-child {
+            position: sticky;
+            right: 0;
+            min-width: 164px;
+            background: var(--bg-card);
         }
 
         .admin-status-badge {
