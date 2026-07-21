@@ -1395,6 +1395,60 @@ def admin_sessions():
     return jsonify(result), 200
 
 
+@app.route('/api/admin/session/<session_id>/pdf', methods=['GET'])
+@require_auth
+@require_admin
+def admin_download_pdf(session_id):
+    """
+    ADM-1 Stage E — admin-authorized PDF download for any session in the
+    admin's own clinic. Deliberately a SEPARATE route from the doctor's
+    owner-only /api/download-pdf/<id> — that endpoint is not broadened to
+    clinic-wide, this is its own explicitly-gated admin route, reusing the
+    same underlying pdf_generator invocation.
+
+    doctor_info reflects the SESSION'S AUTHOR (not the admin viewing it) —
+    the PDF represents that doctor's clinical note.
+    """
+    try:
+        rows = _sb_get(
+            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'&select=usuario_id,clinica_id,structured_data&limit=1'
+        )
+        if not rows:
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+
+        row = rows[0]
+        if row.get('clinica_id') != g.usuario['clinica_id']:
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+
+        structured_data = row.get('structured_data')
+        if not structured_data:
+            return jsonify({'error': 'Datos de sesión no disponibles'}), 404
+
+        autor_usuario_id = row.get('usuario_id')
+        clinica      = get_clinica_context(row.get('clinica_id'))
+        cedula       = get_usuario_cedula(autor_usuario_id)
+        doctor_info  = {
+            'nombre':         get_usuario_nombre(autor_usuario_id),
+            'cedula':         cedula,
+            'clinica_nombre': clinica['nombre'],
+            'clinica_color':  clinica['color_primario'],
+        }
+
+        pdf_bytes = pdf_generator.generate_pdf(
+            structured_data, session_id=session_id, doctor_info=doctor_info
+        )
+        logger.info(f"PDF: Admin-regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
+
+        response = app.response_class(response=pdf_bytes, mimetype='application/pdf')
+        response.headers['Content-Disposition'] = f'attachment; filename="ClinIA_{session_id}.pdf"'
+        return response
+
+    except Exception as e:
+        logger.error(f"PDF: Admin download failed for {session_id}: {e}")
+        return jsonify({'error': 'Error al generar el PDF'}), 500
+
+
 @app.errorhandler(500)
 def internal_server_error(error):
     return jsonify({

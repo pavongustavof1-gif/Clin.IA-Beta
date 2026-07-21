@@ -122,7 +122,7 @@ async function searchSessions() {
                     hour: '2-digit', minute: '2-digit'
                   })
                 : '—';
-            return `<tr>
+            return `<tr class="session-row" data-session-id="${s.session_id}" style="cursor: pointer;">
                 <td>${s.session_id || '—'}</td>
                 <td>${fecha}</td>
                 <td>${s.doctor_nombre || '—'}</td>
@@ -138,6 +138,80 @@ async function searchSessions() {
         loadingEl.style.display = 'none';
         emptyEl.textContent = 'Error al buscar sesiones. Intente de nuevo.';
         emptyEl.style.display = 'block';
+    }
+}
+
+document.addEventListener('click', (e) => {
+    const row = e.target.closest('.session-row');
+    if (!row) return;
+    openSessionDetail(row.dataset.sessionId);
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+    const backBtn = document.getElementById('sessionDetailBackBtn');
+    if (backBtn) {
+        backBtn.addEventListener('click', () => {
+            document.getElementById('sessionDetailPanel').style.display = 'none';
+            document.getElementById('sessionSearchTableWrap').style.display = 'block';
+        });
+    }
+});
+
+async function openSessionDetail(sessionId) {
+    const tableWrap = document.getElementById('sessionSearchTableWrap');
+    const panel = document.getElementById('sessionDetailPanel');
+    const content = document.getElementById('sessionDetailContent');
+
+    tableWrap.style.display = 'none';
+    panel.style.display = 'block';
+    content.innerHTML = '<p style="color: var(--text-secondary);">Cargando...</p>';
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/patient-history/${sessionId}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+        if (res.status === 404) {
+            content.innerHTML = '<p>Sesión no encontrada.</p>';
+            return;
+        }
+        if (!res.ok) throw new Error('Error al cargar sesión');
+
+        const data = await res.json();
+        renderSessionDetail(content, data, {
+            isAdmin: true,
+            onDownloadPdf: () => downloadAdminSessionPdf(sessionId)
+        });
+
+    } catch (err) {
+        console.error('[ClinIA Admin] openSessionDetail error:', err);
+        content.innerHTML = '<p>Error al cargar la nota. Intente de nuevo.</p>';
+    }
+}
+
+async function downloadAdminSessionPdf(sessionId) {
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/pdf`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) {
+            alert('Error al descargar el PDF.');
+            return;
+        }
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ClinIA_${sessionId}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+    } catch (err) {
+        console.error('[ClinIA Admin] downloadAdminSessionPdf error:', err);
+        alert('Error al descargar el PDF.');
     }
 }
 
