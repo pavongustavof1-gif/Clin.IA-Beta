@@ -62,20 +62,36 @@
            scoped per table: each table's actual combined sticky-column
            width is different, and a shared offset silently drifts wrong
            the moment one table's columns differ from the other's.
-           Offsets below are MEASURED, not assumed — see notes at each. */
+
+           IMPORTANT: pixel-matching this offset to a measured sticky-
+           column width is inherently fragile — text rendering (and
+           therefore column width) varies slightly across browsers/font
+           engines (confirmed: a fix measured in one rendering engine
+           reintroduced the exact same bleed-into-text bug in Safari,
+           despite being pixel-exact in the engine it was measured in).
+           So this is deliberately treated as two separate, redundant
+           defenses rather than one precise number:
+             1. z-index: the sticky cells (below) get z-index: 2, these
+                fade layers get z-index: 0 — the sticky cell's own solid
+                background always wins any overlap, so even if the fade
+                extends a few px too far right, it's simply hidden behind
+                the opaque sticky cell rather than bleeding over its text.
+             2. A real ~15px safety margin is added on top of the measured
+                width (not just rounding to the nearest px), so minor
+                cross-browser drift doesn't need z-index as a last resort. */
         #adminTableWrap.admin-table-wrap::after {
             content: '';
             position: absolute;
             top: 0;
             bottom: 0;
             /* Measured total sticky width (Estado + Acciones) = 264.0px
-               exactly — confirmed via getBoundingClientRect(), matches
-               the 100px/164px min-widths with no drift for this table's
-               content. */
-            right: 264px;
+               in the engine measured; +15px safety margin against
+               cross-browser font-rendering drift (see note above). */
+            right: 279px;
             width: 24px;
             background: linear-gradient(to right, transparent, var(--bg-card));
             pointer-events: none;
+            z-index: 0;
         }
 
         #sessionSearchTableWrap.admin-table-wrap::after {
@@ -83,17 +99,18 @@
             position: absolute;
             top: 0;
             bottom: 0;
-            /* Measured total sticky width (Estado + Adenda) = 269.9px —
-               6px more than the doctor table's, because "Confirmada"/
-               "Cancelada"/"Pendiente" render slightly wider than the
-               100px Estado min-width once padding is included. Rounded
-               up to 270px. This was the exact bug: reusing the doctor
-               table's 264px here landed the fade ~6px INSIDE the Estado
-               column, bleeding across the status text itself. */
-            right: 270px;
+            /* Measured total sticky width (Estado + Adenda) = 269.9px in
+               the engine measured — 6px more than the doctor table's,
+               because "Confirmada"/"Cancelada"/"Pendiente" render
+               slightly wider than the doctor table's Estado content once
+               padding is included. +15px safety margin on top of that
+               (see note above) — this is what actually closes the bug,
+               not the exact measured value alone. */
+            right: 285px;
             width: 24px;
             background: linear-gradient(to right, transparent, var(--bg-card));
             pointer-events: none;
+            z-index: 0;
         }
 
         .admin-table {
@@ -148,6 +165,7 @@
             right: 164px;
             min-width: 100px;
             background: var(--bg-card);
+            z-index: 2;
         }
 
         #adminTableWrap .admin-table th:last-child,
@@ -156,6 +174,7 @@
             right: 0;
             min-width: 164px;
             background: var(--bg-card);
+            z-index: 2;
         }
 
         /* Sticky Estado/Adenda (SESSIONS TABLE ONLY — scoped to
@@ -175,6 +194,7 @@
             right: 164px;
             min-width: 100px;
             background: var(--bg-card);
+            z-index: 2;
         }
 
         #sessionSearchTableWrap .admin-table th:last-child,
@@ -183,6 +203,7 @@
             right: 0;
             min-width: 164px;
             background: var(--bg-card);
+            z-index: 2;
         }
 
         .admin-status-badge {
