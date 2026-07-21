@@ -53,16 +53,44 @@
             position: relative;
         }
 
-        /* Scroll-fade cue: sits just left of the sticky Estado/Acciones
-           columns. CSS-only — when the table isn't wide enough to need
+        /* Scroll-fade cue: sits just left of each table's own sticky
+           columns. CSS-only — when a table isn't wide enough to need
            scrolling, this just sits harmlessly at the table's own edge;
-           when it does scroll, it hints there's more content underneath. */
-        .admin-table-wrap::after {
+           when it does scroll, it hints there's more content underneath.
+           Scoped per wrapper ID (NOT a shared .admin-table-wrap::after
+           rule) for the same reason the sticky column positioning is
+           scoped per table: each table's actual combined sticky-column
+           width is different, and a shared offset silently drifts wrong
+           the moment one table's columns differ from the other's.
+           Offsets below are MEASURED, not assumed — see notes at each. */
+        #adminTableWrap.admin-table-wrap::after {
             content: '';
             position: absolute;
             top: 0;
             bottom: 0;
-            right: 264px; /* Estado (100px) + Acciones (164px, see note below) */
+            /* Measured total sticky width (Estado + Acciones) = 264.0px
+               exactly — confirmed via getBoundingClientRect(), matches
+               the 100px/164px min-widths with no drift for this table's
+               content. */
+            right: 264px;
+            width: 24px;
+            background: linear-gradient(to right, transparent, var(--bg-card));
+            pointer-events: none;
+        }
+
+        #sessionSearchTableWrap.admin-table-wrap::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            /* Measured total sticky width (Estado + Adenda) = 269.9px —
+               6px more than the doctor table's, because "Confirmada"/
+               "Cancelada"/"Pendiente" render slightly wider than the
+               100px Estado min-width once padding is included. Rounded
+               up to 270px. This was the exact bug: reusing the doctor
+               table's 264px here landed the fade ~6px INSIDE the Estado
+               column, bleeding across the status text itself. */
+            right: 270px;
             width: 24px;
             background: linear-gradient(to right, transparent, var(--bg-card));
             pointer-events: none;
