@@ -122,7 +122,9 @@ class PDFGenerator:
     # Public entry point
     # ──────────────────────────────────────────────────────────────
 
-    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None, adenda: list = None) -> bytes:
+    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None,
+                      adenda: list = None, status: str = None, cancelled_at: str = None,
+                      cancellation_reason: str = None) -> bytes:
         self._session_id  = session_id
         self._doctor_info = doctor_info or {}
         buffer = BytesIO()
@@ -138,6 +140,8 @@ class PDFGenerator:
         story = []
         story.extend(self._build_consent_page(structured_data))
         story.append(PageBreak())
+        if status == 'cancelled':
+            story.extend(self._build_cancellation_marker(cancelled_at, cancellation_reason))
         story.extend(self._build_header(structured_data))
         story.extend(self._build_patient_block(structured_data))
         story.append(HRFlowable(width="100%", thickness=1.5, color=self.TEAL, spaceAfter=4 * mm))
@@ -779,6 +783,65 @@ class PDFGenerator:
             ('TOPPADDING',    (0, 1), (-1, 1),  8),
         ]))
         return [Spacer(1, 8 * mm), t]
+
+    # ──────────────────────────────────────────────────────────────
+    # Cancellation marker — inserted at the top of the clinical note
+    # page (after the consent page's own page break, before the note's
+    # header/SOAP content), so it's unmissable on a quick glance without
+    # disturbing the consent page itself. Thick BLACK border + bold text
+    # deliberately, not a color-only cue — must still read clearly on a
+    # black-and-white printout/copy.
+    # ──────────────────────────────────────────────────────────────
+
+    def _build_cancellation_marker(self, cancelled_at: str, cancellation_reason: str) -> list:
+        fecha = cancelled_at
+        if cancelled_at:
+            try:
+                fecha = datetime.fromisoformat(cancelled_at).strftime('%d/%m/%Y %H:%M')
+            except (ValueError, TypeError):
+                fecha = cancelled_at
+        reason = self._safe(cancellation_reason, 'No especificado')
+
+        title_style = ParagraphStyle(
+            'cancel_title',
+            fontName='Helvetica-Bold',
+            fontSize=13,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            spaceAfter=2 * mm,
+        )
+        meta_style = ParagraphStyle(
+            'cancel_meta',
+            fontName='Helvetica-Bold',
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+            spaceAfter=1 * mm,
+        )
+        reason_style = ParagraphStyle(
+            'cancel_reason',
+            fontName='Helvetica',
+            fontSize=9,
+            textColor=colors.black,
+            alignment=TA_CENTER,
+        )
+
+        page_width = LETTER[0] - 36 * mm
+        cell = [
+            Paragraph('ESTA CONSULTA FUE CANCELADA', title_style),
+            Paragraph(f'Fecha de cancelación: {html.escape(str(fecha)) if fecha else "No especificada"}', meta_style),
+            Paragraph(f'Motivo: {html.escape(reason)}', reason_style),
+        ]
+        t = Table([[cell]], colWidths=[page_width])
+        t.setStyle(TableStyle([
+            ('BOX',           (0, 0), (-1, -1), 1.5, colors.black),
+            ('VALIGN',        (0, 0), (-1, -1), 'MIDDLE'),
+            ('TOPPADDING',    (0, 0), (-1, -1), 4 * mm),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4 * mm),
+            ('LEFTPADDING',   (0, 0), (-1, -1), 4 * mm),
+            ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
+        ]))
+        return [t, Spacer(1, 6 * mm)]
 
     # ──────────────────────────────────────────────────────────────
     # Adenda — appended AFTER the signature block, not woven into the

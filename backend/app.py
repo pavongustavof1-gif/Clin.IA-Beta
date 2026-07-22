@@ -943,7 +943,10 @@ def download_pdf(session_id):
     """
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,clinica_id,status,addenda&limit=1')
+        rows = _sb_get(
+            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'&select=usuario_id,clinica_id,status,addenda,cancelled_at,cancellation_reason&limit=1'
+        )
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
 
@@ -973,7 +976,10 @@ def download_pdf(session_id):
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
-            adenda=row.get('addenda') or []
+            adenda=row.get('addenda') or [],
+            status=row.get('status'),
+            cancelled_at=row.get('cancelled_at'),
+            cancellation_reason=row.get('cancellation_reason'),
         )
         logger.info(f"PDF: Regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
 
@@ -1395,7 +1401,7 @@ def admin_download_pdf(session_id):
     try:
         rows = _sb_get(
             f'/rest/v1/sesiones?session_id=eq.{session_id}'
-            f'&select=usuario_id,clinica_id,structured_data,addenda&limit=1'
+            f'&select=usuario_id,clinica_id,structured_data,addenda,status,cancelled_at,cancellation_reason&limit=1'
         )
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
@@ -1420,7 +1426,10 @@ def admin_download_pdf(session_id):
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
-            adenda=row.get('addenda') or []
+            adenda=row.get('addenda') or [],
+            status=row.get('status'),
+            cancelled_at=row.get('cancelled_at'),
+            cancellation_reason=row.get('cancellation_reason'),
         )
         logger.info(f"PDF: Admin-regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
 
