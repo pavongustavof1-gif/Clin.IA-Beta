@@ -51,7 +51,41 @@ document.addEventListener('DOMContentLoaded', () => {
     if (sessionSearchBtn) {
         sessionSearchBtn.addEventListener('click', searchSessions);
     }
+
+    const sessionSearchByIdBtn = document.getElementById('sessionSearchByIdBtn');
+    if (sessionSearchByIdBtn) {
+        sessionSearchByIdBtn.addEventListener('click', searchSessionById);
+    }
+    const sessionSearchByIdInput = document.getElementById('sessionSearchByIdInput');
+    if (sessionSearchByIdInput) {
+        sessionSearchByIdInput.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') searchSessionById();
+        });
+    }
 });
+
+async function searchSessionById() {
+    const input = document.getElementById('sessionSearchByIdInput');
+    const errorEl = document.getElementById('sessionSearchByIdError');
+    const sessionId = input.value.trim();
+
+    errorEl.style.display = 'none';
+
+    if (!sessionId) {
+        errorEl.textContent = 'Ingrese un ID de sesión.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    // Reuses the same GET /api/patient-history/<id> endpoint and detail
+    // panel already used for date-range results — no new backend route,
+    // no second detail-rendering path. loadAndRenderSessionDetail() already
+    // shows "Sesión no encontrada" inside the panel on 404, so no separate
+    // not-found handling needed here.
+    document.getElementById('sessionSearchTableWrap').style.display = 'none';
+    document.getElementById('sessionDetailPanel').style.display = 'block';
+    await loadAndRenderSessionDetail(sessionId);
+}
 
 function populateDoctorFilter(usuarios) {
     const select = document.getElementById('sessionSearchDoctor');

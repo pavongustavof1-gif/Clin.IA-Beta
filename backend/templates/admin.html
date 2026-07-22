@@ -325,6 +325,18 @@
         <div class="card">
             <h3 style="margin-bottom: var(--spacing-sm);">Búsqueda de Sesiones (ARCO)</h3>
 
+            <div style="background: var(--bg-primary, #f8fafc); border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: 1rem; margin-bottom: 1.25rem;">
+                <label class="review-label" for="sessionSearchByIdInput">Buscar por ID de sesión</label>
+                <p style="color: var(--text-secondary); font-size: 0.8rem; margin-bottom: 0.5rem;">
+                    Vía más rápida — el paciente normalmente proporciona este identificador al ejercer un derecho ARCO.
+                </p>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input id="sessionSearchByIdInput" class="review-input" type="text" placeholder="Ej. SESSION-20260722-214421-MP" style="flex: 1;">
+                    <button id="sessionSearchByIdBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Buscar por ID</button>
+                </div>
+                <div id="sessionSearchByIdError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.5rem;"></div>
+            </div>
+
             <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0.85rem; align-items: end;">
                 <div>
                     <label class="review-label" for="sessionSearchDesde">Desde</label>
