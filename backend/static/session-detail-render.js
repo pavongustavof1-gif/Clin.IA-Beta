@@ -215,8 +215,15 @@ function generateFormattedHTML(data) {
  *   the CALLER is responsible for re-fetching session data and calling
  *   renderSessionDetail() again with the updated addenda — this function
  *   stays stateless rather than mutating its own DOM in place.
- * @param {function} [options.onCancel] - extension point for Stage G
- *   (session cancellation). Not implemented this stage.
+ * @param {function} [options.onCancel] - async function(cancellation_reason)
+ *   called when the admin confirms cancellation. Only rendered/wired
+ *   when isAdmin is true AND sessionData.status !== 'cancelled'. The
+ *   confirm button stays disabled until a non-empty reason is typed —
+ *   deliberately harder to trigger than the addendum flow, given this
+ *   action is irreversible. Should perform the POST and throw on
+ *   failure (caught here to show an inline error); on success the
+ *   CALLER re-fetches and re-invokes renderSessionDetail(), same
+ *   stateless pattern as onAddAddendum.
  */
 function renderSessionDetail(container, sessionData, options = {}) {
     const { isAdmin = false, canDownloadPdf = false, onDownloadPdf, onAddAddendum, onCancel } = options;
@@ -234,8 +241,16 @@ function renderSessionDetail(container, sessionData, options = {}) {
             hour: '2-digit', minute: '2-digit', second: '2-digit'
           })
         : '—';
+    const statusLabel = sessionData.status === 'confirmed' ? 'Confirmada'
+        : sessionData.status === 'cancelled' ? 'Cancelada'
+        : sessionData.status === 'pending_review' ? 'Pendiente'
+        : (sessionData.status || '—');
+    const statusClass = sessionData.status === 'confirmed' ? 'status-confirmed'
+        : sessionData.status === 'cancelled' ? 'status-cancelled'
+        : 'status-other';
     html += `<p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
         ID de sesión: <strong>${sessionData.session_id || '—'}</strong> · ${fechaCompleta}
+        · <span id="sessionDetailStatusBadge" class="historial-status ${statusClass}">${statusLabel}</span>
     </p>`;
 
     if (sessionData.autor_nombre) {
@@ -278,6 +293,28 @@ function renderSessionDetail(container, sessionData, options = {}) {
                 <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
                     <button id="submitAddendumBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Guardar adendum</button>
                     <button id="cancelAddendumBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Cancelar</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    // Admin-only session cancellation — irreversible, so deliberately
+    // harder to trigger than the addendum flow: a typed, non-empty reason
+    // is required before the confirm button is even enabled (not a bare
+    // confirm()/cancel dialog). Hidden entirely once already cancelled.
+    if (isAdmin && typeof onCancel === 'function' && sessionData.status !== 'cancelled') {
+        html += `<div class="admin-cancel-session" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <button id="showCancelSessionBtn" class="btn btn-danger btn-small" style="max-width: none; width: auto;">Cancelar sesión</button>
+            <div id="cancelSessionForm" style="display: none; margin-top: 0.75rem;">
+                <p style="color: #c0392b; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                    Esta acción es irreversible. Escribe el motivo de la cancelación para continuar.
+                </p>
+                <label class="review-label" for="cancelSessionReasonTextarea">Motivo de cancelación</label>
+                <textarea id="cancelSessionReasonTextarea" class="review-input" rows="3" style="width: 100%;"></textarea>
+                <div id="cancelSessionError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.5rem;"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                    <button id="confirmCancelSessionBtn" class="btn btn-danger btn-small" style="max-width: none; width: auto;" disabled>Confirmar cancelación</button>
+                    <button id="dismissCancelSessionBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Volver</button>
                 </div>
             </div>
         </div>`;
@@ -338,7 +375,60 @@ function renderSessionDetail(container, sessionData, options = {}) {
         });
     }
 
-    // onCancel (Stage G) is not wired up yet — reserved in the options
-    // shape so this function doesn't need reworking again when that
-    // stage lands.
+    if (isAdmin && typeof onCancel === 'function' && sessionData.status !== 'cancelled') {
+        const showBtn = container.querySelector('#showCancelSessionBtn');
+        const form = container.querySelector('#cancelSessionForm');
+        const textarea = container.querySelector('#cancelSessionReasonTextarea');
+        const errorEl = container.querySelector('#cancelSessionError');
+        const confirmBtn = container.querySelector('#confirmCancelSessionBtn');
+        const dismissBtn = container.querySelector('#dismissCancelSessionBtn');
+
+        showBtn.addEventListener('click', () => {
+            form.style.display = 'block';
+            showBtn.style.display = 'none';
+        });
+
+        dismissBtn.addEventListener('click', () => {
+            form.style.display = 'none';
+            showBtn.style.display = '';
+            textarea.value = '';
+            errorEl.style.display = 'none';
+            confirmBtn.disabled = true;
+        });
+
+        // Confirm button stays disabled until a non-empty reason is typed —
+        // deliberately harder to trigger than the addendum flow, given
+        // this action is irreversible.
+        textarea.addEventListener('input', () => {
+            confirmBtn.disabled = textarea.value.trim().length === 0;
+        });
+
+        confirmBtn.addEventListener('click', async () => {
+            const reason = textarea.value.trim();
+            errorEl.style.display = 'none';
+
+            if (!reason) {
+                errorEl.textContent = 'El motivo de cancelación no puede estar vacío.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            confirmBtn.disabled = true;
+            dismissBtn.disabled = true;
+            confirmBtn.textContent = 'Cancelando...';
+
+            try {
+                await onCancel(reason);
+                // Caller re-fetches and re-invokes renderSessionDetail()
+                // with the updated status, same stateless pattern as
+                // onAddAddendum above.
+            } catch (err) {
+                errorEl.textContent = err && err.message ? err.message : 'Error al cancelar la sesión.';
+                errorEl.style.display = 'block';
+                confirmBtn.disabled = false;
+                dismissBtn.disabled = false;
+                confirmBtn.textContent = 'Confirmar cancelación';
+            }
+        });
+    }
 }

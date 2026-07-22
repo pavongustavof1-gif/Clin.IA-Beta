@@ -854,43 +854,6 @@ def get_session(session_id):
     return jsonify({'error': 'Session not found'}), 404
 
 
-@app.route('/api/session/<session_id>', methods=['DELETE'])
-@require_auth
-def cancel_session(session_id):
-    """
-    Soft-delete (bloqueo) a session in response to a patient ARCO Cancelación request.
-    NOM-004 requires clinical records to be retained for 5 years minimum.
-    We block access instead of deleting — hard deletion occurs after the retention period.
-    """
-    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    try:
-        reason = request.args.get('reason', 'Solicitud ARCO — Cancelación')
-
-        # Verify session exists
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status&limit=1')
-        if not rows:
-            return jsonify({'error': 'Sesión no encontrada'}), 404
-
-        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
-            'status':               'cancelled',
-            'cancelled_at':         datetime.now().isoformat(),
-            'cancellation_reason':  reason,
-            'transcript_text':      None,
-        })
-        if not ok:
-            return jsonify({'error': 'No se pudo cancelar la sesión'}), 500
-
-        logger.info(f"DB: Session {session_id} blocked — ARCO Cancelación request.")
-        return jsonify({
-            'status': 'cancelled',
-            'session_id': session_id,
-            'message': 'La sesión ha sido bloqueada conforme al derecho de cancelación LFPDPPP. Los datos clínicos se conservan durante el período de retención obligatorio de 5 años (NOM-004) y serán eliminados definitivamente al vencimiento de dicho plazo.',
-        }), 200
-    except Exception as e:
-        logger.error(f"DB: Error cancelling session {session_id}: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/session/<session_id>/addendum', methods=['POST'])
 @require_auth
 def add_addendum(session_id):
@@ -1113,7 +1076,7 @@ def patient_history_detail(session_id):
     rows = _sb_get(
         f'/rest/v1/sesiones'
         f'?session_id=eq.{session_id}'
-        f'&select=session_id,usuario_id,clinica_id,timestamp,structured_data,addenda'
+        f'&select=session_id,usuario_id,clinica_id,timestamp,status,structured_data,addenda'
         f'&limit=1'
     )
     if not rows:
@@ -1135,6 +1098,7 @@ def patient_history_detail(session_id):
     response = {
         'session_id':      row['session_id'],
         'timestamp':       row.get('timestamp'),
+        'status':          row.get('status'),
         'structured_data': row['structured_data'],
         'addenda':         row.get('addenda') or [],
     }
@@ -1524,6 +1488,64 @@ def admin_add_addendum(session_id):
 
     logger.info(f"Admin: addendum added to session {session_id} by usuario_id={g.usuario['usuario_id']}")
     return jsonify({'addenda': addenda}), 200
+
+
+@app.route('/api/admin/session/<session_id>/cancel', methods=['POST'])
+@require_auth
+@require_admin
+def admin_cancel_session(session_id):
+    """
+    ADM-1 Stage G — admin-authorized session cancellation (soft-delete /
+    bloqueo, ARCO Cancelación). Replaces the old DELETE /api/session/<id>
+    route, which was removed in this same change: that route had NO
+    ownership/clinic scoping at all (any authenticated user could cancel
+    any session in any clinic), had zero frontend callers anywhere in the
+    repo, and silently defaulted cancellation_reason from a query param
+    if omitted. This route fixes all three: admin-gated + clinic-scoped,
+    a required non-empty reason, and cancelled_by_usuario_id recording
+    WHO cancelled it (same reasoning as adenda's author_usuario_id —
+    a reason string alone isn't a reliable audit trail of who acted).
+
+    Preserves the retention mechanics the old route already got right,
+    unchanged: status='cancelled', transcript_text cleared immediately,
+    clinical data otherwise retained (NOM-004 5-year minimum) rather than
+    hard-deleted. PDF download remains available for cancelled sessions —
+    neither PDF route filters on status — since NOM-004 retention implies
+    the record must stay accessible regardless of cancellation status.
+    """
+    data = request.get_json(silent=True) or {}
+    cancellation_reason = (data.get('cancellation_reason') or '').strip()
+
+    if not cancellation_reason:
+        return jsonify({'error': 'El motivo de cancelación es obligatorio'}), 400
+
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,status&limit=1')
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('clinica_id') != g.usuario['clinica_id']:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
+        'status':                  'cancelled',
+        'cancelled_at':            datetime.now().isoformat(),
+        'cancellation_reason':     cancellation_reason,
+        'cancelled_by_usuario_id': g.usuario['usuario_id'],
+        'transcript_text':         None,
+    })
+    if not ok:
+        logger.error(f"Admin: could not cancel session {session_id}")
+        return jsonify({'error': 'No se pudo cancelar la sesión'}), 500
+
+    logger.info(f"Admin: session {session_id} cancelled by usuario_id={g.usuario['usuario_id']}")
+    return jsonify({
+        'session_id': session_id,
+        'status':     'cancelled',
+        'message':    'La sesión ha sido bloqueada conforme al derecho de cancelación LFPDPPP. '
+                      'Los datos clínicos se conservan durante el período de retención obligatorio '
+                      'de 5 años (NOM-004) y serán eliminados definitivamente al vencimiento de dicho plazo.',
+    }), 200
 
 
 @app.errorhandler(500)

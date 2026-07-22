@@ -188,7 +188,8 @@ async function loadAndRenderSessionDetail(sessionId) {
             isAdmin: true,
             canDownloadPdf: true,
             onDownloadPdf: () => downloadAdminSessionPdf(sessionId),
-            onAddAddendum: (texto) => submitAdminAddendum(sessionId, texto)
+            onAddAddendum: (texto) => submitAdminAddendum(sessionId, texto),
+            onCancel: (reason) => submitAdminCancelSession(sessionId, reason)
         });
 
     } catch (err) {
@@ -217,6 +218,33 @@ async function submitAdminAddendum(sessionId, texto) {
 
     // Success — re-fetch and re-render with the updated addenda, per
     // renderSessionDetail()'s stateless/re-render-based design.
+    await loadAndRenderSessionDetail(sessionId);
+}
+
+async function submitAdminCancelSession(sessionId, cancellation_reason) {
+    const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/cancel`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cancellation_reason })
+    });
+
+    if (res.status === 401) {
+        handleSessionExpired();
+        throw new Error('Sesión expirada');
+    }
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        throw new Error(data.error || 'No se pudo cancelar la sesión.');
+    }
+
+    // Success — re-fetch and re-render so the status badge updates to
+    // "Cancelada" immediately, no page reload. NOTE: Stage D's search
+    // results table (if the admin navigates back to it) is NOT refreshed
+    // by this — it keeps showing whatever status it had when originally
+    // fetched, until the admin re-runs the search. Acceptable for now:
+    // flagged rather than silently left unaddressed.
     await loadAndRenderSessionDetail(sessionId);
 }
 
