@@ -1545,7 +1545,7 @@ def admin_cancel_session(session_id):
     })
     if not ok:
         logger.error(f"Admin: could not cancel session {session_id}")
-        return jsonify({'error': 'No se pudo cancelar la sesión'}), 500
+        return jsonify({'error': 'No se pudo cancelar la nota'}), 500
 
     logger.info(f"Admin: session {session_id} cancelled by usuario_id={g.usuario['usuario_id']}")
     return jsonify({

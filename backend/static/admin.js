@@ -270,7 +270,7 @@ async function submitAdminCancelSession(sessionId, cancellation_reason) {
     const data = await res.json();
 
     if (!res.ok) {
-        throw new Error(data.error || 'No se pudo cancelar la sesión.');
+        throw new Error(data.error || 'No se pudo cancelar la nota.');
     }
 
     // Success — re-fetch and re-render so the status badge updates to

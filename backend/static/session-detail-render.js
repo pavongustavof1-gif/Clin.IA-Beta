@@ -304,7 +304,7 @@ function renderSessionDetail(container, sessionData, options = {}) {
     // confirm()/cancel dialog). Hidden entirely once already cancelled.
     if (isAdmin && typeof onCancel === 'function' && sessionData.status !== 'cancelled') {
         html += `<div class="admin-cancel-session" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <button id="showCancelSessionBtn" class="btn btn-danger btn-small" style="max-width: none; width: auto;">Cancelar sesión</button>
+            <button id="showCancelSessionBtn" class="btn btn-danger btn-small" style="max-width: none; width: auto;">Cancelar nota</button>
             <div id="cancelSessionForm" style="display: none; margin-top: 0.75rem;">
                 <p style="color: #c0392b; font-size: 0.85rem; margin-bottom: 0.5rem;">
                     Esta acción es irreversible. Escribe el motivo de la cancelación para continuar.
@@ -423,7 +423,7 @@ function renderSessionDetail(container, sessionData, options = {}) {
                 // with the updated status, same stateless pattern as
                 // onAddAddendum above.
             } catch (err) {
-                errorEl.textContent = err && err.message ? err.message : 'Error al cancelar la sesión.';
+                errorEl.textContent = err && err.message ? err.message : 'Error al cancelar la nota.';
                 errorEl.style.display = 'block';
                 confirmBtn.disabled = false;
                 dismissBtn.disabled = false;
