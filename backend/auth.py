@@ -4,7 +4,6 @@ import jwt
 from functools import wraps
 from flask import request, jsonify, g
 from config import Config
-from supabase_client import get_supabase
 from logger import logger
 
 # Cached public key — fetched once from Supabase JWKS on first request
