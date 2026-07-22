@@ -122,7 +122,7 @@ class PDFGenerator:
     # Public entry point
     # ──────────────────────────────────────────────────────────────
 
-    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None) -> bytes:
+    def generate_pdf(self, structured_data: dict, session_id: str = '', doctor_info: dict = None, adenda: list = None) -> bytes:
         self._session_id  = session_id
         self._doctor_info = doctor_info or {}
         buffer = BytesIO()
@@ -143,6 +143,8 @@ class PDFGenerator:
         story.append(HRFlowable(width="100%", thickness=1.5, color=self.TEAL, spaceAfter=4 * mm))
         story.extend(self._build_soap(structured_data))
         story.extend(self._build_signature_block(structured_data))
+        if adenda:
+            story.extend(self._build_adenda_section(adenda))
 
         doc.build(story, onFirstPage=self._draw_footer, onLaterPages=self._draw_footer)
         buffer.seek(0)
@@ -777,6 +779,54 @@ class PDFGenerator:
             ('TOPPADDING',    (0, 1), (-1, 1),  8),
         ]))
         return [Spacer(1, 8 * mm), t]
+
+    # ──────────────────────────────────────────────────────────────
+    # Adenda — appended AFTER the signature block, not woven into the
+    # original SOAP content. The signed note stays visually and
+    # structurally intact; each correction reads clearly as dated and
+    # layered on top, not as a retroactive edit to the note itself.
+    # ──────────────────────────────────────────────────────────────
+
+    def _build_adenda_section(self, adenda: list) -> list:
+        story = [
+            Spacer(1, 6 * mm),
+            HRFlowable(width="100%", thickness=1, color=self.GRAY_MID, spaceAfter=3 * mm),
+            Paragraph('Adenda — Rectificaciones ARCO', self.styles['section_title']),
+        ]
+
+        entry_meta = ParagraphStyle(
+            'adenda_meta',
+            fontName='Helvetica-Bold',
+            fontSize=8,
+            textColor=self.GRAY_TEXT,
+            spaceAfter=1 * mm,
+        )
+        entry_text = ParagraphStyle(
+            'adenda_text',
+            fontName='Helvetica',
+            fontSize=8.5,
+            textColor=self.DARK,
+            leading=8.5 * 1.4,
+            spaceAfter=3 * mm,
+        )
+
+        for entry in adenda:
+            timestamp = entry.get('timestamp')
+            fecha = timestamp
+            if timestamp:
+                try:
+                    fecha = datetime.fromisoformat(timestamp).strftime('%d/%m/%Y %H:%M')
+                except (ValueError, TypeError):
+                    fecha = timestamp
+            autor = self._safe(entry.get('author'), 'Médico')
+            texto = self._safe(entry.get('text'))
+
+            story.append(Paragraph(
+                f'{html.escape(str(fecha))} — {html.escape(autor)}', entry_meta
+            ))
+            story.append(Paragraph(html.escape(texto), entry_text))
+
+        return story
 
     # ──────────────────────────────────────────────────────────────
     # Per-page footer (drawn on canvas, not in the story)

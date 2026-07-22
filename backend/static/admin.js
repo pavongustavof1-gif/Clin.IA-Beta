@@ -160,10 +160,15 @@ document.addEventListener('DOMContentLoaded', () => {
 async function openSessionDetail(sessionId) {
     const tableWrap = document.getElementById('sessionSearchTableWrap');
     const panel = document.getElementById('sessionDetailPanel');
-    const content = document.getElementById('sessionDetailContent');
 
     tableWrap.style.display = 'none';
     panel.style.display = 'block';
+
+    await loadAndRenderSessionDetail(sessionId);
+}
+
+async function loadAndRenderSessionDetail(sessionId) {
+    const content = document.getElementById('sessionDetailContent');
     content.innerHTML = '<p style="color: var(--text-secondary);">Cargando...</p>';
 
     try {
@@ -182,13 +187,37 @@ async function openSessionDetail(sessionId) {
         renderSessionDetail(content, data, {
             isAdmin: true,
             canDownloadPdf: true,
-            onDownloadPdf: () => downloadAdminSessionPdf(sessionId)
+            onDownloadPdf: () => downloadAdminSessionPdf(sessionId),
+            onAddAddendum: (texto) => submitAdminAddendum(sessionId, texto)
         });
 
     } catch (err) {
         console.error('[ClinIA Admin] openSessionDetail error:', err);
         content.innerHTML = '<p>Error al cargar la nota. Intente de nuevo.</p>';
     }
+}
+
+async function submitAdminAddendum(sessionId, texto) {
+    const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/addendum`, {
+        method: 'POST',
+        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ texto })
+    });
+
+    if (res.status === 401) {
+        handleSessionExpired();
+        throw new Error('Sesión expirada');
+    }
+
+    const data = await res.json();
+
+    if (!res.ok) {
+        throw new Error(data.error || 'No se pudo guardar el adendum.');
+    }
+
+    // Success — re-fetch and re-render with the updated addenda, per
+    // renderSessionDetail()'s stateless/re-render-based design.
+    await loadAndRenderSessionDetail(sessionId);
 }
 
 async function downloadAdminSessionPdf(sessionId) {

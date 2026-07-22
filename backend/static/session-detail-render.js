@@ -207,9 +207,14 @@ function generateFormattedHTML(data) {
  *   the "Descargar PDF" button's visibility, regardless of isAdmin.
  * @param {function} [options.onDownloadPdf] - called when "Descargar PDF"
  *   is clicked. Only wired up if canDownloadPdf is true.
- * @param {function} [options.onAddAddendum] - extension point for Stage F
- *   (addendum-writing). Not implemented this stage — reserved so this
- *   function's shape doesn't need reworking again when Stage F lands.
+ * @param {function} [options.onAddAddendum] - async function(texto) called
+ *   when the admin submits a new adendum. Only rendered/wired when
+ *   isAdmin is true — doctor-facing Historial (isAdmin: false) never
+ *   shows this, stays fully read-only. Should perform the POST and
+ *   throw on failure (caught here to show an inline error); on success
+ *   the CALLER is responsible for re-fetching session data and calling
+ *   renderSessionDetail() again with the updated addenda — this function
+ *   stays stateless rather than mutating its own DOM in place.
  * @param {function} [options.onCancel] - extension point for Stage G
  *   (session cancellation). Not implemented this stage.
  */
@@ -259,6 +264,25 @@ function renderSessionDetail(container, sessionData, options = {}) {
         html += '</div>';
     }
 
+    // Admin-only "Agregar adendum" affordance — inline (not a modal),
+    // consistent with the rest of this view. Doctor-facing Historial
+    // (isAdmin: false) never sees this; it stays fully read-only there
+    // per item 24's original design.
+    if (isAdmin && typeof onAddAddendum === 'function') {
+        html += `<div class="admin-add-addendum" style="margin-top: 1rem;">
+            <button id="showAddAddendumBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Agregar adendum</button>
+            <div id="addAddendumForm" style="display: none; margin-top: 0.75rem;">
+                <label class="review-label" for="addAddendumTextarea">Texto del adendum</label>
+                <textarea id="addAddendumTextarea" class="review-input" rows="3" maxlength="2000" style="width: 100%;"></textarea>
+                <div id="addAddendumError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.5rem;"></div>
+                <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                    <button id="submitAddendumBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Guardar adendum</button>
+                    <button id="cancelAddendumBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Cancelar</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
     container.innerHTML = html;
 
     if (canDownloadPdf && typeof onDownloadPdf === 'function') {
@@ -266,7 +290,55 @@ function renderSessionDetail(container, sessionData, options = {}) {
         if (btn) btn.addEventListener('click', onDownloadPdf);
     }
 
-    // onAddAddendum (Stage F) and onCancel (Stage G) are not wired up yet —
-    // reserved in the options shape so this function doesn't need reworking
-    // again when those stages land.
+    if (isAdmin && typeof onAddAddendum === 'function') {
+        const showBtn = container.querySelector('#showAddAddendumBtn');
+        const form = container.querySelector('#addAddendumForm');
+        const textarea = container.querySelector('#addAddendumTextarea');
+        const errorEl = container.querySelector('#addAddendumError');
+        const submitBtn = container.querySelector('#submitAddendumBtn');
+        const cancelBtn = container.querySelector('#cancelAddendumBtn');
+
+        showBtn.addEventListener('click', () => {
+            form.style.display = 'block';
+            showBtn.style.display = 'none';
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            form.style.display = 'none';
+            showBtn.style.display = '';
+            textarea.value = '';
+            errorEl.style.display = 'none';
+        });
+
+        submitBtn.addEventListener('click', async () => {
+            const texto = textarea.value.trim();
+            errorEl.style.display = 'none';
+
+            if (!texto) {
+                errorEl.textContent = 'El texto del adendum no puede estar vacío.';
+                errorEl.style.display = 'block';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Guardando...';
+
+            try {
+                await onAddAddendum(texto);
+                // Caller (admin.js) is responsible for re-fetching and
+                // re-invoking renderSessionDetail() with the updated
+                // sessionData — this function stays stateless/re-render-
+                // based rather than mutating its own DOM in place.
+            } catch (err) {
+                errorEl.textContent = err && err.message ? err.message : 'Error al guardar el adendum.';
+                errorEl.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Guardar adendum';
+            }
+        });
+    }
+
+    // onCancel (Stage G) is not wired up yet — reserved in the options
+    // shape so this function doesn't need reworking again when that
+    // stage lands.
 }

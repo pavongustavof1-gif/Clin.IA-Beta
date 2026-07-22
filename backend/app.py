@@ -980,7 +980,7 @@ def download_pdf(session_id):
     """
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,clinica_id,status&limit=1')
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,clinica_id,status,addenda&limit=1')
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
 
@@ -1009,7 +1009,8 @@ def download_pdf(session_id):
         }
 
         pdf_bytes = pdf_generator.generate_pdf(
-            structured_data, session_id=session_id, doctor_info=doctor_info
+            structured_data, session_id=session_id, doctor_info=doctor_info,
+            adenda=row.get('addenda') or []
         )
         logger.info(f"PDF: Regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
 
@@ -1430,7 +1431,7 @@ def admin_download_pdf(session_id):
     try:
         rows = _sb_get(
             f'/rest/v1/sesiones?session_id=eq.{session_id}'
-            f'&select=usuario_id,clinica_id,structured_data&limit=1'
+            f'&select=usuario_id,clinica_id,structured_data,addenda&limit=1'
         )
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
@@ -1454,7 +1455,8 @@ def admin_download_pdf(session_id):
         }
 
         pdf_bytes = pdf_generator.generate_pdf(
-            structured_data, session_id=session_id, doctor_info=doctor_info
+            structured_data, session_id=session_id, doctor_info=doctor_info,
+            adenda=row.get('addenda') or []
         )
         logger.info(f"PDF: Admin-regenerated for download — session {session_id}, {len(pdf_bytes)} bytes")
 
@@ -1465,6 +1467,63 @@ def admin_download_pdf(session_id):
     except Exception as e:
         logger.error(f"PDF: Admin download failed for {session_id}: {e}")
         return jsonify({'error': 'Error al generar el PDF'}), 500
+
+
+@app.route('/api/admin/session/<session_id>/addendum', methods=['POST'])
+@require_auth
+@require_admin
+def admin_add_addendum(session_id):
+    """
+    ADM-1 Stage F — admin-authored addendum (ARCO rectification), paired
+    with the pdf_generator.py adenda-rendering section added this stage.
+
+    Field shape matches the existing (dormant, no frontend caller)
+    /api/session/<id>/addendum route's convention exactly — id, type,
+    text, author, timestamp — so the already-live adenda renderer
+    (session-detail-render.js, unchanged this stage) displays these
+    correctly with zero renderer changes. author_usuario_id is an
+    ADDITIONAL field beyond that existing shape, recording the specific
+    admin account that wrote it (an unspoofable link server-side sets,
+    never client-supplied) — the renderer simply ignores it, it isn't a
+    conflicting field.
+    """
+    MAX_ADDENDUM_LENGTH = 2000
+
+    data = request.get_json(silent=True) or {}
+    texto = (data.get('texto') or '').strip()
+
+    if not texto:
+        return jsonify({'error': 'El texto del adendum no puede estar vacío'}), 400
+    if len(texto) > MAX_ADDENDUM_LENGTH:
+        return jsonify({'error': f'El texto no puede exceder {MAX_ADDENDUM_LENGTH} caracteres'}), 400
+
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,addenda&limit=1')
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('clinica_id') != g.usuario['clinica_id']:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    addenda = row.get('addenda') or []
+
+    new_entry = {
+        'id':                f"adendum_{len(addenda) + 1}",
+        'type':              'rectificacion_arco',
+        'text':              texto,
+        'author':            g.usuario.get('nombre', ''),
+        'timestamp':         datetime.now().isoformat(),
+        'author_usuario_id': g.usuario['usuario_id'],
+    }
+    addenda.append(new_entry)  # append, never replace/overwrite existing entries
+
+    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'addenda': addenda})
+    if not ok:
+        logger.error(f"Admin: could not save addendum for session {session_id}")
+        return jsonify({'error': 'No se pudo guardar el adendum'}), 500
+
+    logger.info(f"Admin: addendum added to session {session_id} by usuario_id={g.usuario['usuario_id']}")
+    return jsonify({'addenda': addenda}), 200
 
 
 @app.errorhandler(500)
