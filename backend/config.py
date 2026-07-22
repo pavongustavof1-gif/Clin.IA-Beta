@@ -26,8 +26,9 @@ class Config:
     GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
     
     # WHO ICD-11 API
-    ICD_CLIENT_ID     = os.environ.get('ICD_CLIENT_ID', '')
-    ICD_CLIENT_SECRET = os.environ.get('ICD_CLIENT_SECRET', '')
+    ICD_CLIENT_ID        = os.environ.get('ICD_CLIENT_ID', '')
+    ICD_CLIENT_SECRET    = os.environ.get('ICD_CLIENT_SECRET', '')
+    ICD11_RELEASE_VERSION = os.environ.get('ICD11_RELEASE_VERSION', '2026-01')
 
     # Resend email delivery
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')

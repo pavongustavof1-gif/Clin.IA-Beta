@@ -11,7 +11,7 @@ from logger import logger
 _token_cache = {'token': None, 'expires_at': 0}
 
 TOKEN_ENDPOINT  = 'https://icdaccessmanagement.who.int/connect/token'
-SEARCH_ENDPOINT = 'https://id.who.int/icd/release/11/2026-01/mms/search'
+SEARCH_ENDPOINT = f'https://id.who.int/icd/release/11/{Config.ICD11_RELEASE_VERSION}/mms/search'
 
 
 def _get_token() -> str | None:
