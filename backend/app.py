@@ -969,23 +969,40 @@ def export_json(session_id):
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
 @require_auth
 def download_pdf(session_id):
-    """Regenerate and stream PDF for a confirmed session."""
+    """
+    Regenerate and stream PDF for a confirmed session. Accessible if the
+    session belongs to the requesting doctor OR to their clinic (same
+    OR pattern as GET /api/patient-history/<id>, item 24 Stage 4) — a
+    covering doctor viewing a colleague's session via "Notas de la
+    clínica" can already read the full structured_data, so a PDF of the
+    same content isn't new exposure. 404 (never 403) for genuinely
+    out-of-clinic sessions, consistent with every other route here.
+    """
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,status&limit=1')
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,clinica_id,status&limit=1')
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
-        if rows[0].get('usuario_id') != g.usuario['usuario_id']:
-            return jsonify({'error': 'No autorizado'}), 403
+
+        row = rows[0]
+        autor_usuario_id = row.get('usuario_id')
+        is_owner  = autor_usuario_id == g.usuario['usuario_id']
+        is_clinic = row.get('clinica_id') == g.usuario['clinica_id']
+        if not (is_owner or is_clinic):
+            return jsonify({'error': 'Sesión no encontrada'}), 404
 
         structured_data = load_structured_data(session_id)
         if not structured_data:
             return jsonify({'error': 'Datos de sesión no disponibles'}), 404
 
+        # doctor_info reflects the SESSION'S ACTUAL AUTHOR, not the
+        # downloading doctor — matches the Stage E admin-route convention.
+        # A covering doctor downloading a colleague's note should get a
+        # PDF correctly attributed to whoever actually saw that patient.
         clinica      = get_clinica_context(g.usuario['clinica_id'])
-        cedula       = get_usuario_cedula(g.usuario['usuario_id'])
+        cedula       = get_usuario_cedula(autor_usuario_id)
         doctor_info  = {
-            'nombre':         g.usuario.get('nombre', ''),
+            'nombre':         get_usuario_nombre(autor_usuario_id),
             'cedula':         cedula,
             'clinica_nombre': clinica['nombre'],
             'clinica_color':  clinica['color_primario'],
