@@ -90,25 +90,6 @@ class PDFGenerator:
                 fontSize=7,
                 textColor=self.GRAY_TEXT,
             ),
-            'clinic_name': ParagraphStyle(
-                'clinic_name',
-                fontName='Helvetica-Bold',
-                fontSize=12,
-                textColor=colors.white,
-            ),
-            'clinic_address': ParagraphStyle(
-                'clinic_address',
-                fontName='Helvetica',
-                fontSize=8,
-                textColor=colors.HexColor('#CCEDE4'),
-            ),
-            'note_title': ParagraphStyle(
-                'note_title',
-                fontName='Helvetica-Bold',
-                fontSize=9,
-                textColor=colors.white,
-                alignment=TA_RIGHT,
-            ),
             'bullet_text': ParagraphStyle(
                 'bullet_text',
                 fontName='Helvetica',
@@ -181,6 +162,31 @@ class PDFGenerator:
         """
         return colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
 
+    def _contrast_text_color(self, hex_color: str):
+        """
+        Pick black or white text for legibility against hex_color,
+        using the WCAG 2.x relative-luminance / contrast-ratio formulas
+        (https://www.w3.org/TR/WCAG21/#dfn-relative-luminance,
+        #dfn-contrast-ratio) — computes both candidates' actual contrast
+        ratio against the background and returns whichever wins, rather
+        than a fixed threshold guess. A clinic's picked color can be
+        anything (near-white, near-black, mid-tone); this must adapt
+        per-call, never hardcode white or black.
+        """
+        hex_color = hex_color.lstrip('#')
+        r, g, b = (int(hex_color[i:i + 2], 16) / 255.0 for i in (0, 2, 4))
+
+        def linearize(c: float) -> float:
+            return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+        r_lin, g_lin, b_lin = linearize(r), linearize(g), linearize(b)
+        bg_luminance = 0.2126 * r_lin + 0.7152 * g_lin + 0.0722 * b_lin
+
+        contrast_with_white = (1.0 + 0.05) / (bg_luminance + 0.05)
+        contrast_with_black = (bg_luminance + 0.05) / (0.0 + 0.05)
+
+        return colors.white if contrast_with_white >= contrast_with_black else colors.black
+
     # ──────────────────────────────────────────────────────────────
     # Header block
     # ──────────────────────────────────────────────────────────────
@@ -194,25 +200,39 @@ class PDFGenerator:
 
         page_width = LETTER[0] - 36 * mm
 
+        clinica_nombre     = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color_hex  = self._doctor('clinica_color', '#0F6E56')
+        clinica_color      = colors.HexColor(clinica_color_hex)
+        banner_text_color  = self._contrast_text_color(clinica_color_hex)
+
+        clinic_name_style = ParagraphStyle(
+            'header_clinic_name', fontName='Helvetica-Bold', fontSize=12,
+            textColor=banner_text_color,
+        )
+        clinic_address_style = ParagraphStyle(
+            'header_clinic_address', fontName='Helvetica', fontSize=8,
+            textColor=banner_text_color,
+        )
+        note_title_style = ParagraphStyle(
+            'header_note_title', fontName='Helvetica-Bold', fontSize=9,
+            textColor=banner_text_color, alignment=TA_RIGHT,
+        )
         date_style = ParagraphStyle(
             'header_date',
             fontName='Helvetica',
             fontSize=8,
-            textColor=colors.white,
+            textColor=banner_text_color,
             alignment=TA_RIGHT,
         )
 
-        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
-        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
-
         left_cell  = [
-            Paragraph(html.escape(clinica_nombre), self.styles['clinic_name']),
+            Paragraph(html.escape(clinica_nombre), clinic_name_style),
         ]
         clinica_contacto = self._clinica_contacto_line()
         if clinica_contacto:
-            left_cell.append(Paragraph(html.escape(clinica_contacto), self.styles['clinic_address']))
+            left_cell.append(Paragraph(html.escape(clinica_contacto), clinic_address_style))
         right_cell = [
-            Paragraph('NOTA DE EVOLUCIÓN CLÍNICA', self.styles['note_title']),
+            Paragraph('NOTA DE EVOLUCIÓN CLÍNICA', note_title_style),
             Paragraph(html.escape(fecha), date_style),
         ]
 
@@ -542,8 +562,9 @@ class PDFGenerator:
     # ──────────────────────────────────────────────────────────────
 
     def _meds_table(self, meds: list) -> Table:
+        header_text_color = self._contrast_text_color(self._doctor('clinica_color', '#0F6E56'))
         header_style = ParagraphStyle(
-            'meds_h', fontName='Helvetica-Bold', fontSize=8, textColor=colors.white,
+            'meds_h', fontName='Helvetica-Bold', fontSize=8, textColor=header_text_color,
         )
         cell_style = ParagraphStyle(
             'meds_c', fontName='Helvetica', fontSize=8, textColor=self.DARK,
@@ -580,7 +601,7 @@ class PDFGenerator:
         )
         style_cmds = [
             ('BACKGROUND',    (0, 0), (-1,  0), self._accent_color()),
-            ('TEXTCOLOR',     (0, 0), (-1,  0), colors.white),
+            ('TEXTCOLOR',     (0, 0), (-1,  0), header_text_color),
             ('BOX',           (0, 0), (-1, -1), 0.5, self.GRAY_MID),
             ('INNERGRID',     (0, 0), (-1, -1), 0.3, self.GRAY_MID),
             ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
@@ -632,15 +653,30 @@ class PDFGenerator:
         elems = []
 
         # Header banner
-        clinica_nombre = self._doctor('clinica_nombre', 'Consultorio Médico')
-        clinica_color  = colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
+        clinica_nombre    = self._doctor('clinica_nombre', 'Consultorio Médico')
+        clinica_color_hex = self._doctor('clinica_color', '#0F6E56')
+        clinica_color     = colors.HexColor(clinica_color_hex)
+        banner_text_color = self._contrast_text_color(clinica_color_hex)
+
+        clinic_name_style = ParagraphStyle(
+            'consent_clinic_name', fontName='Helvetica-Bold', fontSize=12,
+            textColor=banner_text_color,
+        )
+        clinic_address_style = ParagraphStyle(
+            'consent_clinic_address', fontName='Helvetica', fontSize=8,
+            textColor=banner_text_color,
+        )
+        note_title_style = ParagraphStyle(
+            'consent_note_title', fontName='Helvetica-Bold', fontSize=9,
+            textColor=banner_text_color, alignment=TA_RIGHT,
+        )
         date_style_w = ParagraphStyle('cdate', fontName='Helvetica', fontSize=8,
-                                       textColor=colors.white, alignment=TA_RIGHT)
-        left_cell  = [Paragraph(html.escape(clinica_nombre), self.styles['clinic_name'])]
+                                       textColor=banner_text_color, alignment=TA_RIGHT)
+        left_cell  = [Paragraph(html.escape(clinica_nombre), clinic_name_style)]
         clinica_contacto = self._clinica_contacto_line()
         if clinica_contacto:
-            left_cell.append(Paragraph(html.escape(clinica_contacto), self.styles['clinic_address']))
-        right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', self.styles['note_title']),
+            left_cell.append(Paragraph(html.escape(clinica_contacto), clinic_address_style))
+        right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', note_title_style),
                       Paragraph(html.escape(fecha), date_style_w)]
         banner = Table([[left_cell, right_cell]],
                        colWidths=[page_width * 0.60, page_width * 0.40])
