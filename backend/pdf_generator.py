@@ -144,7 +144,7 @@ class PDFGenerator:
             story.extend(self._build_cancellation_marker(cancelled_at, cancellation_reason))
         story.extend(self._build_header(structured_data))
         story.extend(self._build_patient_block(structured_data))
-        story.append(HRFlowable(width="100%", thickness=1.5, color=self.TEAL, spaceAfter=4 * mm))
+        story.append(HRFlowable(width="100%", thickness=1.5, color=self._accent_color(), spaceAfter=4 * mm))
         story.extend(self._build_soap(structured_data))
         story.extend(self._build_signature_block(structured_data))
         if adenda:
@@ -168,6 +168,18 @@ class PDFGenerator:
         telefono  = self._doctor('clinica_telefono')
         parts = [p for p in (direccion, telefono) if p]
         return ' · '.join(parts)
+
+    def _accent_color(self):
+        """
+        Clinic-branded accent color for teal-role elements (header divider,
+        medicamentos table header, footer border). Falls back to the
+        default brand teal when the clinic hasn't set a custom color.
+        Deliberately NOT used for COLOR_S/O/A/P — those are a fixed
+        4-color SOAP section-coding scheme (teal/blue/amber/red), not
+        branding, and tying COLOR_S to this would risk it colliding with
+        COLOR_P for a clinic that picks red.
+        """
+        return colors.HexColor(self._doctor('clinica_color', '#0F6E56'))
 
     # ──────────────────────────────────────────────────────────────
     # Header block
@@ -567,7 +579,7 @@ class PDFGenerator:
                        page_width * 0.25, page_width * 0.20],
         )
         style_cmds = [
-            ('BACKGROUND',    (0, 0), (-1,  0), self.TEAL),
+            ('BACKGROUND',    (0, 0), (-1,  0), self._accent_color()),
             ('TEXTCOLOR',     (0, 0), (-1,  0), colors.white),
             ('BOX',           (0, 0), (-1, -1), 0.5, self.GRAY_MID),
             ('INNERGRID',     (0, 0), (-1, -1), 0.3, self.GRAY_MID),
@@ -914,8 +926,8 @@ class PDFGenerator:
 
     def _draw_footer(self, canvas, doc):
         canvas.saveState()
-        # Teal top border
-        canvas.setStrokeColor(self.TEAL)
+        # Teal top border (clinic-branded)
+        canvas.setStrokeColor(self._accent_color())
         canvas.setLineWidth(1)
         canvas.line(18 * mm, 15 * mm, LETTER[0] - 18 * mm, 15 * mm)
         # Branding (left)
