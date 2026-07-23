@@ -416,6 +416,20 @@
                 <div style="margin-top: 1rem;">
                     <button id="clinicaProfileSaveBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Guardar</button>
                 </div>
+
+                <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                    <label class="review-label" style="display: block; margin-bottom: 0.5rem;">Logo de la clínica</label>
+                    <div style="display: flex; align-items: center; gap: 1rem;">
+                        <img id="clinicaLogoPreview" alt="Logo actual" style="display: none; max-width: 80px; max-height: 80px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); object-fit: contain; padding: 4px;">
+                        <input id="clinicaLogoFileInput" type="file" accept="image/png,image/jpeg" style="font-size: 0.85rem; flex: 1;">
+                    </div>
+                    <div id="clinicaLogoError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                    <div id="clinicaLogoSuccess" style="display: none; color: #0F6E56; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                    <div style="display: flex; gap: 0.5rem; margin-top: 0.75rem;">
+                        <button id="clinicaLogoUploadBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Subir logo</button>
+                        <button id="clinicaLogoRemoveBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto; display: none;">Quitar logo</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>

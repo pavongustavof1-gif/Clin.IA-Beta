@@ -7,6 +7,8 @@ from io import BytesIO
 from datetime import datetime
 from typing import Dict
 
+from logger import logger
+
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle
@@ -14,7 +16,7 @@ from reportlab.lib.units import mm
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    HRFlowable, KeepTogether, PageBreak,
+    HRFlowable, KeepTogether, PageBreak, Image,
 )
 from reportlab.pdfgen import canvas
 from reportlab.platypus import BaseDocTemplate, Frame, PageTemplate
@@ -187,6 +189,47 @@ class PDFGenerator:
 
         return colors.white if contrast_with_white >= contrast_with_black else colors.black
 
+    LOGO_BOX_MM = 14  # modest fixed bounding box — logo sits beside clinic name in the banner
+
+    def _wrap_with_logo(self, name_stack: list) -> list:
+        """
+        Given the banner's existing name_stack (clinic name + optional
+        contact line, as built by _build_header/_build_consent_page's
+        left_cell), prepend the clinic logo as a nested 2-column mini-table
+        [[logo, name_stack]] when logo bytes are present. Returns
+        name_stack UNCHANGED when absent — zero layout change for clinics
+        without a logo.
+
+        kind='bound' (reportlab.platypus.Image) scales width/height by
+        min(box/intrinsic) on both axes, preserving aspect ratio —
+        confirmed directly from reportlab/platypus/flowables.py, not
+        assumed. Wrapped in try/except: a corrupt/unparseable image must
+        never break PDF generation, even if the Storage fetch itself
+        succeeded.
+        """
+        logo_bytes = getattr(self, '_doctor_info', {}).get('clinica_logo_bytes')
+        if not logo_bytes:
+            return name_stack
+
+        try:
+            box = self.LOGO_BOX_MM * mm
+            logo_img = Image(BytesIO(logo_bytes), width=box, height=box, kind='bound')
+            wrapper = Table(
+                [[logo_img, name_stack]],
+                colWidths=[box + 2 * mm, None],
+            )
+            wrapper.setStyle(TableStyle([
+                ('VALIGN',       (0, 0), (-1, -1), 'MIDDLE'),
+                ('LEFTPADDING',  (0, 0), (-1, -1), 0),
+                ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+                ('TOPPADDING',   (0, 0), (-1, -1), 0),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            ]))
+            return [wrapper]
+        except Exception as e:
+            logger.warning(f"PDF: could not render clinic logo — {e}")
+            return name_stack
+
     # ──────────────────────────────────────────────────────────────
     # Header block
     # ──────────────────────────────────────────────────────────────
@@ -237,7 +280,7 @@ class PDFGenerator:
         ]
 
         t = Table(
-            [[left_cell, right_cell]],
+            [[self._wrap_with_logo(left_cell), right_cell]],
             colWidths=[page_width * 0.60, page_width * 0.40],
         )
         t.setStyle(TableStyle([
@@ -678,7 +721,7 @@ class PDFGenerator:
             left_cell.append(Paragraph(html.escape(clinica_contacto), clinic_address_style))
         right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', note_title_style),
                       Paragraph(html.escape(fecha), date_style_w)]
-        banner = Table([[left_cell, right_cell]],
+        banner = Table([[self._wrap_with_logo(left_cell), right_cell]],
                        colWidths=[page_width * 0.60, page_width * 0.40])
         banner.setStyle(TableStyle([
             ('BACKGROUND',    (0, 0), (-1, -1), clinica_color),

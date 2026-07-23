@@ -1,5 +1,7 @@
 // frontend/admin.js — ADM-1 Stage A: shell, role-gating, read-only doctor list
 
+let clinicaLogoObjectUrl = null; // tracked so we can revoke the previous preview URL before replacing it
+
 function getAuthHeaders() {
     return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
 }
@@ -75,8 +77,19 @@ document.addEventListener('DOMContentLoaded', () => {
         clinicaSaveBtn.addEventListener('click', submitClinicaProfile);
     }
 
+    const clinicaLogoUploadBtn = document.getElementById('clinicaLogoUploadBtn');
+    if (clinicaLogoUploadBtn) {
+        clinicaLogoUploadBtn.addEventListener('click', submitClinicaLogo);
+    }
+
+    const clinicaLogoRemoveBtn = document.getElementById('clinicaLogoRemoveBtn');
+    if (clinicaLogoRemoveBtn) {
+        clinicaLogoRemoveBtn.addEventListener('click', removeClinicaLogo);
+    }
+
     if (clinicaColorInput) {
         loadClinicaProfile();
+        loadClinicaLogoPreview();
     }
 });
 
@@ -639,5 +652,143 @@ async function submitClinicaProfile() {
     } finally {
         saveBtn.disabled = false;
         saveBtn.textContent = 'Guardar';
+    }
+}
+
+async function loadClinicaLogoPreview() {
+    const previewEl = document.getElementById('clinicaLogoPreview');
+    const removeBtn = document.getElementById('clinicaLogoRemoveBtn');
+
+    try {
+        // Private bucket, proxied — a plain <img src="..."> can't send
+        // auth headers, so fetch as a blob and set an object URL as the
+        // src. Same blob-handling mechanics as the PDF download handlers
+        // (fetch -> response.blob() -> URL.createObjectURL()), just
+        // landing in an <img> instead of a triggered download.
+        const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        if (res.status === 404) {
+            previewEl.style.display = 'none';
+            removeBtn.style.display = 'none';
+            return;
+        }
+        if (!res.ok) throw new Error('Error al cargar el logo');
+
+        const blob = await res.blob();
+        if (clinicaLogoObjectUrl) URL.revokeObjectURL(clinicaLogoObjectUrl);
+        clinicaLogoObjectUrl = URL.createObjectURL(blob);
+        previewEl.src = clinicaLogoObjectUrl;
+        previewEl.style.display = 'inline-block';
+        removeBtn.style.display = '';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] loadClinicaLogoPreview error:', err);
+        // No error shown for a missing/failed logo preview — it's not
+        // the primary content of the card, fails silently like other
+        // optional preview loads in this app.
+    }
+}
+
+async function submitClinicaLogo() {
+    const fileInput = document.getElementById('clinicaLogoFileInput');
+    const errorEl = document.getElementById('clinicaLogoError');
+    const successEl = document.getElementById('clinicaLogoSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const file = fileInput.files[0];
+    if (!file) {
+        errorEl.textContent = 'Seleccione un archivo de imagen (PNG o JPEG).';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    const uploadBtn = document.getElementById('clinicaLogoUploadBtn');
+    uploadBtn.disabled = true;
+    uploadBtn.textContent = 'Subiendo...';
+
+    try {
+        const formData = new FormData();
+        formData.append('logo', file);
+
+        const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: formData
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Error al subir el logo.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        successEl.textContent = 'Logo actualizado.';
+        successEl.style.display = 'block';
+        fileInput.value = '';
+        await loadClinicaLogoPreview();
+
+    } catch (err) {
+        console.error('[ClinIA Admin] submitClinicaLogo error:', err);
+        errorEl.textContent = 'Error de red. Intente de nuevo.';
+        errorEl.style.display = 'block';
+    } finally {
+        uploadBtn.disabled = false;
+        uploadBtn.textContent = 'Subir logo';
+    }
+}
+
+async function removeClinicaLogo() {
+    const errorEl = document.getElementById('clinicaLogoError');
+    const successEl = document.getElementById('clinicaLogoSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const removeBtn = document.getElementById('clinicaLogoRemoveBtn');
+    removeBtn.disabled = true;
+    removeBtn.textContent = 'Quitando...';
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Error al quitar el logo.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        const previewEl = document.getElementById('clinicaLogoPreview');
+        if (clinicaLogoObjectUrl) {
+            URL.revokeObjectURL(clinicaLogoObjectUrl);
+            clinicaLogoObjectUrl = null;
+        }
+        previewEl.src = '';
+        previewEl.style.display = 'none';
+        removeBtn.style.display = 'none';
+        successEl.textContent = 'Logo eliminado.';
+        successEl.style.display = 'block';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] removeClinicaLogo error:', err);
+        errorEl.textContent = 'Error de red. Intente de nuevo.';
+        errorEl.style.display = 'block';
+    } finally {
+        removeBtn.disabled = false;
+        removeBtn.textContent = 'Quitar logo';
     }
 }

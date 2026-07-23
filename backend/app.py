@@ -18,6 +18,8 @@ import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
+from io import BytesIO
+from PIL import Image as PILImage, UnidentifiedImageError
 
 
 def _derive_initials(nombre: str) -> str:
@@ -174,6 +176,78 @@ def _sb_patch(path: str, body: dict) -> bool:
         return False
     except Exception as e:
         logger.warning(f"DB: Supabase PATCH {path} error: {e}")
+        return False
+
+
+# ── Supabase Storage helpers ─────────────────────────────────────────────────
+# Distinct API surface from the PostgREST /rest/v1/ calls above —
+# Supabase Storage lives at /storage/v1/object/{bucket}/{path}. Confirmed
+# against Supabase's own docs (Storage Access Control; Standard Uploads):
+# service_role bypasses Storage RLS unconditionally, same as Postgres RLS,
+# no storage.objects policy required. Overwriting an existing object path
+# requires the x-upsert header — POST alone 400s with "Asset Already
+# Exists" on conflict, there is no PUT-auto-upsert shortcut.
+
+CLINIC_LOGOS_BUCKET = 'clinic-logos'
+
+
+def _storage_headers(content_type: str = None) -> dict:
+    h = {
+        'apikey': Config.SUPABASE_SERVICE_KEY,
+        'Authorization': f'Bearer {Config.SUPABASE_SERVICE_KEY}',
+    }
+    if content_type:
+        h['Content-Type'] = content_type
+    return h
+
+
+def _storage_upload(bucket: str, path: str, data: bytes, content_type: str) -> bool:
+    """POST raw bytes to Supabase Storage with x-upsert so a re-upload replaces the existing object."""
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    headers = _storage_headers(content_type)
+    headers['x-upsert'] = 'true'
+    req = urllib.request.Request(url, data=data, headers=headers, method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return True
+    except urllib.error.HTTPError as e:
+        logger.warning(f"Storage: upload to {bucket}/{path} failed {e.code}: {e.read().decode()}")
+        return False
+    except Exception as e:
+        logger.warning(f"Storage: upload to {bucket}/{path} error: {e}")
+        return False
+
+
+def _storage_download(bucket: str, path: str) -> tuple[bytes, str] | None:
+    """GET from Supabase Storage. Returns (bytes, content_type) or None on any failure (incl. not-found)."""
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    req = urllib.request.Request(url, headers=_storage_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            content_type = resp.headers.get('Content-Type', 'application/octet-stream')
+            return resp.read(), content_type
+    except urllib.error.HTTPError as e:
+        logger.warning(f"Storage: download {bucket}/{path} failed {e.code}")
+        return None
+    except Exception as e:
+        logger.warning(f"Storage: download {bucket}/{path} error: {e}")
+        return None
+
+
+def _storage_delete(bucket: str, path: str) -> bool:
+    """DELETE an object from Supabase Storage. Returns True on success."""
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    req = urllib.request.Request(url, headers=_storage_headers(), method='DELETE')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return True
+    except urllib.error.HTTPError as e:
+        logger.warning(f"Storage: delete {bucket}/{path} failed {e.code}: {e.read().decode()}")
+        return False
+    except Exception as e:
+        logger.warning(f"Storage: delete {bucket}/{path} error: {e}")
         return False
 
 def _sb_post_job(body: dict) -> str | None:
@@ -453,15 +527,33 @@ def get_clinica_context(clinica_id: str) -> dict:
     (not placeholder text) — an unfilled field must render as absent, not
     as a fake value.
     """
-    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario,direccion,telefono&limit=1')
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario,direccion,telefono,logo_url&limit=1')
     if rows:
         return {
             'nombre':         rows[0].get('nombre') or 'Consultorio Médico',
             'color_primario': rows[0].get('color_primario') or '#0F6E56',
             'direccion':      rows[0].get('direccion') or '',
             'telefono':       rows[0].get('telefono') or '',
+            'logo_url':       rows[0].get('logo_url') or '',
         }
-    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56', 'direccion': '', 'telefono': ''}
+    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56', 'direccion': '', 'telefono': '', 'logo_url': ''}
+
+
+def fetch_clinica_logo_bytes(logo_storage_path: str) -> bytes | None:
+    """
+    Fetch clinic logo bytes from Supabase Storage for PDF rendering.
+    Returns None on ANY failure (empty path, missing object, network
+    error, stale logo_url after the object was deleted) — a logo fetch
+    failure must never break PDF generation, only omit the logo.
+    """
+    if not logo_storage_path:
+        return None
+    result = _storage_download(CLINIC_LOGOS_BUCKET, logo_storage_path)
+    if result is None:
+        logger.warning(f"PDF: could not fetch clinic logo at '{logo_storage_path}' — rendering without it")
+        return None
+    image_bytes, _content_type = result
+    return image_bytes
 
 
 def get_usuario_cedula(usuario_id: str) -> str:
@@ -703,6 +795,9 @@ def confirm_and_generate():
                     'clinica_direccion': clinica['direccion'],
                     'clinica_telefono':  clinica['telefono'],
                 }
+                logo_bytes = fetch_clinica_logo_bytes(clinica['logo_url'])
+                if logo_bytes:
+                    doctor_info['clinica_logo_bytes'] = logo_bytes
                 pdf_bytes = pdf_generator.generate_pdf(
                     structured_data, session_id=session_id, doctor_info=doctor_info
                 )
@@ -986,6 +1081,9 @@ def download_pdf(session_id):
             'clinica_direccion': clinica['direccion'],
             'clinica_telefono':  clinica['telefono'],
         }
+        logo_bytes = fetch_clinica_logo_bytes(clinica['logo_url'])
+        if logo_bytes:
+            doctor_info['clinica_logo_bytes'] = logo_bytes
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
@@ -1391,6 +1489,111 @@ def admin_update_clinica():
     return jsonify(body), 200
 
 
+ALLOWED_LOGO_FORMATS = {'PNG', 'JPEG'}
+MAX_LOGO_SIZE_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+@app.route('/api/admin/clinica/logo', methods=['POST'])
+@require_auth
+@require_admin
+def admin_upload_clinica_logo():
+    """
+    Marca Stage 2 — upload/replace the clinic's logo in Supabase Storage
+    (private bucket 'clinic-logos', proxied through this app — never a
+    public URL). clinicas.logo_url stores a STORAGE OBJECT PATH
+    ("logos/<clinica_id>/logo"), NOT a real URL, despite the column name.
+
+    Fixed path per clinic, no file extension — Content-Type is tracked as
+    Storage object metadata, not encoded in the path — so a re-upload
+    always replaces the same object regardless of format changes across
+    uploads (no orphaned old-format file left behind).
+    """
+    clinica_id = g.usuario['clinica_id']
+
+    file = request.files.get('logo')
+    if not file or file.filename == '':
+        return jsonify({'error': 'No se recibió ningún archivo de logo'}), 400
+
+    raw_bytes = file.read()
+    if len(raw_bytes) > MAX_LOGO_SIZE_BYTES:
+        return jsonify({'error': 'El archivo es demasiado grande. Tamaño máximo permitido: 2 MB.'}), 400
+
+    # Validate actual file content via Pillow — the claimed Content-Type
+    # and file extension are both trivially spoofable, never trusted.
+    # A non-image (including SVG, which PIL has no raster decoder for)
+    # fails at open() with UnidentifiedImageError.
+    try:
+        img = PILImage.open(BytesIO(raw_bytes))
+        img.verify()
+        image_format = img.format
+    except Exception:
+        return jsonify({'error': 'El archivo no es una imagen PNG o JPEG válida'}), 400
+
+    if image_format not in ALLOWED_LOGO_FORMATS:
+        return jsonify({
+            'error': f"Formato no permitido: '{image_format}'. Solo se aceptan PNG o JPEG (SVG no soportado)."
+        }), 400
+
+    content_type   = 'image/png' if image_format == 'PNG' else 'image/jpeg'
+    storage_path   = f'logos/{clinica_id}/logo'
+
+    ok = _storage_upload(CLINIC_LOGOS_BUCKET, storage_path, raw_bytes, content_type)
+    if not ok:
+        return jsonify({'error': 'No se pudo subir el logo'}), 500
+
+    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', {'logo_url': storage_path})
+    if not updated:
+        logger.error(f"Admin: logo uploaded to storage but clinicas.logo_url update failed for {clinica_id}")
+        return jsonify({'error': 'Logo subido pero no se pudo guardar la referencia. Intente de nuevo.'}), 500
+
+    logger.info(f"Admin: logo uploaded for clinica {clinica_id} by usuario_id={g.usuario['usuario_id']}")
+    return jsonify({'logo_url': storage_path}), 200
+
+
+@app.route('/api/admin/clinica/logo', methods=['GET'])
+@require_auth
+@require_admin
+def admin_get_clinica_logo():
+    """
+    Proxy GET — the browser never talks to Supabase Storage directly
+    (private bucket). Streams the admin's own clinic's logo bytes back
+    with the Content-Type Storage has on record for that object.
+    """
+    clinica_id = g.usuario['clinica_id']
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=logo_url&limit=1')
+    if not rows or not rows[0].get('logo_url'):
+        return jsonify({'error': 'Esta clínica no tiene logo configurado'}), 404
+
+    result = _storage_download(CLINIC_LOGOS_BUCKET, rows[0]['logo_url'])
+    if result is None:
+        return jsonify({'error': 'No se pudo obtener el logo'}), 404
+
+    image_bytes, content_type = result
+    return app.response_class(response=image_bytes, mimetype=content_type)
+
+
+@app.route('/api/admin/clinica/logo', methods=['DELETE'])
+@require_auth
+@require_admin
+def admin_delete_clinica_logo():
+    """Remove the clinic's logo from Storage and clear clinicas.logo_url."""
+    clinica_id = g.usuario['clinica_id']
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=logo_url&limit=1')
+    if not rows or not rows[0].get('logo_url'):
+        return jsonify({'error': 'Esta clínica no tiene logo configurado'}), 404
+
+    storage_path = rows[0]['logo_url']
+    _storage_delete(CLINIC_LOGOS_BUCKET, storage_path)  # best-effort — clear logo_url regardless
+
+    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', {'logo_url': None})
+    if not updated:
+        logger.error(f"Admin: could not clear logo_url for clinica {clinica_id}")
+        return jsonify({'error': 'No se pudo actualizar la clínica'}), 500
+
+    logger.info(f"Admin: logo removed for clinica {clinica_id} by usuario_id={g.usuario['usuario_id']}")
+    return jsonify({'status': 'ok'}), 200
+
+
 @app.route('/api/admin/sessions', methods=['GET'])
 @require_auth
 @require_admin
@@ -1490,6 +1693,7 @@ def admin_download_pdf(session_id):
         autor_usuario_id = row.get('usuario_id')
         clinica      = get_clinica_context(row.get('clinica_id'))
         cedula       = get_usuario_cedula(autor_usuario_id)
+        logo_bytes   = fetch_clinica_logo_bytes(clinica['logo_url'])
         doctor_info  = {
             'nombre':            get_usuario_nombre(autor_usuario_id),
             'cedula':            cedula,
@@ -1498,6 +1702,8 @@ def admin_download_pdf(session_id):
             'clinica_direccion': clinica['direccion'],
             'clinica_telefono':  clinica['telefono'],
         }
+        if logo_bytes:
+            doctor_info['clinica_logo_bytes'] = logo_bytes
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
