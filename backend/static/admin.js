@@ -62,6 +62,22 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Enter') searchSessionById();
         });
     }
+
+    const clinicaColorInput = document.getElementById('clinicaProfileColor');
+    if (clinicaColorInput) {
+        clinicaColorInput.addEventListener('input', () => {
+            document.getElementById('clinicaProfileColorPreview').textContent = clinicaColorInput.value.toUpperCase();
+        });
+    }
+
+    const clinicaSaveBtn = document.getElementById('clinicaProfileSaveBtn');
+    if (clinicaSaveBtn) {
+        clinicaSaveBtn.addEventListener('click', submitClinicaProfile);
+    }
+
+    if (clinicaColorInput) {
+        loadClinicaProfile();
+    }
 });
 
 async function searchSessionById() {
@@ -550,5 +566,78 @@ async function loadUsuarios() {
     } catch (err) {
         console.error('[ClinIA Admin] loadUsuarios error:', err);
         loadingEl.textContent = 'Error al cargar la lista de médicos. Intente de nuevo.';
+    }
+}
+
+async function loadClinicaProfile() {
+    const loadingEl = document.getElementById('clinicaProfileLoading');
+    const formEl = document.getElementById('clinicaProfileForm');
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/clinica`, {
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) throw new Error('Error al cargar el perfil de la clínica');
+
+        const data = await res.json();
+        const color = data.color_primario || '#0F6E56';
+
+        document.getElementById('clinicaProfileColor').value = color;
+        document.getElementById('clinicaProfileColorPreview').textContent = color.toUpperCase();
+        document.getElementById('clinicaProfileDireccion').value = data.direccion || '';
+        document.getElementById('clinicaProfileTelefono').value = data.telefono || '';
+
+        loadingEl.style.display = 'none';
+        formEl.style.display = 'block';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] loadClinicaProfile error:', err);
+        loadingEl.textContent = 'Error al cargar el perfil de la clínica. Intente de nuevo.';
+    }
+}
+
+async function submitClinicaProfile() {
+    const color = document.getElementById('clinicaProfileColor').value;
+    const direccion = document.getElementById('clinicaProfileDireccion').value.trim();
+    const telefono = document.getElementById('clinicaProfileTelefono').value.trim();
+
+    const errorEl = document.getElementById('clinicaProfileError');
+    const successEl = document.getElementById('clinicaProfileSuccess');
+    errorEl.style.display = 'none';
+    successEl.style.display = 'none';
+
+    const saveBtn = document.getElementById('clinicaProfileSaveBtn');
+    saveBtn.disabled = true;
+    saveBtn.textContent = 'Guardando...';
+
+    try {
+        const res = await fetch(`${window.location.origin}/api/admin/clinica`, {
+            method: 'PATCH',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ color_primario: color, direccion, telefono })
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        const data = await res.json();
+
+        if (!res.ok) {
+            errorEl.textContent = data.error || 'Error al guardar el perfil de la clínica.';
+            errorEl.style.display = 'block';
+            return;
+        }
+
+        successEl.textContent = 'Perfil de la clínica guardado.';
+        successEl.style.display = 'block';
+
+    } catch (err) {
+        console.error('[ClinIA Admin] submitClinicaProfile error:', err);
+        errorEl.textContent = 'Error de red. Intente de nuevo.';
+        errorEl.style.display = 'block';
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = 'Guardar';
     }
 }

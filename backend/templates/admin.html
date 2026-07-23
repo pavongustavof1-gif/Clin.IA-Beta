@@ -386,6 +386,38 @@
                 <div id="sessionDetailContent"></div>
             </div>
         </div>
+
+        <div class="card">
+            <h3 style="margin-bottom: var(--spacing-sm);">Perfil de la Clínica</h3>
+
+            <div id="clinicaProfileLoading" class="admin-loading">Cargando...</div>
+
+            <div id="clinicaProfileForm" style="display: none;">
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.85rem;">
+                    <div>
+                        <label class="review-label" for="clinicaProfileColor">Color de marca</label>
+                        <div style="display: flex; align-items: center; gap: 0.6rem;">
+                            <input id="clinicaProfileColor" type="color"
+                                   style="width: 48px; height: 38px; padding: 2px; border: 1px solid var(--border-color); border-radius: var(--radius-sm); cursor: pointer;">
+                            <span id="clinicaProfileColorPreview" style="font-family: 'DM Mono', monospace; font-size: 0.85rem; color: var(--text-secondary);"></span>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="review-label" for="clinicaProfileDireccion">Dirección</label>
+                        <input id="clinicaProfileDireccion" class="review-input" type="text" autocomplete="off">
+                    </div>
+                    <div>
+                        <label class="review-label" for="clinicaProfileTelefono">Teléfono</label>
+                        <input id="clinicaProfileTelefono" class="review-input" type="text" autocomplete="off">
+                    </div>
+                </div>
+                <div id="clinicaProfileError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                <div id="clinicaProfileSuccess" style="display: none; color: #0F6E56; font-size: 0.85rem; margin-top: 0.75rem;"></div>
+                <div style="margin-top: 1rem;">
+                    <button id="clinicaProfileSaveBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Guardar</button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>

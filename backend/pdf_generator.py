@@ -158,6 +158,17 @@ class PDFGenerator:
         """Return a field from doctor_info, falling back to fallback."""
         return self._safe(getattr(self, '_doctor_info', {}).get(key), fallback)
 
+    def _clinica_contacto_line(self) -> str:
+        """
+        Build the 'direccion · telefono' subtitle line for the clinic
+        banner. Returns '' when both are empty so callers can omit the
+        line entirely rather than rendering a blank one.
+        """
+        direccion = self._doctor('clinica_direccion')
+        telefono  = self._doctor('clinica_telefono')
+        parts = [p for p in (direccion, telefono) if p]
+        return ' · '.join(parts)
+
     # ──────────────────────────────────────────────────────────────
     # Header block
     # ──────────────────────────────────────────────────────────────
@@ -185,6 +196,9 @@ class PDFGenerator:
         left_cell  = [
             Paragraph(html.escape(clinica_nombre), self.styles['clinic_name']),
         ]
+        clinica_contacto = self._clinica_contacto_line()
+        if clinica_contacto:
+            left_cell.append(Paragraph(html.escape(clinica_contacto), self.styles['clinic_address']))
         right_cell = [
             Paragraph('NOTA DE EVOLUCIÓN CLÍNICA', self.styles['note_title']),
             Paragraph(html.escape(fecha), date_style),
@@ -611,6 +625,9 @@ class PDFGenerator:
         date_style_w = ParagraphStyle('cdate', fontName='Helvetica', fontSize=8,
                                        textColor=colors.white, alignment=TA_RIGHT)
         left_cell  = [Paragraph(html.escape(clinica_nombre), self.styles['clinic_name'])]
+        clinica_contacto = self._clinica_contacto_line()
+        if clinica_contacto:
+            left_cell.append(Paragraph(html.escape(clinica_contacto), self.styles['clinic_address']))
         right_cell = [Paragraph('CARTA DE CONSENTIMIENTO INFORMADO', self.styles['note_title']),
                       Paragraph(html.escape(fecha), date_style_w)]
         banner = Table([[left_cell, right_cell]],

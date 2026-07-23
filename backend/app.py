@@ -447,14 +447,21 @@ def load_structured_data(session_id: str) -> dict | None:
 
 
 def get_clinica_context(clinica_id: str) -> dict:
-    """Fetch clinic name and primary color from Supabase. Returns defaults on error."""
-    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario&limit=1')
+    """
+    Fetch clinic name, primary color, address, and phone from Supabase.
+    Returns defaults on error. direccion/telefono default to empty string
+    (not placeholder text) — an unfilled field must render as absent, not
+    as a fake value.
+    """
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario,direccion,telefono&limit=1')
     if rows:
         return {
             'nombre':         rows[0].get('nombre') or 'Consultorio Médico',
             'color_primario': rows[0].get('color_primario') or '#0F6E56',
+            'direccion':      rows[0].get('direccion') or '',
+            'telefono':       rows[0].get('telefono') or '',
         }
-    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56'}
+    return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56', 'direccion': '', 'telefono': ''}
 
 
 def get_usuario_cedula(usuario_id: str) -> str:
@@ -552,10 +559,12 @@ def process_audio():
         clinica     = get_clinica_context(clinica_id)
         cedula      = get_usuario_cedula(usuario_id)
         doctor_info = {
-            'nombre':         nombre,
-            'cedula':         cedula,
-            'clinica_nombre': clinica['nombre'],
-            'clinica_color':  clinica['color_primario'],
+            'nombre':            nombre,
+            'cedula':            cedula,
+            'clinica_nombre':    clinica['nombre'],
+            'clinica_color':     clinica['color_primario'],
+            'clinica_direccion': clinica['direccion'],
+            'clinica_telefono':  clinica['telefono'],
         }
 
         logger.info(f"Auth: upload by {email} (clinica_id={clinica_id})")
@@ -687,10 +696,12 @@ def confirm_and_generate():
                 clinica  = get_clinica_context(g.usuario['clinica_id'])
                 cedula   = get_usuario_cedula(g.usuario['usuario_id'])
                 doctor_info = {
-                    'nombre':         g.usuario.get('nombre', ''),
-                    'cedula':         cedula,
-                    'clinica_nombre': clinica['nombre'],
-                    'clinica_color':  clinica['color_primario'],
+                    'nombre':            g.usuario.get('nombre', ''),
+                    'cedula':            cedula,
+                    'clinica_nombre':    clinica['nombre'],
+                    'clinica_color':     clinica['color_primario'],
+                    'clinica_direccion': clinica['direccion'],
+                    'clinica_telefono':  clinica['telefono'],
                 }
                 pdf_bytes = pdf_generator.generate_pdf(
                     structured_data, session_id=session_id, doctor_info=doctor_info
@@ -968,10 +979,12 @@ def download_pdf(session_id):
         clinica      = get_clinica_context(g.usuario['clinica_id'])
         cedula       = get_usuario_cedula(autor_usuario_id)
         doctor_info  = {
-            'nombre':         get_usuario_nombre(autor_usuario_id),
-            'cedula':         cedula,
-            'clinica_nombre': clinica['nombre'],
-            'clinica_color':  clinica['color_primario'],
+            'nombre':          get_usuario_nombre(autor_usuario_id),
+            'cedula':          cedula,
+            'clinica_nombre':  clinica['nombre'],
+            'clinica_color':   clinica['color_primario'],
+            'clinica_direccion': clinica['direccion'],
+            'clinica_telefono':  clinica['telefono'],
         }
 
         pdf_bytes = pdf_generator.generate_pdf(
@@ -1318,6 +1331,66 @@ def admin_set_usuario_activo(usuario_id):
     return jsonify({'id': usuario_id, 'activo': nuevo_activo}), 200
 
 
+HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+
+
+@app.route('/api/admin/clinica', methods=['GET'])
+@require_auth
+@require_admin
+def admin_get_clinica():
+    """Marca Stage 1 — read the admin's own clinic profile (name, color, address, phone)."""
+    clinica_id = g.usuario['clinica_id']
+    rows = _sb_get(
+        f'/rest/v1/clinicas?id=eq.{clinica_id}'
+        f'&select=nombre,color_primario,direccion,telefono&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Clínica no encontrada'}), 404
+
+    row = rows[0]
+    return jsonify({
+        'nombre':         row.get('nombre') or '',
+        'color_primario': row.get('color_primario') or '',
+        'direccion':      row.get('direccion') or '',
+        'telefono':       row.get('telefono') or '',
+    }), 200
+
+
+@app.route('/api/admin/clinica', methods=['PATCH'])
+@require_auth
+@require_admin
+def admin_update_clinica():
+    """
+    Marca Stage 1 — partial update of color_primario/direccion/telefono.
+    clinica_id always from g.usuario, never client-supplied. nombre and
+    logo_url are out of scope for this pass (logo is Stage 2).
+    """
+    data = request.get_json(silent=True) or {}
+    clinica_id = g.usuario['clinica_id']
+
+    body = {}
+    if 'color_primario' in data:
+        color = (data.get('color_primario') or '').strip()
+        if not HEX_COLOR_RE.match(color):
+            return jsonify({'error': 'Color inválido — debe ser un hex de 6 dígitos, ej. #0F6E56'}), 400
+        body['color_primario'] = color
+    if 'direccion' in data:
+        body['direccion'] = (data.get('direccion') or '').strip()
+    if 'telefono' in data:
+        body['telefono'] = (data.get('telefono') or '').strip()
+
+    if not body:
+        return jsonify({'error': 'No se proporcionaron campos para actualizar'}), 400
+
+    ok = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', body)
+    if not ok:
+        logger.error(f"Admin: could not update clinica {clinica_id}")
+        return jsonify({'error': 'No se pudo guardar el perfil de la clínica'}), 500
+
+    logger.info(f"Admin: clinica {clinica_id} profile updated by usuario_id={g.usuario['usuario_id']}")
+    return jsonify(body), 200
+
+
 @app.route('/api/admin/sessions', methods=['GET'])
 @require_auth
 @require_admin
@@ -1418,10 +1491,12 @@ def admin_download_pdf(session_id):
         clinica      = get_clinica_context(row.get('clinica_id'))
         cedula       = get_usuario_cedula(autor_usuario_id)
         doctor_info  = {
-            'nombre':         get_usuario_nombre(autor_usuario_id),
-            'cedula':         cedula,
-            'clinica_nombre': clinica['nombre'],
-            'clinica_color':  clinica['color_primario'],
+            'nombre':            get_usuario_nombre(autor_usuario_id),
+            'cedula':            cedula,
+            'clinica_nombre':    clinica['nombre'],
+            'clinica_color':     clinica['color_primario'],
+            'clinica_direccion': clinica['direccion'],
+            'clinica_telefono':  clinica['telefono'],
         }
 
         pdf_bytes = pdf_generator.generate_pdf(
