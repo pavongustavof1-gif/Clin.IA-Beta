@@ -159,7 +159,11 @@ const elements = {
     progressSection: document.getElementById('progressSection'),
     progressFill: document.getElementById('progressFill'),
     progressText: document.getElementById('progressText'),
-    
+
+    resumedJobBanner: document.getElementById('resumedJobBanner'),
+    resumedJobMessage: document.getElementById('resumedJobMessage'),
+    resumedJobHistorialBtn: document.getElementById('resumedJobHistorialBtn'),
+
     resultsSection: document.getElementById('resultsSection'),
     documentLink: document.getElementById('documentLink'),
     docLink: document.getElementById('docLink'),
@@ -318,17 +322,27 @@ function init() {
         }
     });
 
+    // Resumed-job banner's "Ir a Historial" — job_id is already cleared
+    // by the time this banner shows (checkResumedJob clears it before
+    // calling showResumedJobBanner), this button just navigates.
+    if (elements.resumedJobHistorialBtn) {
+        elements.resumedJobHistorialBtn.addEventListener('click', () => {
+            elements.resumedJobBanner.style.display = 'none';
+            showHistorialView();
+        });
+    }
+
     // Enter key in CURP input triggers search
     elements.historialCurpInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') searchPatientHistory();
     });
 
-    // Resume polling if a job was in progress before a page reload
-    const savedJobId = sessionStorage.getItem('clinia_job_id');
+    // Resume watching a job that was in progress before a reload OR a
+    // closed/reopened tab (localStorage, unlike sessionStorage, survives
+    // tab close — that's the whole point of this check).
+    const savedJobId = localStorage.getItem('clinia_job_id');
     if (savedJobId) {
-        elements.progressSection.style.display = 'block';
-        updateProgress(10, 'Reanudando procesamiento...', 1);
-        startJobPolling(savedJobId);
+        checkResumedJob(savedJobId);
     }
 
     console.log('[ClinIA] Application initialized successfully');
@@ -638,7 +652,10 @@ async function processAudio() {
 
         if (response.status === 202) {
             const { job_id } = await response.json();
-            sessionStorage.setItem('clinia_job_id', job_id);
+            // localStorage (not sessionStorage) — must survive a tab close
+            // so the doctor can resume watching progress after reopening,
+            // even though the job keeps running server-side regardless.
+            localStorage.setItem('clinia_job_id', job_id);
             updateProgress(20, 'Audio recibido — iniciando transcripción...', 1);
             startJobPolling(job_id);
             return;
@@ -657,13 +674,62 @@ async function processAudio() {
     }
 }
 
+// One-time status check for a job_id resumed from localStorage (page
+// load / reopened tab) — deliberately separate from startJobPolling's
+// own done/error handling, which assumes the doctor is actively watching
+// a job they just started. A job discovered ALREADY done here must not
+// jump straight into the review screen (the doctor may not even
+// remember starting it) — show a banner pointing to Historial instead.
+async function checkResumedJob(jobId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
+            headers: getAuthHeaders()
+        });
+
+        if (res.status === 401) return handleSessionExpired();
+
+        if (!res.ok) {
+            // 404 (job gone) or 403 (not this doctor's job) — clear
+            // silently, no error shown for a job that's simply gone.
+            localStorage.removeItem('clinia_job_id');
+            return;
+        }
+
+        const data = await res.json();
+
+        if (data.status === 'transcribing' || data.status === 'extracting') {
+            elements.progressSection.style.display = 'block';
+            if (data.status === 'transcribing') {
+                updateProgress(30, 'Reanudando — transcribiendo audio...', 1);
+            } else {
+                updateProgress(70, 'Reanudando — extrayendo información médica...', 2);
+            }
+            startJobPolling(jobId);
+        } else if (data.status === 'done') {
+            localStorage.removeItem('clinia_job_id');
+            showResumedJobBanner();
+        } else {
+            // 'error' status, or any unexpected value — clear silently,
+            // same as a not-found job. No error shown for a stale job the
+            // doctor already walked away from.
+            localStorage.removeItem('clinia_job_id');
+        }
+    } catch (err) {
+        // Fetch itself failed (network blip while the page was loading) —
+        // NOT the same as "job is gone". Leave the stored job_id alone so
+        // the next reload can retry; clearing here would permanently lose
+        // the ability to resume a job that may still be running fine.
+        console.warn('[ClinIA] checkResumedJob: could not reach server, will retry on next load:', err);
+    }
+}
+
 function startJobPolling(jobId) {
     let pollCount = 0;
     const pollInterval = setInterval(async () => {
         pollCount++;
         if (pollCount >= 360) {
             clearInterval(pollInterval);
-            sessionStorage.removeItem('clinia_job_id');
+            localStorage.removeItem('clinia_job_id');
             elements.progressSection.style.display = 'none';
             showError('El procesamiento está tardando más de lo esperado. Por favor intente subir el audio nuevamente.');
             return;
@@ -686,7 +752,7 @@ function startJobPolling(jobId) {
                 updateProgress(70, 'Extrayendo información médica...', 2);
             } else if (data.status === 'done') {
                 clearInterval(pollInterval);
-                sessionStorage.removeItem('clinia_job_id');
+                localStorage.removeItem('clinia_job_id');
                 updateProgress(100, 'Listo para revisión.', 3);
                 state.sessionId = data.session_id;
                 await sleep(400);
@@ -698,7 +764,7 @@ function startJobPolling(jobId) {
                 });
             } else if (data.status === 'error') {
                 clearInterval(pollInterval);
-                sessionStorage.removeItem('clinia_job_id');
+                localStorage.removeItem('clinia_job_id');
                 elements.progressSection.style.display = 'none';
                 showError(data.error_message || 'Error durante el procesamiento');
             }
@@ -1099,11 +1165,18 @@ async function downloadJSON() {
 // ─────────────────────────────────────────────
 function showError(message) {
     console.error('[ClinIA] Error:', message);
-    
+
     elements.errorSection.style.display = 'block';
     elements.errorMessage.textContent = message;
-    
+
     elements.errorSection.scrollIntoView({ behavior: 'smooth' });
+}
+
+function showResumedJobBanner() {
+    elements.resumedJobBanner.style.display = 'block';
+    elements.resumedJobMessage.textContent =
+        'Tu nota ya fue procesada — ve a Historial para verla o revisa tu correo.';
+    elements.resumedJobBanner.scrollIntoView({ behavior: 'smooth' });
 }
 
 function resetApplication() {

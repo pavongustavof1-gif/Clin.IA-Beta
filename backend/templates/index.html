@@ -399,7 +399,19 @@
                     </div>
                 </div>
             </section>
-            
+
+            <!-- Resumed Job Banner: shown when a job_id resumed from localStorage
+                 (e.g. after closing/reopening the tab) turns out to already be
+                 done — deliberately not an auto-jump into the review screen. -->
+            <section id="resumedJobBanner" class="card info-section" style="display: none;">
+                <h3>
+                    <svg class="heading-icon" width="18" height="18" aria-hidden="true"><use href="#icon-check-circle"/></svg>
+                    Nota ya procesada
+                </h3>
+                <p id="resumedJobMessage" class="info-message"></p>
+                <button id="resumedJobHistorialBtn" class="btn btn-secondary">Ir a Historial</button>
+            </section>
+
             <!-- Review Section -->
             <section id="reviewSection" class="card review-section" style="display: none;">
                 <h3>
