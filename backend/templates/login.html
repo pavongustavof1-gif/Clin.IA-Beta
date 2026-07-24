@@ -95,7 +95,36 @@
             margin-bottom: var(--spacing-md);
         }
 
+        .login-success {
+            display: none;
+            background: rgba(15, 110, 86, 0.08);
+            border: 1px solid rgba(15, 110, 86, 0.25);
+            border-radius: var(--radius-sm);
+            color: #0F6E56;
+            font-size: 0.86rem;
+            padding: 0.6rem 0.85rem;
+            margin-bottom: var(--spacing-md);
+        }
+
         #loginBtn {
+            max-width: 100%;
+            margin-top: var(--spacing-xs);
+        }
+
+        .forgot-password-link {
+            display: block;
+            text-align: center;
+            margin-top: var(--spacing-md);
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            text-decoration: none;
+        }
+
+        .forgot-password-link:hover {
+            color: #0F6E56;
+        }
+
+        #forgotPasswordBtn {
             max-width: 100%;
             margin-top: var(--spacing-xs);
         }
@@ -123,6 +152,22 @@
                 </div>
                 <button type="submit" id="loginBtn" class="btn btn-primary">Iniciar Sesión</button>
             </form>
+
+            <a href="#" id="forgotPasswordLink" class="forgot-password-link">¿Olvidaste tu contraseña?</a>
+
+            <div id="forgotPasswordWrap" style="display: none;">
+                <div id="forgotPasswordError" class="login-error"></div>
+                <div id="forgotPasswordSuccess" class="login-success"></div>
+
+                <form id="forgotPasswordForm">
+                    <div class="login-field">
+                        <label class="login-label" for="forgotEmail">Correo electrónico</label>
+                        <input type="email" id="forgotEmail" class="login-input" autocomplete="email" required>
+                    </div>
+                    <button type="submit" id="forgotPasswordBtn" class="btn btn-primary">Enviar enlace</button>
+                    <a href="#" id="backToLoginLink" class="forgot-password-link">Volver a iniciar sesión</a>
+                </form>
+            </div>
         </div>
     </div>
 
@@ -160,6 +205,71 @@
             sessionStorage.setItem('clinia_email', data.user.email);
             localStorage.setItem('clinia_doctor_email', data.user.email);
             window.location.href = '/';
+        });
+
+        // Forgot-password inline flow — reveals an email-only field below
+        // the login form rather than navigating to a separate page.
+        const forgotLink       = document.getElementById('forgotPasswordLink');
+        const backToLoginLink  = document.getElementById('backToLoginLink');
+        const forgotWrap       = document.getElementById('forgotPasswordWrap');
+        const forgotForm       = document.getElementById('forgotPasswordForm');
+        const forgotErrorBox   = document.getElementById('forgotPasswordError');
+        const forgotSuccessBox = document.getElementById('forgotPasswordSuccess');
+        const forgotBtn        = document.getElementById('forgotPasswordBtn');
+
+        forgotLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            form.style.display = 'none';
+            forgotLink.style.display = 'none';
+            forgotWrap.style.display = 'block';
+        });
+
+        backToLoginLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            forgotWrap.style.display = 'none';
+            forgotErrorBox.style.display = 'none';
+            forgotSuccessBox.style.display = 'none';
+            forgotForm.style.display = 'block';
+            document.getElementById('forgotEmail').value = '';
+            form.style.display = 'block';
+            forgotLink.style.display = 'block';
+        });
+
+        forgotForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            forgotErrorBox.style.display = 'none';
+            forgotSuccessBox.style.display = 'none';
+
+            const email = document.getElementById('forgotEmail').value.trim();
+
+            // Client-side format check only — never a signal about whether
+            // an account exists, just basic input sanity before the call.
+            if (!email || !email.includes('@') || !email.split('@').pop().includes('.')) {
+                forgotErrorBox.textContent = 'Ingrese un correo electrónico válido.';
+                forgotErrorBox.style.display = 'block';
+                return;
+            }
+
+            forgotBtn.disabled = true;
+            forgotBtn.textContent = 'Enviando...';
+
+            // Deliberately ignore the call's error/data entirely below —
+            // the response must never reveal whether this email has an
+            // account (account-enumeration protection). Same generic
+            // message regardless of outcome, including network failure.
+            try {
+                await supabaseClient.auth.resetPasswordForEmail(email, {
+                    redirectTo: 'https://app.clinianotes.com/set-password'
+                });
+            } catch (err) {
+                console.error('[ClinIA] resetPasswordForEmail error:', err);
+            }
+
+            forgotForm.style.display = 'none';
+            forgotSuccessBox.textContent = 'Si el correo existe, recibirás un enlace en unos minutos.';
+            forgotSuccessBox.style.display = 'block';
+            forgotBtn.disabled = false;
+            forgotBtn.textContent = 'Enviar enlace';
         });
     </script>
 
