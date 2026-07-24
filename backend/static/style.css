@@ -712,24 +712,6 @@ body {
     font-family: 'DM Mono', monospace;
 }
 
-/* ── Info Section (e.g. resumed-job banner) ── */
-.info-section {
-    border-color: rgba(15,110,86,0.3);
-    background: rgba(15,110,86,0.05);
-    animation: fadeUp 0.4s ease both;
-}
-
-.info-section h3 {
-    color: #0F6E56;
-}
-
-.info-message {
-    font-size: 0.92rem;
-    color: rgba(15,110,86,0.85);
-    margin-bottom: var(--spacing-md);
-    line-height: 1.7;
-}
-
 /* ── Review Section ── */
 .review-section {
     animation: fadeUp 0.4s ease both;

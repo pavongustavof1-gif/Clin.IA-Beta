@@ -65,19 +65,24 @@ window.addEventListener('pageshow', function(event) {
             // Non-JSON or malformed response — admin link just stays hidden
         }
 
-        document.body.classList.remove('auth-pending');
+        // auth-pending stays applied through init() (including its resumed-
+        // job check) so the doctor never sees a flash of the default
+        // recording screen before the correct destination — review screen,
+        // progress bar, or nothing — is already in place. Same mechanism
+        // BL-1 introduced for the stale-token case, just held a bit longer.
         if (!_appInitialized) {
             _appInitialized = true;
-            init();
+            await init();
         }
-    }).catch(() => {
+        document.body.classList.remove('auth-pending');
+    }).catch(async () => {
         // Network hiccup — fail open rather than lock the doctor out over
         // a flaky connection; this is a validity check, not a connectivity gate.
-        document.body.classList.remove('auth-pending');
         if (!_appInitialized) {
             _appInitialized = true;
-            init();
+            await init();
         }
+        document.body.classList.remove('auth-pending');
     });
 });
 
@@ -160,10 +165,6 @@ const elements = {
     progressFill: document.getElementById('progressFill'),
     progressText: document.getElementById('progressText'),
 
-    resumedJobBanner: document.getElementById('resumedJobBanner'),
-    resumedJobMessage: document.getElementById('resumedJobMessage'),
-    resumedJobHistorialBtn: document.getElementById('resumedJobHistorialBtn'),
-
     resultsSection: document.getElementById('resultsSection'),
     documentLink: document.getElementById('documentLink'),
     docLink: document.getElementById('docLink'),
@@ -200,7 +201,7 @@ const elements = {
 // ─────────────────────────────────────────────
 // Initialize application
 // ─────────────────────────────────────────────
-function init() {
+async function init() {
     console.log('[ClinIA] Initializing application...');
     
     // Check browser compatibility
@@ -322,16 +323,6 @@ function init() {
         }
     });
 
-    // Resumed-job banner's "Ir a Historial" — job_id is already cleared
-    // by the time this banner shows (checkResumedJob clears it before
-    // calling showResumedJobBanner), this button just navigates.
-    if (elements.resumedJobHistorialBtn) {
-        elements.resumedJobHistorialBtn.addEventListener('click', () => {
-            elements.resumedJobBanner.style.display = 'none';
-            showHistorialView();
-        });
-    }
-
     // Enter key in CURP input triggers search
     elements.historialCurpInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') searchPatientHistory();
@@ -342,7 +333,7 @@ function init() {
     // tab close — that's the whole point of this check).
     const savedJobId = localStorage.getItem('clinia_job_id');
     if (savedJobId) {
-        checkResumedJob(savedJobId);
+        await checkResumedJob(savedJobId);
     }
 
     console.log('[ClinIA] Application initialized successfully');
@@ -674,12 +665,29 @@ async function processAudio() {
     }
 }
 
+// Shared by startJobPolling's done branch AND checkResumedJob's done
+// branch, so the two can never independently diverge on what "done"
+// means — a 'done' job has only finished transcription/extraction, it
+// has NOT been reviewed/confirmed (CURP doesn't exist yet at this point,
+// entered only during review), so the ONLY correct behavior is to enter
+// the review screen directly, exactly as an uninterrupted flow would.
+async function handleJobDone(data) {
+    elements.progressSection.style.display = 'block';
+    updateProgress(100, 'Listo para revisión.', 3);
+    state.sessionId = data.session_id;
+    await sleep(400);
+    displayReviewScreen({
+        session_id:      data.session_id,
+        status:          'pending_review',
+        transcript:      data.transcript,
+        structured_data: data.structured_data,
+    });
+}
+
 // One-time status check for a job_id resumed from localStorage (page
 // load / reopened tab) — deliberately separate from startJobPolling's
-// own done/error handling, which assumes the doctor is actively watching
-// a job they just started. A job discovered ALREADY done here must not
-// jump straight into the review screen (the doctor may not even
-// remember starting it) — show a banner pointing to Historial instead.
+// own polling loop, since this only needs a single check, but MUST
+// share the same 'done' handling (see handleJobDone above).
 async function checkResumedJob(jobId) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
@@ -707,7 +715,7 @@ async function checkResumedJob(jobId) {
             startJobPolling(jobId);
         } else if (data.status === 'done') {
             localStorage.removeItem('clinia_job_id');
-            showResumedJobBanner();
+            await handleJobDone(data);
         } else {
             // 'error' status, or any unexpected value — clear silently,
             // same as a not-found job. No error shown for a stale job the
@@ -753,15 +761,7 @@ function startJobPolling(jobId) {
             } else if (data.status === 'done') {
                 clearInterval(pollInterval);
                 localStorage.removeItem('clinia_job_id');
-                updateProgress(100, 'Listo para revisión.', 3);
-                state.sessionId = data.session_id;
-                await sleep(400);
-                displayReviewScreen({
-                    session_id:      data.session_id,
-                    status:          'pending_review',
-                    transcript:      data.transcript,
-                    structured_data: data.structured_data,
-                });
+                await handleJobDone(data);
             } else if (data.status === 'error') {
                 clearInterval(pollInterval);
                 localStorage.removeItem('clinia_job_id');
@@ -1170,13 +1170,6 @@ function showError(message) {
     elements.errorMessage.textContent = message;
 
     elements.errorSection.scrollIntoView({ behavior: 'smooth' });
-}
-
-function showResumedJobBanner() {
-    elements.resumedJobBanner.style.display = 'block';
-    elements.resumedJobMessage.textContent =
-        'Tu nota ya fue procesada — ve a Historial para verla o revisa tu correo.';
-    elements.resumedJobBanner.scrollIntoView({ behavior: 'smooth' });
 }
 
 function resetApplication() {
