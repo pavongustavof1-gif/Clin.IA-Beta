@@ -1110,6 +1110,11 @@ async function confirmAndGenerate() {
         await sleep(500);
         displayResults(result);
 
+        // Confirming moves this session out of pending_review — refresh the
+        // nav badge/banner so a note continued from the pending list (or
+        // any confirm at all) doesn't leave a stale count behind.
+        checkPendingSessions();
+
         // Lock review form — note is now immutable (NOM-024)
         document.querySelectorAll('.review-input').forEach(el => {
             el.setAttribute('readonly', true);
@@ -1354,6 +1359,25 @@ function hidePendingSessionsView() {
 // sessions exist, the load-time banner. Deliberately assertive (not just
 // the nav link) since these are unsigned notes, not something to leave
 // easy to miss.
+// Single source of truth for the nav badge count — called from every
+// place the pending-sessions count can change (init, after confirm,
+// after discard, when the list itself loads) so the badge can never
+// independently drift out of sync the way the banner-only version of
+// this logic just did.
+function updatePendingBadge(count) {
+    if (count > 0) {
+        elements.pendingSessionsBadge.textContent = String(count);
+        elements.pendingSessionsBadge.style.display = 'inline-block';
+    } else {
+        elements.pendingSessionsBadge.style.display = 'none';
+    }
+}
+
+// Called at init() and after a confirm — the only two moments the
+// load-time banner should be able to (re)appear. Deliberately NOT
+// called by loadPendingSessionsList(): a doctor already looking at the
+// list doesn't need the banner popping back in on top of it (see
+// showPendingSessionsView(), which hides the banner on entry).
 async function checkPendingSessions() {
     try {
         const res = await fetch(`${API_BASE_URL}/api/pending-sessions`, {
@@ -1363,10 +1387,15 @@ async function checkPendingSessions() {
         if (!res.ok) return;
 
         const sessions = await res.json();
-        if (!sessions.length) return;
+        updatePendingBadge(sessions.length);
 
-        elements.pendingSessionsBadge.textContent = String(sessions.length);
-        elements.pendingSessionsBadge.style.display = 'inline-block';
+        if (!sessions.length) {
+            // Must actively hide, not skip — this runs after a confirm too,
+            // when the count may have just dropped to zero. A bare early
+            // return would leave a stale banner from before the confirm.
+            elements.pendingSessionsBanner.style.display = 'none';
+            return;
+        }
 
         elements.pendingSessionsBannerText.textContent = sessions.length === 1
             ? 'Tienes 1 nota procesada que aún no has revisado ni confirmado.'
@@ -1389,10 +1418,10 @@ async function loadPendingSessionsList() {
         if (!res.ok) throw new Error('Error al cargar notas pendientes');
 
         const sessions = await res.json();
+        updatePendingBadge(sessions.length);
 
         if (!sessions.length) {
             elements.pendingSessionsList.innerHTML = '<p style="color: var(--text-secondary);">No tienes notas pendientes.</p>';
-            elements.pendingSessionsBadge.style.display = 'none';
             elements.pendingSessionsBanner.style.display = 'none';
             return;
         }
@@ -1462,7 +1491,10 @@ async function discardPendingSession(sessionId) {
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) {
-            alert('No se pudo descartar la nota. Intente de nuevo.');
+            let serverError = '';
+            try { serverError = (await res.json()).error || ''; } catch (_) { /* non-JSON body */ }
+            console.error(`[ClinIA] discardPendingSession failed: HTTP ${res.status}`, serverError);
+            alert(serverError || 'No se pudo descartar la nota. Intente de nuevo.');
             return;
         }
 
