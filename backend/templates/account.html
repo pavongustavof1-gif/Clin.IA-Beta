@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Cuenta - Clin.IA™</title>
+
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon/favicon-16.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-touch-icon.png') }}">
+    <link rel="icon" type="image/png" sizes="192x192" href="{{ url_for('static', filename='favicon/android-chrome-192x192.png') }}">
+    <link rel="icon" type="image/png" sizes="512x512" href="{{ url_for('static', filename='favicon/android-chrome-512x512.png') }}">
+
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+
+    <style>
+        /* Hidden until session-check confirms the token is valid — no role
+           gate here, unlike admin.html, since every authenticated user
+           reaches this page regardless of rol. */
+        body.auth-pending { visibility: hidden; }
+
+        .account-container {
+            max-width: 560px;
+            margin: 0 auto;
+            padding: var(--spacing-lg) var(--spacing-md);
+        }
+
+        .account-title {
+            font-family: 'DM Serif Display', Georgia, serif;
+            font-style: italic;
+            font-size: 1.8rem;
+            color: var(--text-primary);
+            margin-bottom: var(--spacing-md);
+        }
+
+        .account-email {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin-bottom: var(--spacing-md);
+        }
+
+        .account-email strong {
+            color: var(--text-primary);
+            font-weight: 500;
+        }
+
+        .account-error {
+            display: none;
+            color: #c0392b;
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+        }
+
+        .account-success {
+            display: none;
+            color: #0F6E56;
+            font-size: 0.85rem;
+            margin-top: 0.75rem;
+        }
+    </style>
+</head>
+<body class="auth-pending">
+
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions">
+                <a href="/" class="nav-link">← Volver a la app</a>
+                <span class="nav-sep">|</span>
+                <a href="#" id="logoutBtn" class="nav-link">Cerrar sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="account-container">
+        <h1 class="account-title">Mi Cuenta</h1>
+
+        <div class="card">
+            <h3 style="margin-bottom: var(--spacing-sm);">Cambiar contraseña</h3>
+            <p class="account-email">Cuenta: <strong id="accountEmail"></strong></p>
+
+            <form id="changePasswordForm">
+                <div style="display: grid; gap: 0.85rem;">
+                    <div>
+                        <label class="review-label" for="currentPassword">Contraseña actual</label>
+                        <input type="password" id="currentPassword" class="review-input" autocomplete="current-password" required>
+                    </div>
+                    <div>
+                        <label class="review-label" for="newPassword">Nueva contraseña</label>
+                        <input type="password" id="newPassword" class="review-input" autocomplete="new-password" required>
+                    </div>
+                    <div>
+                        <label class="review-label" for="confirmNewPassword">Confirmar nueva contraseña</label>
+                        <input type="password" id="confirmNewPassword" class="review-input" autocomplete="new-password" required>
+                    </div>
+                </div>
+
+                <div id="changePasswordError" class="account-error"></div>
+                <div id="changePasswordSuccess" class="account-success"></div>
+
+                <div style="margin-top: 1rem;">
+                    <button type="submit" id="changePasswordBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Cambiar contraseña</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseClient = window.supabase.createClient(
+            "{{ supabase_url }}",
+            "{{ supabase_anon_key }}"
+        );
+
+        function getAuthHeaders() {
+            return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
+        }
+
+        function logout() {
+            sessionStorage.removeItem('clinia_token');
+            sessionStorage.removeItem('clinia_email');
+            window.location.href = '/login';
+        }
+
+        function handleSessionExpired() {
+            sessionStorage.removeItem('clinia_token');
+            sessionStorage.removeItem('clinia_email');
+            window.location.href = '/login';
+        }
+
+        document.getElementById('logoutBtn').addEventListener('click', (e) => {
+            e.preventDefault();
+            logout();
+        });
+
+        // Same token-presence + validity-check pattern as admin.js's
+        // pageshow guard, minus the rol check — every authenticated user
+        // reaches this page regardless of role.
+        window.addEventListener('pageshow', function(event) {
+            const token = sessionStorage.getItem('clinia_token');
+            if (!token) {
+                window.location.href = '/login';
+                return;
+            }
+
+            if (event.persisted) {
+                document.body.classList.add('auth-pending');
+            }
+
+            fetch(`${window.location.origin}/api/session-check`, {
+                headers: getAuthHeaders()
+            }).then(async res => {
+                if (res.status === 401) {
+                    handleSessionExpired();
+                    return;
+                }
+
+                document.getElementById('accountEmail').textContent =
+                    sessionStorage.getItem('clinia_email') || '';
+                document.body.classList.remove('auth-pending');
+
+            }).catch(() => {
+                // Network hiccup on the validity check itself — retry is on
+                // the doctor via reload; we don't reveal the page on a
+                // failed check.
+            });
+        });
+
+        // Change-password form
+        const form = document.getElementById('changePasswordForm');
+        const errorBox = document.getElementById('changePasswordError');
+        const successBox = document.getElementById('changePasswordSuccess');
+        const submitBtn = document.getElementById('changePasswordBtn');
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            errorBox.style.display = 'none';
+            successBox.style.display = 'none';
+
+            const currentPassword = document.getElementById('currentPassword').value;
+            const newPassword = document.getElementById('newPassword').value;
+            const confirmNewPassword = document.getElementById('confirmNewPassword').value;
+
+            if (newPassword.length < 8) {
+                errorBox.textContent = 'La nueva contraseña debe tener al menos 8 caracteres.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            if (newPassword !== confirmNewPassword) {
+                errorBox.textContent = 'Las contraseñas no coinciden.';
+                errorBox.style.display = 'block';
+                return;
+            }
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Verificando...';
+
+            // Re-verify the CURRENT password before allowing a change —
+            // extra friction against an unattended, already-logged-in
+            // session on a shared clinic computer, not something
+            // Supabase's own updateUser() requires on its own.
+            const email = sessionStorage.getItem('clinia_email');
+            const { data: reauthData, error: reauthError } =
+                await supabaseClient.auth.signInWithPassword({ email, password: currentPassword });
+
+            if (reauthError || !reauthData?.session) {
+                errorBox.textContent = 'Contraseña actual incorrecta.';
+                errorBox.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Cambiar contraseña';
+                return;
+            }
+
+            // Keep our own tracked token in sync with the fresh session
+            // signInWithPassword just established.
+            sessionStorage.setItem('clinia_token', reauthData.session.access_token);
+
+            submitBtn.textContent = 'Guardando...';
+
+            const { error: updateError } = await supabaseClient.auth.updateUser({ password: newPassword });
+
+            if (updateError) {
+                errorBox.textContent = updateError.message || 'No se pudo cambiar la contraseña. Intente de nuevo.';
+                errorBox.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Cambiar contraseña';
+                return;
+            }
+
+            successBox.textContent = 'Contraseña actualizada. Redirigiendo a inicio de sesión...';
+            successBox.style.display = 'block';
+            form.style.display = 'none';
+
+            setTimeout(() => {
+                logout();
+            }, 1500);
+        });
+    </script>
+</body>
+</html>

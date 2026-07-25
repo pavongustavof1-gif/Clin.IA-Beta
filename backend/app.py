@@ -606,6 +606,19 @@ def admin():
     # @require_admin on /api/admin/* below.
     return render_template('admin.html')
 
+@app.route('/account')
+def account():
+    # Unconditional shell, same pattern as admin() — no role gate at all,
+    # any authenticated user (doctor or admin) reaches this for their own
+    # password. Client-side auth guard only (account.js), no @require_*
+    # boundary needed server-side since the actual password change goes
+    # straight to Supabase Auth via supabaseClient, not through our API.
+    return render_template(
+        'account.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
