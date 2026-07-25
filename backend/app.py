@@ -1777,15 +1777,36 @@ def admin_sessions():
     if usuario_id_filter:
         filters.append(f'usuario_id=eq.{usuario_id_filter}')
 
+    try:
+        limit = int(request.args.get('limit', 20))
+    except ValueError:
+        limit = 20
+    limit = max(1, min(limit, 50))
+
+    try:
+        offset = int(request.args.get('offset', 0))
+    except ValueError:
+        offset = 0
+    offset = max(0, offset)
+
+    # Fetch one extra row to cheaply detect a next page without needing
+    # Prefer: count=exact / Content-Range — good enough for next/previous
+    # controls, no total-page-count requirement.
     path = (
         f'/rest/v1/sesiones'
         f'?{"&".join(filters)}'
         f'&select=session_id,timestamp,usuario_id,status,addenda'
         f'&order=timestamp.desc'
+        f'&limit={limit + 1}'
+        f'&offset={offset}'
     )
     rows = _sb_get(path)
+
     if rows is None:
         return jsonify({'error': 'Error al consultar sesiones'}), 500
+
+    has_more = len(rows) > limit
+    rows = rows[:limit]
 
     # Resolve doctor names via a plain second query per DISTINCT usuario_id
     # (not a PostgREST embed — same reasoning as item 24 Stage 4: embeds
@@ -1797,7 +1818,7 @@ def admin_sessions():
         if uid and uid not in nombre_cache:
             nombre_cache[uid] = get_usuario_nombre(uid)
 
-    result = [
+    sessions = [
         {
             'session_id':    r.get('session_id'),
             'timestamp':     r.get('timestamp'),
@@ -1807,7 +1828,7 @@ def admin_sessions():
         }
         for r in rows
     ]
-    return jsonify(result), 200
+    return jsonify({'sessions': sessions, 'has_more': has_more}), 200
 
 
 @app.route('/api/admin/session/<session_id>/pdf', methods=['GET'])

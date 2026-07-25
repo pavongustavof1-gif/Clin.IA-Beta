@@ -26,6 +26,9 @@ function generateFormattedHTML(data) {
         if (info.fecha_de_nacimiento) {
             html += `<p><strong>Fecha de Nacimiento:</strong> ${info.fecha_de_nacimiento}</p>`;
         }
+        if (info.curp) {
+            html += `<p><strong>CURP:</strong> ${info.curp}</p>`;
+        }
         if (info.edad) {
             html += `<p><strong>Edad:</strong> ${info.edad}</p>`;
         }

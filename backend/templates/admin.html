@@ -354,7 +354,16 @@
                         <option value="">Todos los doctores</option>
                     </select>
                 </div>
-                <button id="sessionSearchBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Buscar</button>
+                <button id="sessionSearchBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Buscar por fecha o doctor</button>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 0.5rem; margin-top: 0.85rem;">
+                <label class="review-label" for="sessionSearchPageSize" style="margin-bottom: 0;">Resultados por página</label>
+                <select id="sessionSearchPageSize" class="review-input" style="width: auto;">
+                    <option value="10">10</option>
+                    <option value="20" selected>20</option>
+                    <option value="50">50</option>
+                </select>
             </div>
 
             <div id="sessionSearchLoading" class="admin-loading" style="display: none;">Buscando...</div>
@@ -379,6 +388,10 @@
                     </thead>
                     <tbody id="sessionSearchTableBody"></tbody>
                 </table>
+            </div>
+            <div id="sessionSearchPagination" style="display: none; justify-content: flex-end; gap: 0.5rem; margin-top: 0.75rem;">
+                <button id="sessionSearchPrevBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">← Anterior</button>
+                <button id="sessionSearchNextBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">Siguiente →</button>
             </div>
 
             <div id="sessionDetailPanel" style="display: none; margin-top: var(--spacing-md); padding-top: var(--spacing-md); border-top: 1px solid var(--border-color);">

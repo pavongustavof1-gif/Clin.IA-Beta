@@ -337,6 +337,18 @@ async function init() {
         if (e.key === 'Enter') searchPatientHistory();
     });
 
+    // Session-ID direct lookup — mirrors admin's Búsqueda ARCO fast path.
+    const historialSessionIdBtn = document.getElementById('historialSessionIdBtn');
+    if (historialSessionIdBtn) {
+        historialSessionIdBtn.addEventListener('click', searchHistorialBySessionId);
+    }
+    const historialSessionIdInput = document.getElementById('historialSessionIdInput');
+    if (historialSessionIdInput) {
+        historialSessionIdInput.addEventListener('keydown', e => {
+            if (e.key === 'Enter') searchHistorialBySessionId();
+        });
+    }
+
     // Pending sessions: nav button toggles the list view, banner button
     // opens it directly (both lead to the same place).
     elements.pendingSessionsBtn.addEventListener('click', (e) => {
@@ -1504,6 +1516,27 @@ async function discardPendingSession(sessionId) {
         console.error('[ClinIA] discardPendingSession error:', err);
         alert('Error de red al descartar la nota. Intente de nuevo.');
     }
+}
+
+async function searchHistorialBySessionId() {
+    const input = document.getElementById('historialSessionIdInput');
+    const errorEl = document.getElementById('historialSessionIdError');
+    const sessionId = input.value.trim();
+
+    errorEl.style.display = 'none';
+
+    if (!sessionId) {
+        errorEl.textContent = 'Ingrese un ID de sesión.';
+        errorEl.style.display = 'block';
+        return;
+    }
+
+    // Reuses the same GET /api/patient-history/<id> endpoint and detail
+    // view already used for CURP-search results — no new backend route,
+    // mirroring admin's Búsqueda ARCO fast path exactly. openHistoryDetail
+    // already shows "Sesión no encontrada" inside the panel on 404, so no
+    // separate not-found handling needed here.
+    await openHistoryDetail(sessionId);
 }
 
 async function searchPatientHistory() {

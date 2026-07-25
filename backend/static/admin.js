@@ -51,7 +51,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const sessionSearchBtn = document.getElementById('sessionSearchBtn');
     if (sessionSearchBtn) {
-        sessionSearchBtn.addEventListener('click', searchSessions);
+        sessionSearchBtn.addEventListener('click', () => searchSessions(true));
+    }
+
+    const sessionSearchPrevBtn = document.getElementById('sessionSearchPrevBtn');
+    if (sessionSearchPrevBtn) {
+        sessionSearchPrevBtn.addEventListener('click', sessionSearchPrevPage);
+    }
+
+    const sessionSearchNextBtn = document.getElementById('sessionSearchNextBtn');
+    if (sessionSearchNextBtn) {
+        sessionSearchNextBtn.addEventListener('click', sessionSearchNextPage);
+    }
+
+    const sessionSearchPageSize = document.getElementById('sessionSearchPageSize');
+    if (sessionSearchPageSize) {
+        sessionSearchPageSize.addEventListener('change', () => {
+            // Only auto-refresh if a search has already run — don't fetch
+            // before the doctor has actually searched for anything.
+            if (document.getElementById('sessionSearchTableWrap').style.display !== 'none') {
+                searchSessions(true);
+            }
+        });
     }
 
     const sessionSearchByIdBtn = document.getElementById('sessionSearchByIdBtn');
@@ -138,24 +159,34 @@ function sessionStatusLabel(status) {
     return status || '—';
 }
 
-async function searchSessions() {
+let sessionSearchOffset = 0;
+let sessionSearchHasMore = false;
+
+async function searchSessions(resetOffset) {
+    if (resetOffset) sessionSearchOffset = 0;
+
     const desde = document.getElementById('sessionSearchDesde').value;
     const hasta = document.getElementById('sessionSearchHasta').value;
     const usuarioId = document.getElementById('sessionSearchDoctor').value;
+    const pageSize = parseInt(document.getElementById('sessionSearchPageSize').value, 10) || 20;
 
     const loadingEl = document.getElementById('sessionSearchLoading');
     const emptyEl = document.getElementById('sessionSearchEmpty');
     const tableWrap = document.getElementById('sessionSearchTableWrap');
+    const paginationEl = document.getElementById('sessionSearchPagination');
     const tbody = document.getElementById('sessionSearchTableBody');
 
     loadingEl.style.display = 'block';
     emptyEl.style.display = 'none';
     tableWrap.style.display = 'none';
+    paginationEl.style.display = 'none';
 
     const params = new URLSearchParams();
     if (desde) params.set('desde', desde);
     if (hasta) params.set('hasta', hasta);
     if (usuarioId) params.set('usuario_id', usuarioId);
+    params.set('limit', String(pageSize));
+    params.set('offset', String(sessionSearchOffset));
 
     try {
         const res = await fetch(`${window.location.origin}/api/admin/sessions?${params.toString()}`, {
@@ -169,11 +200,15 @@ async function searchSessions() {
         }
         if (!res.ok) throw new Error('Error al buscar sesiones');
 
-        const sessions = await res.json();
+        const data = await res.json();
+        const sessions = data.sessions || [];
+        sessionSearchHasMore = !!data.has_more;
         loadingEl.style.display = 'none';
 
         if (!sessions.length) {
-            emptyEl.textContent = 'No se encontraron sesiones para estos filtros.';
+            emptyEl.textContent = sessionSearchOffset > 0
+                ? 'No hay más resultados.'
+                : 'No se encontraron sesiones para estos filtros.';
             emptyEl.style.display = 'block';
             return;
         }
@@ -195,6 +230,9 @@ async function searchSessions() {
         }).join('');
 
         tableWrap.style.display = 'block';
+        paginationEl.style.display = 'flex';
+        document.getElementById('sessionSearchPrevBtn').disabled = sessionSearchOffset === 0;
+        document.getElementById('sessionSearchNextBtn').disabled = !sessionSearchHasMore;
 
     } catch (err) {
         console.error('[ClinIA Admin] searchSessions error:', err);
@@ -202,6 +240,19 @@ async function searchSessions() {
         emptyEl.textContent = 'Error al buscar sesiones. Intente de nuevo.';
         emptyEl.style.display = 'block';
     }
+}
+
+function sessionSearchNextPage() {
+    if (!sessionSearchHasMore) return;
+    const pageSize = parseInt(document.getElementById('sessionSearchPageSize').value, 10) || 20;
+    sessionSearchOffset += pageSize;
+    searchSessions(false);
+}
+
+function sessionSearchPrevPage() {
+    const pageSize = parseInt(document.getElementById('sessionSearchPageSize').value, 10) || 20;
+    sessionSearchOffset = Math.max(0, sessionSearchOffset - pageSize);
+    searchSessions(false);
 }
 
 document.addEventListener('click', (e) => {
