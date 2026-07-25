@@ -196,6 +196,15 @@ const elements = {
     historialResults: document.getElementById('historialResults'),
     historialDetail: document.getElementById('historialDetail'),
     historialDetailContent: document.getElementById('historialDetailContent'),
+
+    pendingSessionsBtn: document.getElementById('pendingSessionsBtn'),
+    pendingSessionsBtnLabel: document.getElementById('pendingSessionsBtnLabel'),
+    pendingSessionsBadge: document.getElementById('pendingSessionsBadge'),
+    pendingSessionsBanner: document.getElementById('pendingSessionsBanner'),
+    pendingSessionsBannerText: document.getElementById('pendingSessionsBannerText'),
+    pendingSessionsBannerBtn: document.getElementById('pendingSessionsBannerBtn'),
+    pendingSessionsSection: document.getElementById('pendingSessionsSection'),
+    pendingSessionsList: document.getElementById('pendingSessionsList'),
 };
 
 // ─────────────────────────────────────────────
@@ -328,6 +337,20 @@ async function init() {
         if (e.key === 'Enter') searchPatientHistory();
     });
 
+    // Pending sessions: nav button toggles the list view, banner button
+    // opens it directly (both lead to the same place).
+    elements.pendingSessionsBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        if (elements.pendingSessionsSection.style.display === 'none') {
+            showPendingSessionsView();
+        } else {
+            hidePendingSessionsView();
+        }
+    });
+    elements.pendingSessionsBannerBtn.addEventListener('click', () => {
+        showPendingSessionsView();
+    });
+
     // Resume watching a job that was in progress before a reload OR a
     // closed/reopened tab (localStorage, unlike sessionStorage, survives
     // tab close — that's the whole point of this check).
@@ -335,6 +358,12 @@ async function init() {
     if (savedJobId) {
         await checkResumedJob(savedJobId);
     }
+
+    // Own unfinished pending_review sessions — badge + banner, checked
+    // independently of the job-resume check above (different concept:
+    // this is about old, never-completed drafts, not an interrupted
+    // in-flight job).
+    await checkPendingSessions();
 
     console.log('[ClinIA] Application initialized successfully');
 }
@@ -1283,6 +1312,7 @@ function setHistorialScope(scope) {
 }
 
 function showHistorialView() {
+    elements.pendingSessionsSection.style.display = 'none'; // only one standalone view open at a time
     _mainSections().forEach(el => { el._histSavedDisplay = el.style.display; el.style.display = 'none'; });
     elements.historialSection.style.display = 'block';
     elements.historialBtn.textContent = '← Volver';
@@ -1299,6 +1329,149 @@ function hideHistorialView() {
 function showHistorialSearch() {
     elements.historialSearch.style.display = 'block';
     elements.historialDetail.style.display = 'none';
+}
+
+// ─────────────────────────────────────────────
+// Pending Sessions (own unfinished pending_review sessions)
+// ─────────────────────────────────────────────
+
+function showPendingSessionsView() {
+    elements.historialSection.style.display = 'none'; // only one standalone view open at a time
+    elements.pendingSessionsBanner.style.display = 'none'; // redundant once the list itself is open
+    _mainSections().forEach(el => { el._pendingSavedDisplay = el.style.display; el.style.display = 'none'; });
+    elements.pendingSessionsSection.style.display = 'block';
+    elements.pendingSessionsBtnLabel.textContent = '← Volver';
+    loadPendingSessionsList();
+}
+
+function hidePendingSessionsView() {
+    elements.pendingSessionsSection.style.display = 'none';
+    _mainSections().forEach(el => { el.style.display = el._pendingSavedDisplay ?? ''; });
+    elements.pendingSessionsBtnLabel.textContent = 'Notas pendientes';
+}
+
+// Called once at init() — populates the nav badge and, if any pending
+// sessions exist, the load-time banner. Deliberately assertive (not just
+// the nav link) since these are unsigned notes, not something to leave
+// easy to miss.
+async function checkPendingSessions() {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pending-sessions`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) return;
+
+        const sessions = await res.json();
+        if (!sessions.length) return;
+
+        elements.pendingSessionsBadge.textContent = String(sessions.length);
+        elements.pendingSessionsBadge.style.display = 'inline-block';
+
+        elements.pendingSessionsBannerText.textContent = sessions.length === 1
+            ? 'Tienes 1 nota procesada que aún no has revisado ni confirmado.'
+            : `Tienes ${sessions.length} notas procesadas que aún no has revisado ni confirmado.`;
+        elements.pendingSessionsBanner.style.display = 'block';
+
+    } catch (err) {
+        console.warn('[ClinIA] checkPendingSessions error:', err);
+    }
+}
+
+async function loadPendingSessionsList() {
+    elements.pendingSessionsList.innerHTML = '<p style="color: var(--text-secondary);">Cargando...</p>';
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pending-sessions`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) throw new Error('Error al cargar notas pendientes');
+
+        const sessions = await res.json();
+
+        if (!sessions.length) {
+            elements.pendingSessionsList.innerHTML = '<p style="color: var(--text-secondary);">No tienes notas pendientes.</p>';
+            elements.pendingSessionsBadge.style.display = 'none';
+            elements.pendingSessionsBanner.style.display = 'none';
+            return;
+        }
+
+        const rows = sessions.map(s => {
+            const fecha = s.timestamp
+                ? new Date(s.timestamp).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+                : '—';
+            const motivo = s.motivo_de_consulta || '—';
+            const sid = s.session_id;
+            return `<div class="pending-row">
+                <div class="pending-row-main">
+                    <span class="pending-fecha">${fecha}</span>
+                    <span class="pending-motivo">${motivo}</span>
+                </div>
+                <div class="pending-row-actions">
+                    <button class="btn btn-primary btn-small" style="max-width: none; width: auto;" onclick="continuePendingSession('${sid}')">Continuar revisión</button>
+                    <button class="btn btn-danger btn-small" style="max-width: none; width: auto;" onclick="discardPendingSession('${sid}')">Descartar</button>
+                </div>
+            </div>`;
+        }).join('');
+
+        elements.pendingSessionsList.innerHTML = `<div class="pending-list">${rows}</div>`;
+
+    } catch (err) {
+        console.error('[ClinIA] loadPendingSessionsList error:', err);
+        elements.pendingSessionsList.innerHTML = '<p style="color: var(--text-secondary);">Error al cargar notas pendientes. Intente de nuevo.</p>';
+    }
+}
+
+async function continuePendingSession(sessionId) {
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pending-sessions/${sessionId}`, {
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) {
+            alert('No se pudo cargar esta nota. Puede que ya haya sido confirmada o descartada.');
+            loadPendingSessionsList();
+            return;
+        }
+
+        const data = await res.json();
+        hidePendingSessionsView();
+        state.sessionId = data.session_id;
+        displayReviewScreen({
+            session_id:      data.session_id,
+            status:          'pending_review',
+            transcript:      data.transcript,
+            structured_data: data.structured_data,
+        });
+
+    } catch (err) {
+        console.error('[ClinIA] continuePendingSession error:', err);
+        alert('Error de red al cargar la nota. Intente de nuevo.');
+    }
+}
+
+async function discardPendingSession(sessionId) {
+    const ok = confirm('¿Descartar esta nota de forma permanente? Esta acción no se puede deshacer.');
+    if (!ok) return;
+
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/pending-sessions/${sessionId}`, {
+            method: 'DELETE',
+            headers: getAuthHeaders()
+        });
+        if (res.status === 401) return handleSessionExpired();
+        if (!res.ok) {
+            alert('No se pudo descartar la nota. Intente de nuevo.');
+            return;
+        }
+
+        await loadPendingSessionsList();
+
+    } catch (err) {
+        console.error('[ClinIA] discardPendingSession error:', err);
+        alert('Error de red al descartar la nota. Intente de nuevo.');
+    }
 }
 
 async function searchPatientHistory() {

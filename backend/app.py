@@ -178,6 +178,21 @@ def _sb_patch(path: str, body: dict) -> bool:
         logger.warning(f"DB: Supabase PATCH {path} error: {e}")
         return False
 
+def _sb_delete(path: str) -> bool:
+    """DELETE via Supabase REST. Returns True on success."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    req = urllib.request.Request(url, headers=_sb_headers(), method='DELETE')
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+        return True
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase DELETE {path} failed {e.code}: {e.read().decode()}")
+        return False
+    except Exception as e:
+        logger.warning(f"DB: Supabase DELETE {path} error: {e}")
+        return False
+
 
 # ── Supabase Storage helpers ─────────────────────────────────────────────────
 # Distinct API surface from the PostgREST /rest/v1/ calls above —
@@ -1236,6 +1251,128 @@ def patient_history_detail(session_id):
         response['autor_nombre'] = get_usuario_nombre(row.get('usuario_id'))
 
     return jsonify(response), 200
+
+
+@app.route('/api/pending-sessions', methods=['GET'])
+@require_auth
+def pending_sessions_list():
+    """
+    List the CALLER'S OWN pending_review sessions — ownership-based, not
+    clinica-wide, unlike patient-history's scope=clinica option. Only the
+    doctor who can legally sign a note can complete it; nobody else
+    (including an admin) has any special access to someone else's
+    unfinished, unsigned draft here.
+    """
+    usuario_id = g.usuario['usuario_id']
+    select = (
+        'session_id,timestamp,'
+        'structured_data->informacion_paciente->>motivo_de_consulta'
+        .replace('>', '%3E')
+    )
+    rows = _sb_get(
+        f'/rest/v1/sesiones'
+        f'?usuario_id=eq.{usuario_id}'
+        f'&status=eq.pending_review'
+        f'&select={select}'
+        f'&order=timestamp.desc'
+    )
+    if rows is None:
+        return jsonify({'error': 'Error al consultar notas pendientes'}), 500
+
+    return jsonify([
+        {
+            'session_id':         r.get('session_id'),
+            'timestamp':          r.get('timestamp'),
+            'motivo_de_consulta': r.get('motivo_de_consulta'),
+        }
+        for r in rows
+    ]), 200
+
+
+@app.route('/api/pending-sessions/<session_id>', methods=['GET'])
+@require_auth
+def pending_sessions_detail(session_id):
+    """
+    Full structured_data + transcript for one of the caller's own
+    pending_review sessions — shaped identically to the job-status 'done'
+    response so the frontend can reuse displayReviewScreen() unchanged.
+    404 (never 403) if not found, not owned, or not pending_review —
+    this route has no business surfacing a confirmed/cancelled session
+    even to its own owner, that's patient-history's job.
+    """
+    usuario_id = g.usuario['usuario_id']
+    rows = _sb_get(
+        f'/rest/v1/sesiones'
+        f'?session_id=eq.{session_id}'
+        f'&select=session_id,usuario_id,status,full_response'
+        f'&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('usuario_id') != usuario_id or row.get('status') != 'pending_review':
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    full_response = row.get('full_response') or {}
+    return jsonify({
+        'session_id':      row['session_id'],
+        'status':          row['status'],
+        'structured_data': full_response.get('structured_data', {}),
+        'transcript':      full_response.get('transcript', {}),
+    }), 200
+
+
+@app.route('/api/pending-sessions/<session_id>', methods=['DELETE'])
+@require_auth
+def pending_sessions_discard(session_id):
+    """
+    Permanently discard one of the caller's own pending_review sessions —
+    a hard DELETE, deliberately NOT the soft-delete/status-flag pattern
+    used for confirmed-session cancellation (item 37). A pending_review
+    session that's never been confirmed was never a signed clinical
+    record — there's nothing requiring retention, and a doctor discarding
+    it may mean the patient withdrew consent or the recording was
+    abandoned mid-encounter. Holding the raw transcript/structured_data
+    indefinitely in that case works against LFPDPPP data minimization
+    rather than serving any compliance purpose, unlike a cancelled-but-
+    once-signed note, which keeps its audit trail because it WAS a record.
+
+    Also deletes the matching trabajos row: it independently holds its
+    own full copy of the same structured_data/transcript (written when
+    the job completed), so leaving it behind would defeat the entire
+    point of discarding — the sensitive data would just survive under a
+    different table. trabajos cleanup is best-effort (logged, not
+    blocking) since its absence doesn't indicate anything is wrong.
+    lecturas_sesion rows are deliberately left untouched — that table is
+    an access-audit log ("who read what, when"), not primary patient
+    data, and audit trails are meant to survive deletion of the thing
+    they logged access to, not be minimized alongside it.
+    """
+    usuario_id = g.usuario['usuario_id']
+    rows = _sb_get(
+        f'/rest/v1/sesiones'
+        f'?session_id=eq.{session_id}'
+        f'&select=usuario_id,status'
+        f'&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('usuario_id') != usuario_id or row.get('status') != 'pending_review':
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    trabajos_deleted = _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}')
+    if not trabajos_deleted:
+        logger.warning(f"Discard: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
+
+    ok = _sb_delete(f'/rest/v1/sesiones?session_id=eq.{session_id}')
+    if not ok:
+        return jsonify({'error': 'No se pudo descartar la nota'}), 500
+
+    logger.info(f"Discard: session {session_id} permanently deleted by usuario_id={usuario_id}")
+    return jsonify({'status': 'ok'}), 200
 
 
 @app.route('/api/session-check', methods=['GET'])

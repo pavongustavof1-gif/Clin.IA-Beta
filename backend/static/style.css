@@ -712,6 +712,81 @@ body {
     font-family: 'DM Mono', monospace;
 }
 
+/* ── Pending Sessions (nav badge, load-time banner, list rows) ── */
+.pending-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    background: #f59e0b;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 999px;
+}
+
+.pending-banner {
+    border-color: rgba(245,158,11,0.35);
+    background: rgba(245,158,11,0.07);
+    animation: fadeUp 0.4s ease both;
+}
+
+.pending-banner h3 {
+    color: #b45309;
+}
+
+.pending-banner-text {
+    font-size: 0.92rem;
+    color: rgba(180,83,9,0.9);
+    margin-bottom: var(--spacing-md);
+    line-height: 1.7;
+}
+
+.pending-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.pending-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+}
+
+.pending-row-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.pending-fecha {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.pending-motivo {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 40ch;
+}
+
+.pending-row-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-shrink: 0;
+}
+
 /* ── Review Section ── */
 .review-section {
     animation: fadeUp 0.4s ease both;
