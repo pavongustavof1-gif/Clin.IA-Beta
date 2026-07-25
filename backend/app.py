@@ -1769,10 +1769,17 @@ def admin_sessions():
         hasta = hasta_dt.strftime('%Y-%m-%d')
 
     filters = [f'clinica_id=eq.{clinica_id}']
-    if desde:
+    if desde and hasta:
+        # Explicit and=(...) combinator rather than repeating timestamp=
+        # twice — PostgREST documents AND-by-default for repeated same-
+        # column params, but also documents this explicit form as the
+        # unambiguous way to combine multiple conditions on ONE column.
+        # hasta is a date (YYYY-MM-DD); T23:59:59.999 makes it inclusive
+        # of the whole day.
+        filters.append(f'and=(timestamp.gte.{desde},timestamp.lte.{hasta}T23:59:59.999)')
+    elif desde:
         filters.append(f'timestamp=gte.{desde}')
-    if hasta:
-        # hasta is a date (YYYY-MM-DD); make it inclusive of the whole day
+    elif hasta:
         filters.append(f'timestamp=lte.{hasta}T23:59:59.999')
     if usuario_id_filter:
         filters.append(f'usuario_id=eq.{usuario_id_filter}')
@@ -1802,6 +1809,11 @@ def admin_sessions():
     )
     rows = _sb_get(path)
 
+    # TEMP DEBUG — item 38 investigation, REMOVE once root cause is found.
+    logger.warning(
+        f"ITEM38-DEBUG admin_sessions: desde={desde!r} hasta={hasta!r} "
+        f"path={path!r} rows_returned={len(rows) if rows is not None else 'None (query failed)'}"
+    )
     if rows is None:
         return jsonify({'error': 'Error al consultar sesiones'}), 500
 
