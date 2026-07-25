@@ -1809,11 +1809,6 @@ def admin_sessions():
     )
     rows = _sb_get(path)
 
-    # TEMP DEBUG — item 38 investigation, REMOVE once root cause is found.
-    logger.warning(
-        f"ITEM38-DEBUG admin_sessions: desde={desde!r} hasta={hasta!r} "
-        f"path={path!r} rows_returned={len(rows) if rows is not None else 'None (query failed)'}"
-    )
     if rows is None:
         return jsonify({'error': 'Error al consultar sesiones'}), 500
 

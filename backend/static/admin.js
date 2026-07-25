@@ -49,6 +49,28 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.addEventListener('click', submitAddDoctor);
     }
 
+    // Pre-fill Desde/Hasta with today's actual committed value, not just a
+    // visual default — item 38's real bug was that a native <input
+    // type="date">'s calendar picker highlights today in the grid as a
+    // reference marker WITHOUT that being the field's real .value. A
+    // doctor who saw "today" highlighted and clicked Buscar without
+    // explicitly selecting a day got an empty desde/hasta, silently
+    // falling through to the 30-day default instead of filtering to
+    // today. Setting .value directly here means what's displayed always
+    // matches what actually gets submitted.
+    const sessionSearchDesdeInput = document.getElementById('sessionSearchDesde');
+    const sessionSearchHastaInput = document.getElementById('sessionSearchHasta');
+    if (sessionSearchDesdeInput && sessionSearchHastaInput) {
+        // Local date components, NOT toISOString() — that's UTC-based and
+        // would show the wrong calendar day near midnight for any clinic
+        // not in UTC (e.g. Mexico, UTC-6), same class of mismatch as the
+        // bug this whole pre-fill exists to fix.
+        const now = new Date();
+        const todayIso = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        sessionSearchDesdeInput.value = todayIso;
+        sessionSearchHastaInput.value = todayIso;
+    }
+
     const sessionSearchBtn = document.getElementById('sessionSearchBtn');
     if (sessionSearchBtn) {
         sessionSearchBtn.addEventListener('click', () => searchSessions(true));
