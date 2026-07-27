@@ -213,7 +213,7 @@ async function searchSessions(resetOffset) {
 
     try {
         const res = await fetch(`${window.location.origin}/api/admin/sessions?${params.toString()}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -310,7 +310,7 @@ async function loadAndRenderSessionDetail(sessionId) {
 
     try {
         const res = await fetch(`${window.location.origin}/api/patient-history/${sessionId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -338,7 +338,7 @@ async function loadAndRenderSessionDetail(sessionId) {
 async function submitAdminAddendum(sessionId, texto) {
     const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/addendum`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ texto })
     });
 
@@ -361,7 +361,7 @@ async function submitAdminAddendum(sessionId, texto) {
 async function submitAdminCancelSession(sessionId, cancellation_reason) {
     const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/cancel`, {
         method: 'POST',
-        headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+        headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
         body: JSON.stringify({ cancellation_reason })
     });
 
@@ -388,7 +388,7 @@ async function submitAdminCancelSession(sessionId, cancellation_reason) {
 async function downloadAdminSessionPdf(sessionId) {
     try {
         const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}/pdf`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) {
@@ -448,7 +448,7 @@ async function submitAddDoctor() {
     try {
         const res = await fetch(`${window.location.origin}/api/admin/usuarios`, {
             method: 'POST',
-            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
             body: JSON.stringify({ nombre, email, especialidad, cedula })
         });
 
@@ -531,7 +531,7 @@ document.addEventListener('click', async (e) => {
     try {
         const res = await fetch(`${window.location.origin}/api/admin/usuarios/${usuarioId}/activo`, {
             method: 'PATCH',
-            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
             body: JSON.stringify({ activo: targetActivo })
         });
 
@@ -591,7 +591,7 @@ window.addEventListener('pageshow', async function(event) {
     }
 
     fetch(`${window.location.origin}/api/session-check`, {
-        headers: getAuthHeaders()
+        headers: await getAuthHeaders()
     }).then(async res => {
         if (res.status === 401) {
             handleSessionExpired();
@@ -621,7 +621,7 @@ async function loadUsuarios() {
 
     try {
         const res = await fetch(`${window.location.origin}/api/admin/usuarios`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -662,7 +662,7 @@ async function loadClinicaProfile() {
 
     try {
         const res = await fetch(`${window.location.origin}/api/admin/clinica`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -702,7 +702,7 @@ async function submitClinicaProfile() {
     try {
         const res = await fetch(`${window.location.origin}/api/admin/clinica`, {
             method: 'PATCH',
-            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
             body: JSON.stringify({ color_primario: color, direccion, telefono })
         });
 
@@ -740,7 +740,7 @@ async function loadClinicaLogoPreview() {
         // (fetch -> response.blob() -> URL.createObjectURL()), just
         // landing in an <img> instead of a triggered download.
         const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -791,7 +791,7 @@ async function submitClinicaLogo() {
 
         const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: await getAuthHeaders(),
             body: formData
         });
 
@@ -833,7 +833,7 @@ async function removeClinicaLogo() {
     try {
         const res = await fetch(`${window.location.origin}/api/admin/clinica/logo`, {
             method: 'DELETE',
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
