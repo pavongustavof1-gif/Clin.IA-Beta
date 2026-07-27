@@ -9,8 +9,9 @@
 // ─────────────────────────────────────────────
 // Auth helpers
 // ─────────────────────────────────────────────
-function getAuthHeaders() {
-    return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
+async function getAuthHeaders() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    return { 'Authorization': 'Bearer ' + session?.access_token };
 }
 
 function logout() {
@@ -32,9 +33,9 @@ function handleSessionExpired() {
 // alone isn't enough at that point, we need to re-validate every time.
 let _appInitialized = false;
 
-window.addEventListener('pageshow', function(event) {
-    const token = sessionStorage.getItem('clinia_token');
-    if (!token) {
+window.addEventListener('pageshow', async function(event) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
         window.location.href = '/login';
         return;
     }

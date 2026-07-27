@@ -175,7 +175,8 @@
     <script>
         const supabaseClient = window.supabase.createClient(
             "{{ supabase_url }}",
-            "{{ supabase_anon_key }}"
+            "{{ supabase_anon_key }}",
+            { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
         );
 
         const form = document.getElementById('loginForm');
@@ -201,7 +202,6 @@
                 return;
             }
 
-            sessionStorage.setItem('clinia_token', data.session.access_token);
             sessionStorage.setItem('clinia_email', data.user.email);
             localStorage.setItem('clinia_doctor_email', data.user.email);
             window.location.href = '/';

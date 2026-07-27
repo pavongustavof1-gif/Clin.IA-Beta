@@ -876,6 +876,14 @@
         </div><!-- /aviso-card -->
     </div><!-- /avisoModal -->
     
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabaseClient = window.supabase.createClient(
+            "{{ supabase_url }}",
+            "{{ supabase_anon_key }}",
+            { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
+        );
+    </script>
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

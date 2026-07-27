@@ -118,11 +118,13 @@
     <script>
         const supabaseClient = window.supabase.createClient(
             "{{ supabase_url }}",
-            "{{ supabase_anon_key }}"
+            "{{ supabase_anon_key }}",
+            { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
         );
 
-        function getAuthHeaders() {
-            return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
+        async function getAuthHeaders() {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            return { 'Authorization': 'Bearer ' + session?.access_token };
         }
 
         function logout() {
@@ -145,9 +147,9 @@
         // Same token-presence + validity-check pattern as admin.js's
         // pageshow guard, minus the rol check — every authenticated user
         // reaches this page regardless of role.
-        window.addEventListener('pageshow', function(event) {
-            const token = sessionStorage.getItem('clinia_token');
-            if (!token) {
+        window.addEventListener('pageshow', async function(event) {
+            const { data: { session } } = await supabaseClient.auth.getSession();
+            if (!session) {
                 window.location.href = '/login';
                 return;
             }
@@ -220,10 +222,6 @@
                 submitBtn.textContent = 'Cambiar contraseña';
                 return;
             }
-
-            // Keep our own tracked token in sync with the fresh session
-            // signInWithPassword just established.
-            sessionStorage.setItem('clinia_token', reauthData.session.access_token);
 
             submitBtn.textContent = 'Guardando...';
 

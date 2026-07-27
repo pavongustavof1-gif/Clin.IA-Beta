@@ -591,7 +591,11 @@ def get_usuario_nombre(usuario_id: str) -> str:
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template(
+        'index.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
 
 @app.route('/login')
 def login():
@@ -619,7 +623,11 @@ def admin():
     # session to gate on for a plain page GET. Role-gating happens client-side
     # (admin.js checks /api/session-check) and the real boundary is
     # @require_admin on /api/admin/* below.
-    return render_template('admin.html')
+    return render_template(
+        'admin.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
 
 @app.route('/account')
 def account():

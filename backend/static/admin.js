@@ -2,8 +2,9 @@
 
 let clinicaLogoObjectUrl = null; // tracked so we can revoke the previous preview URL before replacing it
 
-function getAuthHeaders() {
-    return { 'Authorization': 'Bearer ' + sessionStorage.getItem('clinia_token') };
+async function getAuthHeaders() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    return { 'Authorization': 'Bearer ' + session?.access_token };
 }
 
 function logout() {
@@ -578,9 +579,9 @@ function addDoctorRow(u) {
 // Same token-presence + validity-check pattern as app.js, but this page
 // additionally requires rol === 'admin' — anything else bounces silently
 // to / rather than showing an error page confirming /admin exists.
-window.addEventListener('pageshow', function(event) {
-    const token = sessionStorage.getItem('clinia_token');
-    if (!token) {
+window.addEventListener('pageshow', async function(event) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) {
         window.location.href = '/login';
         return;
     }
