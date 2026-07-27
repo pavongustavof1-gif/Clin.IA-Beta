@@ -47,7 +47,7 @@ window.addEventListener('pageshow', async function(event) {
     }
 
     fetch(`${window.location.origin}/api/session-check`, {
-        headers: getAuthHeaders()
+        headers: await getAuthHeaders()
     }).then(async res => {
         if (res.status === 401) {
             handleSessionExpired();
@@ -267,7 +267,7 @@ async function init() {
         console.log('[ClinIA] Downloading PDF for session:', state.sessionId);
         try {
             const response = await fetch(`${API_BASE_URL}/api/download-pdf/${state.sessionId}`, {
-                headers: getAuthHeaders()
+                headers: await getAuthHeaders()
             });
             if (response.status === 401) return handleSessionExpired();
             if (!response.ok) {
@@ -672,7 +672,7 @@ async function processAudio() {
 
         const response = await fetch(`${API_BASE_URL}/api/process-audio`, {
             method: 'POST',
-            headers: getAuthHeaders(),
+            headers: await getAuthHeaders(),
             body: formData
         });
 
@@ -733,7 +733,7 @@ async function handleJobDone(data) {
 async function checkResumedJob(jobId) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -786,7 +786,7 @@ function startJobPolling(jobId) {
         }
         try {
             const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
-                headers: getAuthHeaders()
+                headers: await getAuthHeaders()
             });
             if (res.status === 401) {
                 clearInterval(pollInterval);
@@ -1093,7 +1093,7 @@ async function confirmAndGenerate() {
     try {
         const response = await fetch(`${API_BASE_URL}/api/confirm-and-generate`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+            headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
             body: JSON.stringify({
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
@@ -1186,7 +1186,7 @@ async function downloadJSON() {
     
     try {
         const response = await fetch(`${API_BASE_URL}/api/export-json/${state.sessionId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (response.status === 401) return handleSessionExpired();
         const blob = await response.blob();
@@ -1394,7 +1394,7 @@ function updatePendingBadge(count) {
 async function checkPendingSessions() {
     try {
         const res = await fetch(`${API_BASE_URL}/api/pending-sessions`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) return;
@@ -1425,7 +1425,7 @@ async function loadPendingSessionsList() {
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/pending-sessions`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) throw new Error('Error al cargar notas pendientes');
@@ -1468,7 +1468,7 @@ async function loadPendingSessionsList() {
 async function continuePendingSession(sessionId) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/pending-sessions/${sessionId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) {
@@ -1500,7 +1500,7 @@ async function discardPendingSession(sessionId) {
     try {
         const res = await fetch(`${API_BASE_URL}/api/pending-sessions/${sessionId}`, {
             method: 'DELETE',
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) {
@@ -1549,7 +1549,7 @@ async function searchPatientHistory() {
 
     try {
         const url = `${API_BASE_URL}/api/patient-history?curp=${encodeURIComponent(curp)}&scope=${historialScope}`;
-        const res = await fetch(url, { headers: getAuthHeaders() });
+        const res = await fetch(url, { headers: await getAuthHeaders() });
         if (res.status === 401) return handleSessionExpired();
         if (!res.ok) throw new Error('Error al buscar historial');
 
@@ -1598,7 +1598,7 @@ async function openHistoryDetail(sessionId) {
 
     try {
         const res = await fetch(`${API_BASE_URL}/api/patient-history/${sessionId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (res.status === 401) return handleSessionExpired();
         if (res.status === 404) {
@@ -1626,7 +1626,7 @@ async function downloadHistorialSessionPdf(sessionId) {
     // new backend route, just reused for a session opened via Historial.
     try {
         const response = await fetch(`${API_BASE_URL}/api/download-pdf/${sessionId}`, {
-            headers: getAuthHeaders()
+            headers: await getAuthHeaders()
         });
         if (response.status === 401) return handleSessionExpired();
         if (!response.ok) {
