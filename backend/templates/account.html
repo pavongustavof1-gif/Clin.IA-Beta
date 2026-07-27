@@ -159,7 +159,7 @@
             }
 
             fetch(`${window.location.origin}/api/session-check`, {
-                headers: getAuthHeaders()
+                headers: await getAuthHeaders()
             }).then(async res => {
                 if (res.status === 401) {
                     handleSessionExpired();
