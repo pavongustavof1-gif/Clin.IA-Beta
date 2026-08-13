@@ -12,6 +12,7 @@ from auth import require_auth, require_admin
 from concurrent.futures import ThreadPoolExecutor
 import os
 import re
+import secrets
 import tempfile
 import json
 import urllib.request
@@ -614,6 +615,68 @@ def get_usuario_nombre(usuario_id: str) -> str:
     if rows:
         return rows[0].get('nombre') or ''
     return ''
+
+# ────────────────────────────────────────────────────────────────────────────
+
+
+# ── Security headers / CSP (Stage 3, findings #7-#9) ─────────────────────────
+#
+# script-src is nonce-based, not 'self'-only: login.html, account.html, and
+# set-password.html carry their entire page logic (login, forgot-password,
+# password re-auth + change, invite-link session detection) as inline
+# <script> with no external .js file, and moving all of that out — plus
+# inventing a way to hand Jinja-rendered Supabase config to a static file —
+# was judged a larger, riskier refactor than the security gain over a
+# per-request nonce justifies. A nonce blocks any attacker-injected <script>
+# or event-handler attribute exactly as well as 'self'-only does; the extra
+# protection 'self'-only buys is against an attacker rewriting a *trusted*
+# inline block's own content, which isn't how the addenda/patient-data
+# stored-XSS vector (#7) works. Nonces do NOT cover inline handler
+# attributes (onclick=...) regardless — every one of those was refactored
+# to addEventListener as part of #7, so there is no 'unsafe-inline' here.
+#
+# style-src keeps 'unsafe-inline': inline style="..." attributes are
+# pervasive throughout the generated HTML (session-detail-render.js,
+# admin.js, app.js). Style injection is a materially lower-severity risk
+# than script injection, and hashing/nonce-ing every dynamically generated
+# style attribute individually isn't practical here.
+@app.before_request
+def _set_csp_nonce():
+    g.csp_nonce = secrets.token_urlsafe(16)
+
+
+@app.context_processor
+def _inject_csp_nonce():
+    return {'csp_nonce': getattr(g, 'csp_nonce', '')}
+
+
+@app.after_request
+def _set_security_headers(response):
+    nonce = getattr(g, 'csp_nonce', '')
+    csp = (
+        "default-src 'self'; "
+        f"script-src 'self' https://cdn.jsdelivr.net 'nonce-{nonce}'; "
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src https://fonts.gstatic.com; "
+        f"connect-src 'self' {Config.SUPABASE_URL}; "
+        "img-src 'self' blob:; "
+        "media-src 'self' blob:; "
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "frame-ancestors 'none'"
+    )
+    response.headers['Content-Security-Policy'] = csp
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    # Only microphone is used anywhere in this app (audio recording via
+    # getUserMedia({audio:...}) in app.js) — every other sensitive
+    # permission is explicitly denied.
+    response.headers['Permissions-Policy'] = (
+        'microphone=(self), camera=(), geolocation=(), payment=(), usb=()'
+    )
+    return response
 
 # ────────────────────────────────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@
 
 function generateFormattedHTML(data) {
     let html = '';
+    const e = escapeHtml;
 
     // Patient Information
     if (data.informacion_paciente) {
@@ -21,19 +22,19 @@ function generateFormattedHTML(data) {
 
         const info = data.informacion_paciente;
         if (info.nombre_del_paciente) {
-            html += `<p><strong>Nombre:</strong> ${info.nombre_del_paciente}</p>`;
+            html += `<p><strong>Nombre:</strong> ${e(info.nombre_del_paciente)}</p>`;
         }
         if (info.fecha_de_nacimiento) {
-            html += `<p><strong>Fecha de Nacimiento:</strong> ${info.fecha_de_nacimiento}</p>`;
+            html += `<p><strong>Fecha de Nacimiento:</strong> ${e(info.fecha_de_nacimiento)}</p>`;
         }
         if (info.curp) {
-            html += `<p><strong>CURP:</strong> ${info.curp}</p>`;
+            html += `<p><strong>CURP:</strong> ${e(info.curp)}</p>`;
         }
         if (info.edad) {
-            html += `<p><strong>Edad:</strong> ${info.edad}</p>`;
+            html += `<p><strong>Edad:</strong> ${e(info.edad)}</p>`;
         }
         if (info.genero) {
-            html += `<p><strong>Género:</strong> ${info.genero}</p>`;
+            html += `<p><strong>Género:</strong> ${e(info.genero)}</p>`;
         }
 
         html += '</div>';
@@ -48,23 +49,23 @@ function generateFormattedHTML(data) {
 
         if (subj.motivo_de_consulta) {
             html += '<h6>Motivo de Consulta</h6>';
-            html += `<p>${subj.motivo_de_consulta}</p>`;
+            html += `<p>${e(subj.motivo_de_consulta)}</p>`;
         }
 
         if (subj.sintomas && subj.sintomas.length > 0) {
             html += '<h6>Síntomas</h6>';
             html += '<ul>';
-            subj.sintomas.forEach(s => html += `<li>${s}</li>`);
+            subj.sintomas.forEach(s => html += `<li>${e(s)}</li>`);
             html += '</ul>';
         }
 
         if (subj.historia_de_enfermedad_actual) {
             html += '<h6>Historia de Enfermedad Actual</h6>';
-            html += `<p>${subj.historia_de_enfermedad_actual}</p>`;
+            html += `<p>${e(subj.historia_de_enfermedad_actual)}</p>`;
         }
 
         if (subj.duracion_sintomas) {
-            html += `<p><strong>Duración:</strong> ${subj.duracion_sintomas}</p>`;
+            html += `<p><strong>Duración:</strong> ${e(subj.duracion_sintomas)}</p>`;
         }
 
         html += '</div>';
@@ -80,22 +81,22 @@ function generateFormattedHTML(data) {
         if (obj.signos_vitales) {
             html += '<h6>Signos Vitales</h6>';
             const vitals = obj.signos_vitales;
-            if (vitals.presion_arterial) html += `<p><strong>Presión Arterial:</strong> ${vitals.presion_arterial}</p>`;
-            if (vitals.frecuencia_cardiaca) html += `<p><strong>Frecuencia Cardíaca:</strong> ${vitals.frecuencia_cardiaca}</p>`;
-            if (vitals.temperatura) html += `<p><strong>Temperatura:</strong> ${vitals.temperatura}</p>`;
-            if (vitals.frecuencia_respiratoria) html += `<p><strong>Frecuencia Respiratoria:</strong> ${vitals.frecuencia_respiratoria}</p>`;
-            if (vitals.saturacion_oxigeno) html += `<p><strong>Saturación de Oxígeno:</strong> ${vitals.saturacion_oxigeno}</p>`;
+            if (vitals.presion_arterial) html += `<p><strong>Presión Arterial:</strong> ${e(vitals.presion_arterial)}</p>`;
+            if (vitals.frecuencia_cardiaca) html += `<p><strong>Frecuencia Cardíaca:</strong> ${e(vitals.frecuencia_cardiaca)}</p>`;
+            if (vitals.temperatura) html += `<p><strong>Temperatura:</strong> ${e(vitals.temperatura)}</p>`;
+            if (vitals.frecuencia_respiratoria) html += `<p><strong>Frecuencia Respiratoria:</strong> ${e(vitals.frecuencia_respiratoria)}</p>`;
+            if (vitals.saturacion_oxigeno) html += `<p><strong>Saturación de Oxígeno:</strong> ${e(vitals.saturacion_oxigeno)}</p>`;
         }
 
         if (obj.examen_fisico) {
             html += '<h6>Examen Físico</h6>';
-            html += `<p>${obj.examen_fisico}</p>`;
+            html += `<p>${e(obj.examen_fisico)}</p>`;
         }
 
         if (obj.hallazgos && obj.hallazgos.length > 0) {
             html += '<h6>Hallazgos</h6>';
             html += '<ul>';
-            obj.hallazgos.forEach(h => html += `<li>${h}</li>`);
+            obj.hallazgos.forEach(h => html += `<li>${e(h)}</li>`);
             html += '</ul>';
         }
 
@@ -111,19 +112,19 @@ function generateFormattedHTML(data) {
 
         if (eval_data.diagnostico) {
             html += '<h6>Diagnóstico Principal</h6>';
-            html += `<p><strong>${eval_data.diagnostico}</strong></p>`;
+            html += `<p><strong>${e(eval_data.diagnostico)}</strong></p>`;
         }
 
         if (eval_data.diagnosticos_adicionales && eval_data.diagnosticos_adicionales.length > 0) {
             html += '<h6>Diagnósticos Adicionales</h6>';
             html += '<ul>';
-            eval_data.diagnosticos_adicionales.forEach(d => html += `<li>${d}</li>`);
+            eval_data.diagnosticos_adicionales.forEach(d => html += `<li>${e(d)}</li>`);
             html += '</ul>';
         }
 
         if (eval_data.impresion_clinica) {
             html += '<h6>Impresión Clínica</h6>';
-            html += `<p>${eval_data.impresion_clinica}</p>`;
+            html += `<p>${e(eval_data.impresion_clinica)}</p>`;
         }
 
         html += '</div>';
@@ -138,17 +139,17 @@ function generateFormattedHTML(data) {
 
         if (plan.tratamiento) {
             html += '<h6>Tratamiento</h6>';
-            html += `<p>${plan.tratamiento}</p>`;
+            html += `<p>${e(plan.tratamiento)}</p>`;
         }
 
         if (plan.medicamentos && plan.medicamentos.length > 0) {
             html += '<h6>Medicamentos Prescritos</h6>';
             html += '<ul>';
             plan.medicamentos.forEach(med => {
-                let medText = med.nombre || 'Medicamento';
-                if (med.dosis) medText += ` - ${med.dosis}`;
-                if (med.frecuencia) medText += `, ${med.frecuencia}`;
-                if (med.duracion) medText += ` por ${med.duracion}`;
+                let medText = e(med.nombre || 'Medicamento');
+                if (med.dosis) medText += ` - ${e(med.dosis)}`;
+                if (med.frecuencia) medText += `, ${e(med.frecuencia)}`;
+                if (med.duracion) medText += ` por ${e(med.duracion)}`;
                 html += `<li>${medText}</li>`;
             });
             html += '</ul>';
@@ -157,20 +158,20 @@ function generateFormattedHTML(data) {
         if (plan.recomendaciones && plan.recomendaciones.length > 0) {
             html += '<h6>Recomendaciones</h6>';
             html += '<ul>';
-            plan.recomendaciones.forEach(r => html += `<li>${r}</li>`);
+            plan.recomendaciones.forEach(r => html += `<li>${e(r)}</li>`);
             html += '</ul>';
         }
 
         if (plan.estudios_solicitados && plan.estudios_solicitados.length > 0) {
             html += '<h6>Estudios Solicitados</h6>';
             html += '<ul>';
-            plan.estudios_solicitados.forEach(e => html += `<li>${e}</li>`);
+            plan.estudios_solicitados.forEach(e2 => html += `<li>${e(e2)}</li>`);
             html += '</ul>';
         }
 
         if (plan.seguimiento) {
             html += '<h6>Seguimiento</h6>';
-            html += `<p>${plan.seguimiento}</p>`;
+            html += `<p>${e(plan.seguimiento)}</p>`;
         }
 
         html += '</div>';
@@ -182,9 +183,9 @@ function generateFormattedHTML(data) {
         html += '<h5>ℹ️ INFORMACIÓN DE LA CONSULTA</h5>';
 
         const meta = data.metadata;
-        if (meta.fecha_consulta) html += `<p><strong>Fecha:</strong> ${meta.fecha_consulta}</p>`;
-        if (meta.medico) html += `<p><strong>Médico:</strong> ${meta.medico}</p>`;
-        if (meta.duracion_consulta) html += `<p><strong>Duración:</strong> ${meta.duracion_consulta}</p>`;
+        if (meta.fecha_consulta) html += `<p><strong>Fecha:</strong> ${e(meta.fecha_consulta)}</p>`;
+        if (meta.medico) html += `<p><strong>Médico:</strong> ${e(meta.medico)}</p>`;
+        if (meta.duracion_consulta) html += `<p><strong>Duración:</strong> ${e(meta.duracion_consulta)}</p>`;
 
         html += '</div>';
     }
@@ -231,6 +232,7 @@ function generateFormattedHTML(data) {
 function renderSessionDetail(container, sessionData, options = {}) {
     const { isAdmin = false, canDownloadPdf = false, onDownloadPdf, onAddAddendum, onCancel } = options;
     const sd = sessionData.structured_data || {};
+    const e = escapeHtml;
 
     let html = `<h3 style="margin-bottom: 0.25rem;">Nota de Consulta</h3>`;
 
@@ -247,17 +249,17 @@ function renderSessionDetail(container, sessionData, options = {}) {
     const statusLabel = sessionData.status === 'confirmed' ? 'Confirmada'
         : sessionData.status === 'cancelled' ? 'Cancelada'
         : sessionData.status === 'pending_review' ? 'Pendiente'
-        : (sessionData.status || '—');
+        : (e(sessionData.status) || '—');
     const statusClass = sessionData.status === 'confirmed' ? 'status-confirmed'
         : sessionData.status === 'cancelled' ? 'status-cancelled'
         : 'status-other';
     html += `<p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1rem;">
-        ID de sesión: <strong>${sessionData.session_id || '—'}</strong> · ${fechaCompleta}
+        ID de sesión: <strong>${e(sessionData.session_id) || '—'}</strong> · ${fechaCompleta}
         · <span id="sessionDetailStatusBadge" class="historial-status ${statusClass}">${statusLabel}</span>
     </p>`;
 
     if (sessionData.autor_nombre) {
-        html += `<div class="historial-autor-banner">Nota escrita por Dr(a). ${sessionData.autor_nombre}</div>`;
+        html += `<div class="historial-autor-banner">Nota escrita por Dr(a). ${e(sessionData.autor_nombre)}</div>`;
     }
 
     if (canDownloadPdf) {
@@ -275,8 +277,8 @@ function renderSessionDetail(container, sessionData, options = {}) {
         addenda.forEach(a => {
             const fecha = a.timestamp ? new Date(a.timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
             html += `<div class="adenda-entry">
-                <div class="adenda-meta"><strong>${a.author || 'Médico'}</strong> · ${fecha}</div>
-                <p class="adenda-text">${a.text || ''}</p>
+                <div class="adenda-meta"><strong>${e(a.author) || 'Médico'}</strong> · ${fecha}</div>
+                <p class="adenda-text">${e(a.text)}</p>
             </div>`;
         });
         html += '</div>';

@@ -449,14 +449,15 @@
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+    <script nonce="{{ csp_nonce }}">
         const supabaseClient = window.supabase.createClient(
             "{{ supabase_url }}",
             "{{ supabase_anon_key }}",
             { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
         );
     </script>
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>
     <script src="{{ url_for('static', filename='admin.js') }}"></script>
 </body>

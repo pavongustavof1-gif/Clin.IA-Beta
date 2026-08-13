@@ -338,6 +338,28 @@ async function init() {
         if (e.key === 'Enter') searchPatientHistory();
     });
 
+    // Formerly inline onclick="..." attributes in index.html — moved to
+    // addEventListener so a strict CSP script-src (no 'unsafe-inline') can
+    // hold; CSP blocks inline handler attributes regardless of how they
+    // entered the DOM.
+    if (elements.confirmAndGenerateBtn) {
+        elements.confirmAndGenerateBtn.addEventListener('click', confirmAndGenerate);
+    }
+    document.getElementById('cancelReviewBtn')?.addEventListener('click', cancelReview);
+    document.getElementById('historialBuscarBtn')?.addEventListener('click', searchPatientHistory);
+    document.getElementById('historialScopeMine')?.addEventListener('click', () => setHistorialScope('mine'));
+    document.getElementById('historialScopeClinica')?.addEventListener('click', () => setHistorialScope('clinica'));
+    document.getElementById('historialBackBtn')?.addEventListener('click', showHistorialSearch);
+    document.getElementById('avisoInlineLink')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showAvisoModal();
+    });
+    document.getElementById('avisoFooterLink')?.addEventListener('click', (e) => {
+        e.preventDefault();
+        showAvisoModal();
+    });
+    document.getElementById('avisoCloseBtn')?.addEventListener('click', closeAvisoModal);
+
     // Session-ID direct lookup — mirrors admin's Búsqueda ARCO fast path.
     const historialSessionIdBtn = document.getElementById('historialSessionIdBtn');
     if (historialSessionIdBtn) {
@@ -849,8 +871,8 @@ function displayResults(result) {
     // 1. Document link
     if (result.document && result.document.link) {
         elements.documentLink.style.display = 'block';
-        elements.docLink.href = result.document.link;
-        elements.docLink.innerHTML = `Abrir "${result.document.title}" en Google Docs <svg width="15" height="15" aria-hidden="true"><use href="#icon-external"/></svg>`;
+        elements.docLink.href = safeUrl(result.document.link);
+        elements.docLink.innerHTML = `Abrir "${escapeHtml(result.document.title)}" en Google Docs <svg width="15" height="15" aria-hidden="true"><use href="#icon-external"/></svg>`;
     } else {
         elements.documentLink.style.display = 'none';
     }
@@ -977,10 +999,7 @@ function displayReviewScreen(result) {
     if (transcriptEl) {
         const raw = t.labeled_text || t.text || '';
         // Escape HTML, then bold [Persona X]: speaker labels in teal
-        const escaped = raw
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
+        const escaped = escapeHtml(raw);
         transcriptEl.innerHTML = escaped.replace(
             /\[([^\]]+)\]:/g,
             '<strong class="review-speaker-label">[$1]:</strong>'
@@ -1443,16 +1462,16 @@ async function loadPendingSessionsList() {
             const fecha = s.timestamp
                 ? new Date(s.timestamp).toLocaleString('es-MX', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
                 : '—';
-            const motivo = s.motivo_de_consulta || '—';
-            const sid = s.session_id;
+            const motivo = escapeHtml(s.motivo_de_consulta) || '—';
+            const sid = escapeHtml(s.session_id);
             return `<div class="pending-row">
                 <div class="pending-row-main">
                     <span class="pending-fecha">${fecha}</span>
                     <span class="pending-motivo">${motivo}</span>
                 </div>
                 <div class="pending-row-actions">
-                    <button class="btn btn-primary btn-small" style="max-width: none; width: auto;" onclick="continuePendingSession('${sid}')">Continuar revisión</button>
-                    <button class="btn btn-danger btn-small" style="max-width: none; width: auto;" onclick="discardPendingSession('${sid}')">Descartar</button>
+                    <button class="btn btn-primary btn-small pending-continue-btn" style="max-width: none; width: auto;" data-session-id="${sid}">Continuar revisión</button>
+                    <button class="btn btn-danger btn-small pending-discard-btn" style="max-width: none; width: auto;" data-session-id="${sid}">Descartar</button>
                 </div>
             </div>`;
         }).join('');
@@ -1464,6 +1483,22 @@ async function loadPendingSessionsList() {
         elements.pendingSessionsList.innerHTML = '<p style="color: var(--text-secondary);">Error al cargar notas pendientes. Intente de nuevo.</p>';
     }
 }
+
+// Delegated listeners for pending-row buttons — rendered via innerHTML above,
+// so no inline onclick (CSP script-src blocks inline handler attributes
+// regardless of how they entered the DOM). Same pattern as admin.js's
+// toggle-activo-btn delegation.
+document.addEventListener('click', (e) => {
+    const continueBtn = e.target.closest('.pending-continue-btn');
+    if (continueBtn) {
+        continuePendingSession(continueBtn.dataset.sessionId);
+        return;
+    }
+    const discardBtn = e.target.closest('.pending-discard-btn');
+    if (discardBtn) {
+        discardPendingSession(discardBtn.dataset.sessionId);
+    }
+});
 
 async function continuePendingSession(sessionId) {
     try {
@@ -1567,13 +1602,13 @@ async function searchPatientHistory() {
 
         const rows = sessions.map(s => {
             const fecha = s.timestamp ? new Date(s.timestamp).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
-            const statusLabel = s.status === 'confirmed' ? 'Confirmada' : s.status === 'cancelled' ? 'Cancelada' : s.status ?? '—';
+            const statusLabel = s.status === 'confirmed' ? 'Confirmada' : s.status === 'cancelled' ? 'Cancelada' : (escapeHtml(s.status) || '—');
             const statusClass = s.status === 'confirmed' ? 'status-confirmed' : s.status === 'cancelled' ? 'status-cancelled' : 'status-other';
-            const motivo = s.motivo_de_consulta || '—';
+            const motivo = escapeHtml(s.motivo_de_consulta) || '—';
             const doctorLine = s.doctor_nombre
-                ? `<div class="historial-doctor">Dr(a). ${s.doctor_nombre}</div>`
+                ? `<div class="historial-doctor">Dr(a). ${escapeHtml(s.doctor_nombre)}</div>`
                 : '';
-            return `<div class="historial-row" onclick="openHistoryDetail('${s.session_id}')">
+            return `<div class="historial-row" data-session-id="${escapeHtml(s.session_id)}">
                 <div class="historial-row-main">
                     <span class="historial-fecha">${fecha}</span>
                     <span class="historial-status ${statusClass}">${statusLabel}</span>
@@ -1590,6 +1625,14 @@ async function searchPatientHistory() {
         elements.historialResults.innerHTML = '<p style="color: var(--text-secondary);">Error al cargar el historial. Intente de nuevo.</p>';
     }
 }
+
+// Delegated listener for historial-row clicks — rendered via innerHTML
+// above, so no inline onclick (CSP script-src blocks inline handler
+// attributes regardless of how they entered the DOM).
+document.addEventListener('click', (e) => {
+    const row = e.target.closest('.historial-row');
+    if (row) openHistoryDetail(row.dataset.sessionId);
+});
 
 async function openHistoryDetail(sessionId) {
     elements.historialSearch.style.display = 'none';

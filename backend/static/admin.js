@@ -179,7 +179,7 @@ function sessionStatusLabel(status) {
     if (status === 'confirmed') return 'Confirmada';
     if (status === 'cancelled') return 'Cancelada';
     if (status === 'pending_review') return 'Pendiente';
-    return status || '—';
+    return escapeHtml(status) || '—';
 }
 
 let sessionSearchOffset = 0;
@@ -243,10 +243,10 @@ async function searchSessions(resetOffset) {
                     hour: '2-digit', minute: '2-digit'
                   })
                 : '—';
-            return `<tr class="session-row" data-session-id="${s.session_id}" style="cursor: pointer;">
-                <td>${s.session_id || '—'}</td>
+            return `<tr class="session-row" data-session-id="${escapeHtml(s.session_id)}" style="cursor: pointer;">
+                <td>${escapeHtml(s.session_id) || '—'}</td>
                 <td>${fecha}</td>
-                <td>${s.doctor_nombre || '—'}</td>
+                <td>${escapeHtml(s.doctor_nombre) || '—'}</td>
                 <td>${sessionStatusLabel(s.status)}</td>
                 <td>${s.tiene_adenda ? 'Sí' : '—'}</td>
             </tr>`;
@@ -490,18 +490,18 @@ function doctorRowHtml(u) {
     const badgeLabel = activo ? 'Activo' : 'Inactivo';
     const actionLabel = activo ? 'Desactivar' : 'Reactivar';
     const actionClass = activo ? 'btn-danger' : 'btn-secondary';
-    return `<tr data-usuario-id="${u.id}">
-        <td>${u.nombre || '—'}</td>
-        <td>${u.email || '—'}</td>
-        <td>${u.especialidad || '—'}</td>
-        <td>${u.cedula || '—'}</td>
-        <td>${u.rol || '—'}</td>
+    return `<tr data-usuario-id="${escapeHtml(u.id)}">
+        <td>${escapeHtml(u.nombre) || '—'}</td>
+        <td>${escapeHtml(u.email) || '—'}</td>
+        <td>${escapeHtml(u.especialidad) || '—'}</td>
+        <td>${escapeHtml(u.cedula) || '—'}</td>
+        <td>${escapeHtml(u.rol) || '—'}</td>
         <td><span class="admin-status-badge ${badgeClass}">${badgeLabel}</span></td>
         <td>
             <button class="btn ${actionClass} btn-small toggle-activo-btn"
                     style="max-width: none; width: auto;"
-                    data-usuario-id="${u.id}"
-                    data-nombre="${(u.nombre || '').replace(/"/g, '&quot;')}"
+                    data-usuario-id="${escapeHtml(u.id)}"
+                    data-nombre="${escapeHtml(u.nombre || '')}"
                     data-target-activo="${!activo}">
                 ${actionLabel}
             </button>

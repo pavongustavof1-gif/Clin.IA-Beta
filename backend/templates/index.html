@@ -253,7 +253,7 @@
                         <span>El paciente ha sido informado y otorga su consentimiento para la
                         <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
                         mediante ClinIA™, de conformidad con la LFPDPPP.
-                        <a href="#" class="aviso-inline-link" onclick="showAvisoModal(); return false;">Ver Aviso de Privacidad</a></span>
+                        <a href="#" id="avisoInlineLink" class="aviso-inline-link">Ver Aviso de Privacidad</a></span>
                     </label>
                 </div>
             </section>
@@ -639,13 +639,13 @@
 
             <!-- Review Action Buttons -->
             <div id="reviewActionsSection" class="review-actions" style="display: none;">
-                <button id="confirmAndGenerateBtn" class="btn btn-primary" type="button" onclick="confirmAndGenerate()">
+                <button id="confirmAndGenerateBtn" class="btn btn-primary" type="button">
                     <span class="btn-icon" aria-hidden="true">
                         <svg width="18" height="18"><use href="#icon-document"/></svg>
                     </span>
                     Confirmar y Generar Documento
                 </button>
-                <button class="btn btn-danger" type="button" onclick="cancelReview()">
+                <button id="cancelReviewBtn" class="btn btn-danger" type="button">
                     Cancelar
                 </button>
             </div>
@@ -744,11 +744,11 @@
                             <label class="review-label" for="historialCurpInput">CURP</label>
                             <input id="historialCurpInput" class="review-input" type="text" placeholder="Ej. LOAM980101HDFPNR09" autocomplete="off" style="text-transform: uppercase;">
                         </div>
-                        <button id="historialBuscarBtn" class="btn btn-primary" style="max-width: none; width: auto;" onclick="searchPatientHistory()">Buscar</button>
+                        <button id="historialBuscarBtn" class="btn btn-primary" style="max-width: none; width: auto;">Buscar</button>
                     </div>
                     <div class="historial-scope-toggle" role="group" aria-label="Alcance de la búsqueda">
-                        <button type="button" id="historialScopeMine" class="historial-scope-btn active" onclick="setHistorialScope('mine')">Mis notas</button>
-                        <button type="button" id="historialScopeClinica" class="historial-scope-btn" onclick="setHistorialScope('clinica')">Notas de la clínica</button>
+                        <button type="button" id="historialScopeMine" class="historial-scope-btn active">Mis notas</button>
+                        <button type="button" id="historialScopeClinica" class="historial-scope-btn">Notas de la clínica</button>
                     </div>
                     <div id="historialResults" style="margin-top: 1.25rem;"></div>
                 </div>
@@ -756,7 +756,7 @@
                 <!-- Detail state -->
                 <div id="historialDetail" style="display: none;">
                     <div style="margin-bottom: 1rem;">
-                        <button class="btn btn-secondary btn-small" style="max-width: none; width: auto;" onclick="showHistorialSearch()">← Volver al historial</button>
+                        <button id="historialBackBtn" class="btn btn-secondary btn-small" style="max-width: none; width: auto;">← Volver al historial</button>
                     </div>
                     <div id="historialDetailContent" class="card"></div>
                 </div>
@@ -789,7 +789,7 @@
         <footer class="footer">
             <p>ClinIA™ Beta v0.3 - Solo para usuarios de prueba</p>
             <p class="footer-links">
-                <a href="#" class="footer-link" onclick="showAvisoModal(); return false;">Aviso de Privacidad</a>
+                <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
                 <span>clinianotes.com</span>
             </p>
@@ -870,20 +870,21 @@
             </div><!-- /aviso-body -->
 
             <div class="aviso-footer">
-                <button class="btn btn-secondary" type="button" onclick="closeAvisoModal()">Cerrar</button>
+                <button id="avisoCloseBtn" class="btn btn-secondary" type="button">Cerrar</button>
             </div>
 
         </div><!-- /aviso-card -->
     </div><!-- /avisoModal -->
     
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+    <script nonce="{{ csp_nonce }}">
         const supabaseClient = window.supabase.createClient(
             "{{ supabase_url }}",
             "{{ supabase_anon_key }}",
             { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
         );
     </script>
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>
