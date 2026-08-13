@@ -535,6 +535,35 @@ def load_structured_data(session_id: str) -> dict | None:
     return rows[0].get('structured_data')
 
 
+def caller_can_read_session(row: dict, usuario: dict) -> bool:
+    """
+    Read-scoping for a `sesiones` row: the caller is the session's author
+    OR shares its clinic. Mirrors patient_history_detail's is_owner/is_clinic
+    rule exactly — that route is the existing legitimate detail view backing
+    the doctor Historial UI. The "Notas de la clínica" scope toggle only
+    parameterizes the separate LIST/search endpoint's filter; it has no
+    bearing on this per-session rule, which already always grants
+    clinic-wide read regardless of toggle state.
+    """
+    return (
+        row.get('usuario_id') == usuario['usuario_id']
+        or row.get('clinica_id') == usuario['clinica_id']
+    )
+
+
+def caller_can_addend_session(row: dict, usuario: dict) -> bool:
+    """
+    Write-scoping for addenda: owner only. An addendum amends a signed
+    clinical record, so it is deliberately narrower than read access —
+    mirrors the owner-only convention already used for Notas Pendientes
+    (nobody but the authoring doctor, not even an admin, gets special
+    access there; see pending_sessions_list's docstring). Clinic-wide
+    addendum authority exists only via the separate, admin-gated
+    POST /api/admin/session/<id>/addendum route.
+    """
+    return row.get('usuario_id') == usuario['usuario_id']
+
+
 def get_clinica_context(clinica_id: str) -> dict:
     """
     Fetch clinic name, primary color, address, and phone from Supabase.
@@ -988,19 +1017,32 @@ def process_transcript():
 @app.route('/api/session/<session_id>', methods=['GET'])
 @require_auth
 def get_session(session_id):
-    """Retrieve session data by ID"""
+    """Retrieve session data by ID. Owner-or-clinic scoped — see
+    caller_can_read_session. 404 on any miss (not-found or out-of-scope),
+    same convention as patient_history_detail."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    session = load_session(session_id)
-    if session:
-        return jsonify(session), 200
-    return jsonify({'error': 'Session not found'}), 404
+    rows = _sb_get(
+        f'/rest/v1/sesiones?session_id=eq.{session_id}'
+        f'&select=usuario_id,clinica_id,full_response&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Session not found'}), 404
+
+    row = rows[0]
+    if not caller_can_read_session(row, g.usuario):
+        return jsonify({'error': 'Session not found'}), 404
+
+    return jsonify(row.get('full_response')), 200
 
 
 @app.route('/api/session/<session_id>/addendum', methods=['POST'])
 @require_auth
 def add_addendum(session_id):
     """
-    Append an addendum to a confirmed (locked) session.
+    Append an addendum to a confirmed (locked) session. Owner-only — see
+    caller_can_addend_session. Author is always derived from the verified
+    token (g.usuario), never client-supplied — same as the admin addendum
+    route.
     Types: 'adendum_clinico' (doctor correction) or 'rectificacion_arco' (patient ARCO request).
     The original structured_data is never modified.
     """
@@ -1012,18 +1054,20 @@ def add_addendum(session_id):
 
         addendum_text = data.get('addendum_text', '').strip()
         addendum_type = data.get('addendum_type', 'adendum_clinico')
-        author        = data.get('author', 'Médico')
 
         if not addendum_text:
             return jsonify({'error': 'El texto del adéndum no puede estar vacío'}), 400
         if addendum_type not in ('adendum_clinico', 'rectificacion_arco'):
             return jsonify({'error': 'Tipo de adéndum no válido'}), 400
 
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status,addenda&limit=1')
+        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,status,addenda&limit=1')
         if not rows:
             return jsonify({'error': 'Sesión no encontrada'}), 404
 
         row = rows[0]
+        if not caller_can_addend_session(row, g.usuario):
+            return jsonify({'error': 'Sesión no encontrada'}), 404
+
         status  = row.get('status')
         addenda = row.get('addenda') or []
 
@@ -1033,11 +1077,12 @@ def add_addendum(session_id):
             return jsonify({'error': 'Solo se pueden agregar adéndum a notas confirmadas'}), 409
 
         new_addendum = {
-            'id':        f"adendum_{len(addenda) + 1}",
-            'type':      addendum_type,
-            'text':      addendum_text,
-            'author':    author,
-            'timestamp': datetime.now().isoformat(),
+            'id':                f"adendum_{len(addenda) + 1}",
+            'type':              addendum_type,
+            'text':              addendum_text,
+            'author':            g.usuario.get('nombre', ''),
+            'timestamp':         datetime.now().isoformat(),
+            'author_usuario_id': g.usuario['usuario_id'],
         }
         addenda.append(new_addendum)
 
@@ -1056,9 +1101,21 @@ def add_addendum(session_id):
 @app.route('/api/export-json/<session_id>', methods=['GET'])
 @require_auth
 def export_json(session_id):
-    """Export structured data as downloadable JSON"""
+    """Export structured data as downloadable JSON. Owner-or-clinic scoped —
+    same rule as get_session, since this is the same data via another door."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    data = load_structured_data(session_id)
+    rows = _sb_get(
+        f'/rest/v1/sesiones?session_id=eq.{session_id}'
+        f'&select=usuario_id,clinica_id,structured_data&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Session not found'}), 404
+
+    row = rows[0]
+    if not caller_can_read_session(row, g.usuario):
+        return jsonify({'error': 'Session not found'}), 404
+
+    data = row.get('structured_data')
     if not data:
         return jsonify({'error': 'Session not found'}), 404
 
