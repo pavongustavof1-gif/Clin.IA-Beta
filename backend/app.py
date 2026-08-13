@@ -798,7 +798,9 @@ def confirm_and_generate():
         structured_data = data.get('structured_data', {})
         create_doc = data.get('create_doc', True)
         create_pdf = data.get('create_pdf', False)
-        doctor_email = data.get('doctor_email', '').strip()
+        # doctor_email is NOT read from the client — a PHI document must
+        # only go to the authenticated doctor's own registered address
+        # (Stage 2 fix #5). Derived below from g.usuario, not the request.
         consent_tratamiento = {
             'given': data.get('consent_tratamiento_given', False),
             'timestamp': data.get('consent_tratamiento_timestamp', '')
@@ -809,24 +811,37 @@ def confirm_and_generate():
         if not session_id:
             return jsonify({'error': 'Session not found'}), 404
 
-        session = load_session(session_id)
+        # Owner-only — confirming/signing a pending session is a write to a
+        # not-yet-signed record, same rule as addenda (Stage 2 fix #4).
+        # Reuses Stage 1's caller_can_addend_session rather than a parallel
+        # check, since it's already exactly this owner-only rule.
+        rows = _sb_get(
+            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'&select=usuario_id,clinica_id,status,full_response&limit=1'
+        )
+        if not rows:
+            return jsonify({'error': 'Session not found'}), 404
+
+        row = rows[0]
+        if not caller_can_addend_session(row, g.usuario):
+            return jsonify({'error': 'Session not found'}), 404
+
+        session = row.get('full_response')
         if not session:
             return jsonify({'error': 'Session not found'}), 404
 
         # NOM-024 immutability — reject if already confirmed or cancelled
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=status&limit=1')
-        if rows:
-            current_status = rows[0].get('status')
-            if current_status == 'confirmed':
-                return jsonify({
-                    'error': 'Esta nota ya fue confirmada y no puede modificarse. Para hacer correcciones, utilice la función de adéndum.',
-                    'error_code': 'SESSION_LOCKED'
-                }), 409
-            if current_status == 'cancelled':
-                return jsonify({
-                    'error': 'Esta nota ha sido cancelada por solicitud ARCO y no puede modificarse.',
-                    'error_code': 'SESSION_CANCELLED'
-                }), 409
+        current_status = row.get('status')
+        if current_status == 'confirmed':
+            return jsonify({
+                'error': 'Esta nota ya fue confirmada y no puede modificarse. Para hacer correcciones, utilice la función de adéndum.',
+                'error_code': 'SESSION_LOCKED'
+            }), 409
+        if current_status == 'cancelled':
+            return jsonify({
+                'error': 'Esta nota ha sido cancelada por solicitud ARCO y no puede modificarse.',
+                'error_code': 'SESSION_CANCELLED'
+            }), 409
 
         local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
 
@@ -885,7 +900,10 @@ def confirm_and_generate():
             'consent_tratamiento': consent_tratamiento
         }
 
-        # Persist confirmed session
+        # Persist confirmed session. usuario_id/clinica_id come from the
+        # RECORDED row (already verified above to equal the caller), never
+        # from g.usuario directly — ownership is fixed at creation and must
+        # never be reassigned by whoever happens to confirm (Stage 2 fix #4).
         save_session(session_id, {
             **session,
             'structured_data': structured_data,
@@ -894,7 +912,7 @@ def confirm_and_generate():
             'locked_at': locked_at,
             'timestamp': locked_at,
             'consent_tratamiento': consent_tratamiento
-        }, usuario_id=g.usuario['usuario_id'], clinica_id=g.usuario['clinica_id'])
+        }, usuario_id=row['usuario_id'], clinica_id=row['clinica_id'])
 
         # Delete transcript text to minimize LFPDPPP exposure
         ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'transcript_text': None})
@@ -903,7 +921,10 @@ def confirm_and_generate():
         else:
             logger.warning(f"DB: Could not delete transcript text for {session_id}")
 
-        # Send PDF to doctor's email if generated
+        # Send PDF to the authenticated doctor's own registered email only
+        # (Stage 2 fix #5) — never a client-supplied address, to prevent
+        # exfiltrating a PHI document to an arbitrary outside inbox.
+        doctor_email = g.usuario.get('email', '')
         if pdf_bytes and doctor_email:
             patient_name = (structured_data
                 .get('informacion_paciente', {})
@@ -932,86 +953,6 @@ def confirm_and_generate():
         import traceback
         traceback.print_exc()
         return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
-
-
-@app.route('/api/transcribe-only', methods=['POST'])
-# TODO: remove or auth-gate before production — this is a test-only utility
-def transcribe_only():
-    """
-    Endpoint for transcription only (no LLM processing)
-    Useful for testing and verification
-    """
-    try:
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
-
-        audio_file = request.files['audio']
-        print_raw = request.form.get('print_raw', 'true').lower() == 'true'
-
-        # Save to temp file
-        filename = secure_filename(audio_file.filename)
-        temp_path = os.path.join(tempfile.gettempdir(), filename)
-        audio_file.save(temp_path)
-
-        try:
-            # Transcribe
-            result = transcription_service.transcribe_audio(temp_path, print_raw=print_raw)
-
-            return jsonify({
-                'status': 'success',
-                'transcript': result
-            }), 200
-
-        finally:
-            if os.path.exists(temp_path):
-                os.remove(temp_path)
-
-    except Exception as e:
-        return jsonify({
-            'error': 'Transcription failed',
-            'details': str(e)
-        }), 500
-
-
-@app.route('/api/process-transcript', methods=['POST'])
-# TODO: remove or auth-gate before production — this is a test-only utility
-def process_transcript():
-    """
-    Process a raw transcript (for testing LLM without audio).
-    Expected JSON: {"transcript": "text here"}
-    Note: this endpoint does not create a persistent session — it is a
-    one-shot testing utility and has never written to session storage.
-    """
-    try:
-        data = request.get_json()
-
-        if not data or 'transcript' not in data:
-            return jsonify({'error': 'No transcript provided'}), 400
-
-        transcript = data['transcript']
-
-        # Process with LLM
-        structured_data = llm_processor.extract_structured_data(transcript)
-
-        # Optionally create document
-        create_doc = data.get('create_doc', False)
-        doc_info = None
-
-        if create_doc:
-            docs_generator = GoogleDocsGenerator()
-            doc_info = docs_generator.create_medical_note(structured_data)
-
-        return jsonify({
-            'status': 'success',
-            'structured_data': structured_data,
-            'document': doc_info
-        }), 200
-
-    except Exception as e:
-        return jsonify({
-            'error': 'Processing failed',
-            'details': str(e)
-        }), 500
 
 
 @app.route('/api/session/<session_id>', methods=['GET'])
