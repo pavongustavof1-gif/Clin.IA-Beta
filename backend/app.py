@@ -1039,69 +1039,6 @@ def get_session(session_id):
     return jsonify(row.get('full_response')), 200
 
 
-@app.route('/api/session/<session_id>/addendum', methods=['POST'])
-@require_auth
-def add_addendum(session_id):
-    """
-    Append an addendum to a confirmed (locked) session. Owner-only — see
-    caller_can_addend_session. Author is always derived from the verified
-    token (g.usuario), never client-supplied — same as the admin addendum
-    route.
-    Types: 'adendum_clinico' (doctor correction) or 'rectificacion_arco' (patient ARCO request).
-    The original structured_data is never modified.
-    """
-    logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
-    try:
-        data = request.get_json()
-        if not data:
-            return jsonify({'error': 'No data provided'}), 400
-
-        addendum_text = data.get('addendum_text', '').strip()
-        addendum_type = data.get('addendum_type', 'adendum_clinico')
-
-        if not addendum_text:
-            return jsonify({'error': 'El texto del adéndum no puede estar vacío'}), 400
-        if addendum_type not in ('adendum_clinico', 'rectificacion_arco'):
-            return jsonify({'error': 'Tipo de adéndum no válido'}), 400
-
-        rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=usuario_id,status,addenda&limit=1')
-        if not rows:
-            return jsonify({'error': 'Sesión no encontrada'}), 404
-
-        row = rows[0]
-        if not caller_can_addend_session(row, g.usuario):
-            return jsonify({'error': 'Sesión no encontrada'}), 404
-
-        status  = row.get('status')
-        addenda = row.get('addenda') or []
-
-        if status == 'cancelled':
-            return jsonify({'error': 'No se pueden agregar adéndum a una sesión cancelada'}), 409
-        if status != 'confirmed':
-            return jsonify({'error': 'Solo se pueden agregar adéndum a notas confirmadas'}), 409
-
-        new_addendum = {
-            'id':                f"adendum_{len(addenda) + 1}",
-            'type':              addendum_type,
-            'text':              addendum_text,
-            'author':            g.usuario.get('nombre', ''),
-            'timestamp':         datetime.now().isoformat(),
-            'author_usuario_id': g.usuario['usuario_id'],
-        }
-        addenda.append(new_addendum)
-
-        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'addenda': addenda})
-        if not ok:
-            return jsonify({'error': 'No se pudo guardar el adéndum'}), 500
-
-        logger.info(f"DB: Addendum added to session {session_id} — type={addendum_type}")
-        return jsonify({'status': 'ok', 'addendum': new_addendum, 'total_addenda': len(addenda)}), 200
-
-    except Exception as e:
-        logger.error(f"DB: Error adding addendum to session {session_id}: {str(e)}")
-        return jsonify({'error': str(e)}), 500
-
-
 @app.route('/api/export-json/<session_id>', methods=['GET'])
 @require_auth
 def export_json(session_id):
@@ -1978,15 +1915,16 @@ def admin_add_addendum(session_id):
     ADM-1 Stage F — admin-authored addendum (ARCO rectification), paired
     with the pdf_generator.py adenda-rendering section added this stage.
 
-    Field shape matches the existing (dormant, no frontend caller)
-    /api/session/<id>/addendum route's convention exactly — id, type,
-    text, author, timestamp — so the already-live adenda renderer
-    (session-detail-render.js, unchanged this stage) displays these
-    correctly with zero renderer changes. author_usuario_id is an
-    ADDITIONAL field beyond that existing shape, recording the specific
-    admin account that wrote it (an unspoofable link server-side sets,
-    never client-supplied) — the renderer simply ignores it, it isn't a
-    conflicting field.
+    Field shape — id, type, text, author, timestamp — matches what
+    session-detail-render.js's adenda renderer already expects (unchanged
+    this stage). author_usuario_id is an ADDITIONAL field beyond that
+    shape, recording the specific admin account that wrote it (an
+    unspoofable link server-side sets, never client-supplied) — the
+    renderer simply ignores it, it isn't a conflicting field.
+
+    (The doctor-facing POST /api/session/<id>/addendum route this
+    originally matched conventions with was removed in the post-
+    remediation cleanup pass — it had zero frontend callers.)
     """
     MAX_ADDENDUM_LENGTH = 2000
 

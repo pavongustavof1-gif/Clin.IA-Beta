@@ -1535,34 +1535,10 @@ body {
     flex-shrink: 0;
 }
 
-.email-delivery-input {
+.email-delivery-value {
     font-size: var(--font-size-sm, 13px);
     color: var(--text-primary);
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-sm, 4px);
-    padding: 3px 8px;
-    flex: 1;
-    min-width: 180px;
-    max-width: 260px;
-}
-
-.email-delivery-input:focus {
-    outline: none;
-    border-color: var(--teal-400, #0F6E56);
-}
-
-.email-save-indicator {
-    font-size: 11px;
-    color: var(--teal-400, #0F6E56);
     font-weight: 500;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.email-save-indicator.visible {
-    opacity: 1;
-    display: inline !important;
 }
 
 /* ── Consent 2 — NOM-004 treatment consent block on review screen ── */

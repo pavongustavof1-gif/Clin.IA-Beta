@@ -112,35 +112,6 @@ const state = {
 const API_BASE_URL = window.location.origin.replace(/\/$/, '');
 
 // ─────────────────────────────────────────────
-// Doctor email persistence (localStorage)
-// ─────────────────────────────────────────────
-const STORAGE_KEY_EMAIL = 'clinia_doctor_email';
-
-function loadDoctorEmail() {
-    try {
-        const saved = localStorage.getItem(STORAGE_KEY_EMAIL);
-        if (saved && elements.doctorEmail) {
-            elements.doctorEmail.value = saved;
-        }
-    } catch (e) {
-        // localStorage unavailable — silent fail
-    }
-}
-
-function saveDoctorEmail(email) {
-    try {
-        localStorage.setItem(STORAGE_KEY_EMAIL, email);
-        const indicator = document.getElementById('emailSaveIndicator');
-        if (indicator) {
-            indicator.classList.add('visible');
-            setTimeout(() => indicator.classList.remove('visible'), 2000);
-        }
-    } catch (e) {
-        // localStorage unavailable — silent fail
-    }
-}
-
-// ─────────────────────────────────────────────
 // DOM Elements
 // ─────────────────────────────────────────────
 const elements = {
@@ -180,7 +151,7 @@ const elements = {
     jsonData: document.getElementById('jsonData'),
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
 
-    doctorEmail: document.getElementById('doctorEmail'),
+    doctorEmailDisplay: document.getElementById('doctorEmailDisplay'),
     consentCheckbox: document.getElementById('consentCheckbox'),
     consentTratamiento: document.getElementById('consentTratamiento'),
     confirmAndGenerateBtn: document.getElementById('confirmAndGenerateBtn'),
@@ -221,19 +192,11 @@ async function init() {
         return;
     }
 
-    // Restore saved doctor email; fall back to session login email
-    loadDoctorEmail();
-    if (elements.doctorEmail && !elements.doctorEmail.value) {
-        elements.doctorEmail.value = sessionStorage.getItem('clinia_email') || '';
-    }
-
-    if (elements.doctorEmail) {
-        elements.doctorEmail.addEventListener('blur', () => {
-            const email = elements.doctorEmail.value.trim();
-            if (email && email.includes('@')) {
-                saveDoctorEmail(email);
-            }
-        });
+    // Read-only: the PDF always goes to the doctor's own registered
+    // account email (server-derived, never client-supplied). Just display
+    // the email captured at login — nothing to persist or edit.
+    if (elements.doctorEmailDisplay) {
+        elements.doctorEmailDisplay.textContent = sessionStorage.getItem('clinia_email') || '';
     }
 
     // Record button starts disabled until patient consent is given
@@ -1118,7 +1081,6 @@ async function confirmAndGenerate() {
                 structured_data: sd,
                 create_doc: false,
                 create_pdf: elements.createPDF ? elements.createPDF.checked : true,
-                doctor_email: elements.doctorEmail?.value?.trim() || '',
                 consent_tratamiento_given: elements.consentTratamiento ? elements.consentTratamiento.checked : false,
                 consent_tratamiento_timestamp: new Date().toISOString()
             })
