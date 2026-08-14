@@ -4,6 +4,7 @@
 
 import resend
 import base64
+import html
 from config import Config
 from logger import logger
 
@@ -58,10 +59,10 @@ def send_pdf_email(
                             Se adjunta la nota clínica de evolución generada para:
                         </p>
                         <p style="margin: 0 0 8px 0;">
-                            <strong>Paciente:</strong> {patient_name}
+                            <strong>Paciente:</strong> {html.escape(patient_name)}
                         </p>
                         <p style="margin: 0 0 24px 0;">
-                            <strong>Fecha de consulta:</strong> {consultation_date}
+                            <strong>Fecha de consulta:</strong> {html.escape(consultation_date)}
                         </p>
                         <p style="font-size: 12px; color: #94a3b8; margin: 0;">
                             Este mensaje fue generado automáticamente por Clin.IA.
@@ -130,10 +131,10 @@ def send_invite_email(
                                 border: 1px solid #e2e8f0;
                                 border-top: none; border-radius: 0 0 6px 6px;">
                         <p style="margin: 0 0 12px 0;">
-                            Hola {doctor_nombre},
+                            Hola {html.escape(doctor_nombre)},
                         </p>
                         <p style="margin: 0 0 16px 0;">
-                            Se te ha invitado a unirte a <strong>{clinica_nombre}</strong> en Clin.IA.
+                            Se te ha invitado a unirte a <strong>{html.escape(clinica_nombre)}</strong> en Clin.IA.
                             Haz clic en el siguiente enlace para configurar tu contraseña y
                             acceder a tu cuenta:
                         </p>

@@ -781,6 +781,27 @@ def process_audio():
     Returns 202 {job_id} immediately; caller polls /api/job-status/<job_id>.
     """
     try:
+        # Server-side consent gate (Stage H2 fix #12) — the Aviso de
+        # Privacidad states consent is a CONDITION of processing; until
+        # now that was only enforced by a disabled button client-side, so
+        # a crafted request with no/false consent was processed anyway.
+        # This is the earliest point the server is involved at all (the
+        # recording itself happens client-side) — checked here, before
+        # any transcription, storage, or job enqueue, so "condition of
+        # processing" actually holds: no consent means the audio never
+        # becomes a stored, processed note. Fails closed on anything
+        # falsy/missing/malformed, matching the pre-existing 'false' parse
+        # default — this adds the *enforcement*, the recording of consent
+        # (params['consent_given'] below, persisted to the session) is
+        # unchanged.
+        consent_given = request.form.get('consent_given', 'false').lower() == 'true'
+        if not consent_given:
+            logger.warning("Validation: rejected upload — no patient consent recorded")
+            return jsonify({
+                'error': 'No se puede procesar el audio sin el consentimiento del paciente.',
+                'error_code': 'CONSENT_REQUIRED'
+            }), 400
+
         audio_file = request.files.get('audio')
         is_valid, error_message = validate_audio_file(audio_file)
         if not is_valid:
@@ -800,7 +821,7 @@ def process_audio():
             'speakers_expected':    int(request.form.get('speakers_expected', 2)),
             'local_timestamp':      local_timestamp,
             'consultation_timestamp': request.form.get('consultation_timestamp', local_timestamp),
-            'consent_given':        request.form.get('consent_given', 'false').lower() == 'true',
+            'consent_given':        consent_given,
             'consent_timestamp':    request.form.get('consent_timestamp', ''),
         }
 
