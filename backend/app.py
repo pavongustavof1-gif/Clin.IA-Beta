@@ -467,6 +467,35 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
 
 # ── Supabase session persistence ─────────────────────────────────────────────
 
+def strip_transcript(payload: dict) -> dict:
+    """
+    Return a shallow copy of a session payload with the raw transcript
+    content removed from its 'transcript' sub-dict — 'text' and
+    'labeled_text' only, the two PHI-bearing fields (confidence,
+    duration_seconds, word_count, speaker_role_map are metadata, not
+    patient speech, and are kept).
+
+    Used at the two points a session leaves the pending_review window —
+    confirm and cancel — so full_response never retains a live copy of
+    the transcript once the record is finalized. Before this fix, nulling
+    the transcript_text COLUMN gave the appearance of minimization while
+    the same content lived on unabated inside full_response's JSONB blob
+    (Stage H1 finding #10).
+
+    Does not mutate the input — callers that still need the original in
+    the same request (e.g. confirm_and_generate echoing the transcript
+    back once in its response) keep it.
+    """
+    stripped = dict(payload)
+    transcript = stripped.get('transcript')
+    if isinstance(transcript, dict):
+        transcript = dict(transcript)
+        transcript.pop('text', None)
+        transcript.pop('labeled_text', None)
+        stripped['transcript'] = transcript
+    return stripped
+
+
 def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
     """Upsert a session to Supabase sesiones table. Silently logs on failure — never raises."""
     try:
@@ -766,7 +795,7 @@ def process_audio():
 
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
         params = {
-            'print_raw':            request.form.get('print_raw', 'true').lower() == 'true',
+            'print_raw':            request.form.get('print_raw', 'false').lower() == 'true',
             'create_doc':           request.form.get('create_doc', 'true').lower() == 'true',
             'speakers_expected':    int(request.form.get('speakers_expected', 2)),
             'local_timestamp':      local_timestamp,
@@ -967,7 +996,14 @@ def confirm_and_generate():
         # RECORDED row (already verified above to equal the caller), never
         # from g.usuario directly — ownership is fixed at creation and must
         # never be reassigned by whoever happens to confirm (Stage 2 fix #4).
-        save_session(session_id, {
+        #
+        # strip_transcript() is applied to the PERSISTED copy only — the
+        # `response` dict below still echoes session.get('transcript') in
+        # full, since that's this request's own one-time confirmation
+        # response, not something retained (Stage H1 fix #10). `session`
+        # itself is never mutated (strip_transcript returns a copy), so
+        # building `response` before or after this call is equivalent.
+        save_session(session_id, strip_transcript({
             **session,
             'structured_data': structured_data,
             'document': doc_info,
@@ -975,7 +1011,7 @@ def confirm_and_generate():
             'locked_at': locked_at,
             'timestamp': locked_at,
             'consent_tratamiento': consent_tratamiento
-        }, usuario_id=row['usuario_id'], clinica_id=row['clinica_id'])
+        }), usuario_id=row['usuario_id'], clinica_id=row['clinica_id'])
 
         # Delete transcript text to minimize LFPDPPP exposure
         ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'transcript_text': None})
@@ -983,6 +1019,14 @@ def confirm_and_generate():
             logger.info(f"DB: Transcript text deleted for session {session_id} — LFPDPPP minimization")
         else:
             logger.warning(f"DB: Could not delete transcript text for {session_id}")
+
+        # trabajos independently holds its own full copy of the transcript
+        # (written when the job completed) with no remaining legitimate
+        # reader once a session leaves pending_review — same reasoning
+        # pending_sessions_discard already applies on discard. Best-effort:
+        # its absence doesn't indicate anything is wrong (Stage H1 fix #10).
+        if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}'):
+            logger.warning(f"DB: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
 
         # Send PDF to the authenticated doctor's own registered email only
         # (Stage 2 fix #5) — never a client-supplied address, to prevent
@@ -1994,7 +2038,7 @@ def admin_cancel_session(session_id):
     if not cancellation_reason:
         return jsonify({'error': 'El motivo de cancelación es obligatorio'}), 400
 
-    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,status&limit=1')
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,status,full_response&limit=1')
     if not rows:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
@@ -2002,16 +2046,29 @@ def admin_cancel_session(session_id):
     if row.get('clinica_id') != g.usuario['clinica_id']:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
+    # A session can be cancelled directly from pending_review (never
+    # confirmed) or from confirmed — either way this is a point the
+    # session leaves the pending_review window, so full_response gets the
+    # same transcript strip confirm_and_generate applies (Stage H1 fix
+    # #10). strip_transcript is idempotent on an already-stripped payload.
+    stripped_full_response = strip_transcript(row.get('full_response') or {})
+
     ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
         'status':                  'cancelled',
         'cancelled_at':            datetime.now().isoformat(),
         'cancellation_reason':     cancellation_reason,
         'cancelled_by_usuario_id': g.usuario['usuario_id'],
         'transcript_text':         None,
+        'full_response':           stripped_full_response,
     })
     if not ok:
         logger.error(f"Admin: could not cancel session {session_id}")
         return jsonify({'error': 'No se pudo cancelar la nota'}), 500
+
+    # Same reasoning as confirm_and_generate — trabajos has no remaining
+    # legitimate reader once a session leaves pending_review. Best-effort.
+    if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}'):
+        logger.warning(f"DB: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
 
     logger.info(f"Admin: session {session_id} cancelled by usuario_id={g.usuario['usuario_id']}")
     return jsonify({

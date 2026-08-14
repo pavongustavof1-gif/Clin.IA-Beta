@@ -80,7 +80,11 @@ def lookup_cie11(diagnosis_text: str) -> dict | None:
 
         dest_entities = results.get('destinationEntities', [])
         if not dest_entities:
-            logger.info(f"ICD: No results for '{diagnosis_text}'")
+            # No diagnosis text or resulting code/title logged — both are
+            # PHI (a specific patient's health condition), even though the
+            # code/title themselves look like generic medical vocabulary
+            # (Stage H1 fix #11).
+            logger.info("ICD: No results for diagnosis lookup")
             return None
 
         top = dest_entities[0]
@@ -90,9 +94,9 @@ def lookup_cie11(diagnosis_text: str) -> dict | None:
         # Strip HTML tags the API sometimes includes in title
         title = re.sub(r'<[^>]+>', '', title).strip()
 
-        logger.info(f"ICD: '{diagnosis_text}' → {code} ({title})")
+        logger.info("ICD: lookup succeeded")
         return {'code': code, 'title': title}
 
     except Exception as e:
-        logger.error(f"ICD: Lookup failed for '{diagnosis_text}': {e}")
+        logger.error(f"ICD: Lookup failed: {e}")
         return None

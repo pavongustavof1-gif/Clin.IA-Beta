@@ -44,13 +44,17 @@ class TranscriptionService:
         aai.settings.api_key = Config.ASSEMBLYAI_API_KEY
         self.transcriber = aai.Transcriber()
 
-    def transcribe_audio(self, audio_file_path: str, print_raw: bool = True, speakers_expected: int = 0) -> Dict:
+    def transcribe_audio(self, audio_file_path: str, print_raw: bool = False, speakers_expected: int = 0) -> Dict:
         """
         Transcribe audio file using AssemblyAI
 
         Args:
             audio_file_path: Path to audio file or URL
-            print_raw: Whether to print raw transcript (for Alpha verification)
+            print_raw: Whether to additionally log transcript METADATA
+                (duration/confidence/word count) at DEBUG. Never logs
+                transcript or utterance CONTENT regardless of this flag or
+                the configured log level — that content is PHI and must
+                never reach a retained log (Stage H1 fix #11).
             speakers_expected: Hint to AssemblyAI for number of speakers (0 = not set)
 
         Returns:
@@ -116,19 +120,13 @@ class TranscriptionService:
             result["speaker_role_map"] = role_map
             logger.info(f"Transcription: Speaker role mapping: {role_map}")
 
-            # Verification: log raw transcript details
+            # Metadata only — never transcript/utterance CONTENT, at any
+            # log level (Stage H1 fix #11). This is the entire scope of
+            # what print_raw controls now.
             if print_raw:
                 logger.debug(f"Transcription: Duration: {result['audio_duration'] / 1000:.2f} seconds")
                 logger.debug(f"Transcription: Confidence: {result['confidence']:.2%}")
                 logger.debug(f"Transcription: Word count: {result['words']}")
-                logger.debug(f"Transcription: Full text:\n{result['text']}")
-
-                if result["utterances"]:
-                    lines = []
-                    for utt in result["utterances"]:
-                        role = role_map.get(utt['speaker'], 'Hablante ' + utt['speaker'])
-                        lines.append(f"[{role}]: {utt['text']}")
-                    logger.debug("Transcription: Speaker-separated transcript:\n" + "\n".join(lines))
 
             # LFPDPPP compliance: delete transcript from AssemblyAI servers immediately.
             # Patient audio data must not be retained on third-party servers beyond
@@ -148,13 +146,13 @@ class TranscriptionService:
             logger.error(f"AssemblyAI: Error during transcription: {str(e)}")
             raise
 
-    def transcribe_from_bytes(self, audio_data: bytes, print_raw: bool = True, speakers_expected: int = 0) -> Dict:
+    def transcribe_from_bytes(self, audio_data: bytes, print_raw: bool = False, speakers_expected: int = 0) -> Dict:
         """
         Transcribe audio from bytes (for real-time recording)
 
         Args:
             audio_data: Raw audio bytes
-            print_raw: Whether to print raw transcript
+            print_raw: Whether to additionally log transcript metadata (see transcribe_audio)
 
         Returns:
             Dictionary containing transcript and metadata
