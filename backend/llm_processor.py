@@ -202,7 +202,11 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                             structured_data.setdefault('evaluacion', {})
                             structured_data['evaluacion']['codigo_cie11'] = cie_result['code']
                             structured_data['evaluacion']['titulo_cie11'] = cie_result['title']
-                            logger.info(f"ICD: Injected CIE-11 code {cie_result['code']} into structured_data")
+                            # No code/title in the log — a patient's diagnosis
+                            # code is PHI same as the free-text diagnosis it
+                            # came from (Stage H1 fix #11, caught via a live
+                            # log review that still had one in it).
+                            logger.info("ICD: CIE-11 code injected into structured_data")
                 except Exception as e:
                     logger.warning(f"ICD: Could not inject CIE-11 code (non-fatal): {e}")
 
