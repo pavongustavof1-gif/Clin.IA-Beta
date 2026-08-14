@@ -2051,7 +2051,18 @@ def admin_cancel_session(session_id):
     # session leaves the pending_review window, so full_response gets the
     # same transcript strip confirm_and_generate applies (Stage H1 fix
     # #10). strip_transcript is idempotent on an already-stripped payload.
+    #
+    # Also correct full_response['status'] to 'cancelled' here — found via
+    # live testing that this route had never updated it (pre-existing
+    # since ADM-1 Stage G, not introduced by this fix): the top-level
+    # sesiones.status column was always correctly set to 'cancelled', but
+    # full_response's OWN embedded status key was left stale forever
+    # after. Not user-visible today (every real UI path reads status from
+    # the top-level column — patient_history_detail, admin_sessions —
+    # never from inside full_response), but fixing it here is a one-key
+    # addition to the exact dict this fix already rewrites, not new scope.
     stripped_full_response = strip_transcript(row.get('full_response') or {})
+    stripped_full_response['status'] = 'cancelled'
 
     ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
         'status':                  'cancelled',
