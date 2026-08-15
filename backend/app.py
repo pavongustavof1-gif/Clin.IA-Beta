@@ -4,7 +4,6 @@ from flask_cors import CORS
 from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
-from docs_generator import GoogleDocsGenerator
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email, send_invite_email
@@ -73,32 +72,6 @@ def validate_audio_file(file) -> tuple[bool, str]:
         return False, "El archivo de audio está vacío o es demasiado corto para procesar."
 
     return True, ''
-
-
-# --- THE TELEPORTER ---
-# This checks if we are in the cloud. If so, it creates the secret file from a variable.
-# This recreates the physical JSON files from Render Environment Variables
-def teleport_secrets():
-    if os.environ.get("RENDER"):
-        logger.info("Teleporter: Running in Cloud mode...")
-
-        # 1. Teleport the Client Secrets (OAuth Web)
-        if "GOOGLE_SECRETS_JSON" in os.environ:
-            with open("client_secrets.json", "w") as f:
-                f.write(os.environ["GOOGLE_SECRETS_JSON"])
-            logger.info("Teleporter: client_secrets.json created.")
-
-        # 2. Teleport the Service Account (if you use it)
-        if "GOOGLE_SERVICE_ACCOUNT_JSON" in os.environ:
-            with open("credentials.json", "w") as f:
-                f.write(os.environ["GOOGLE_SERVICE_ACCOUNT_JSON"])
-            logger.info("Teleporter: credentials.json created.")
-
-# Run the teleporter immediately
-logger.info("Startup: Teleporter starting...")
-teleport_secrets()
-logger.info("Startup: Teleporter finished.")
-# ----------------------
 
 
 # Initialize Flask app
@@ -444,7 +417,6 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
             'transcript':        transcript_payload,
             'structured_data':   structured_data,
             'local_timestamp':   params['local_timestamp'],
-            'create_doc':        params['create_doc'],
             'consent_given':     params['consent_given'],
             'consent_timestamp': params['consent_timestamp'],
         }, usuario_id=usuario_id, clinica_id=clinica_id)
@@ -817,7 +789,6 @@ def process_audio():
         local_timestamp = request.form.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
         params = {
             'print_raw':            request.form.get('print_raw', 'false').lower() == 'true',
-            'create_doc':           request.form.get('create_doc', 'true').lower() == 'true',
             'speakers_expected':    int(request.form.get('speakers_expected', 2)),
             'local_timestamp':      local_timestamp,
             'consultation_timestamp': request.form.get('consultation_timestamp', local_timestamp),
@@ -899,8 +870,8 @@ def job_status(job_id):
 @require_auth
 def confirm_and_generate():
     """
-    Receives doctor-reviewed structured_data, creates Google Doc, returns final response.
-    Expected JSON: { "session_id": "...", "structured_data": {...}, "create_doc": true }
+    Receives doctor-reviewed structured_data, returns final response.
+    Expected JSON: { "session_id": "...", "structured_data": {...} }
     """
     try:
         data = request.get_json()
@@ -909,7 +880,6 @@ def confirm_and_generate():
 
         session_id = data.get('session_id')
         structured_data = data.get('structured_data', {})
-        create_doc = data.get('create_doc', True)
         create_pdf = data.get('create_pdf', False)
         # doctor_email is NOT read from the client — a PHI document must
         # only go to the authenticated doctor's own registered address
@@ -956,24 +926,17 @@ def confirm_and_generate():
                 'error_code': 'SESSION_CANCELLED'
             }), 409
 
-        local_timestamp = session.get('local_timestamp', datetime.now().strftime("%Y-%m-%d %H:%M"))
-
+        # Google Docs generation removed (Stage H3, finding #13) — every
+        # clinic's doc used to land in one hardcoded Drive account with no
+        # per-tenant separation; the frontend never requested one anyway
+        # (always sent create_doc: false), so this was dormant-but-live
+        # API surface with no product behind it. doc_info stays None
+        # unconditionally; downstream response/save_session already
+        # handle a None document correctly (that was already the normal
+        # case before this removal).
         doc_info = None
-        if create_doc:
-            logger.info("Orchestrator: PHASE C — Google Docs Generation")
-            try:
-                docs_generator = GoogleDocsGenerator()
-                patient_name = structured_data.get('informacion_paciente', {}).get(
-                    'nombre_del_paciente', 'Paciente'
-                )
-                doc_title = f"ClinIA - {patient_name} - {local_timestamp}"
-                doc_info = docs_generator.create_medical_note(structured_data, title=doc_title)
-                logger.info(f"Orchestrator: Google Doc created: {doc_info['link']}")
-            except Exception as e:
-                logger.error(f"Orchestrator: Google Docs creation failed: {str(e)}")
-                doc_info = {'error': 'Failed to create Google Doc', 'details': str(e)}
 
-        # PDF generation (if requested) — runs independently of Google Docs
+        # PDF generation
         pdf_bytes = None
         if create_pdf:
             logger.info("Orchestrator: PHASE C2 — PDF Generation")

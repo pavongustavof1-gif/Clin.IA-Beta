@@ -138,8 +138,6 @@ const elements = {
     progressText: document.getElementById('progressText'),
 
     resultsSection: document.getElementById('resultsSection'),
-    documentLink: document.getElementById('documentLink'),
-    docLink: document.getElementById('docLink'),
     speakersExpected: document.getElementById('speakersExpected'),
     transcriptResult: document.getElementById('transcriptResult'),
     transcriptConfidence: document.getElementById('transcriptConfidence'),
@@ -642,7 +640,6 @@ async function processAudio() {
         const formData = new FormData();
         formData.append('audio', state.currentAudioBlob, 'recording.webm');
         formData.append('print_raw', elements.printRawTranscript.checked);
-        formData.append('create_doc', false);
         formData.append('speakers_expected', elements.speakersExpected.value);
         const _now = new Date();
         const _pad = n => String(n).padStart(2, '0');
@@ -831,15 +828,9 @@ function displayResults(result) {
     // Show results section
     elements.resultsSection.style.display = 'block';
     
-    // 1. Document link
-    if (result.document && result.document.link) {
-        elements.documentLink.style.display = 'block';
-        elements.docLink.href = safeUrl(result.document.link);
-        elements.docLink.innerHTML = `Abrir "${escapeHtml(result.document.title)}" en Google Docs <svg width="15" height="15" aria-hidden="true"><use href="#icon-external"/></svg>`;
-    } else {
-        elements.documentLink.style.display = 'none';
-    }
-    
+    // Google Docs result card removed (Stage H3, finding #13) — the
+    // backend no longer generates one under any input.
+
     // 2. Transcript — only shown when "Mostrar transcripción completa" is checked
     const showTranscript = elements.printRawTranscript?.checked ?? true;
     if (elements.transcriptResult) {
@@ -1079,7 +1070,6 @@ async function confirmAndGenerate() {
             body: JSON.stringify({
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
-                create_doc: false,
                 create_pdf: elements.createPDF ? elements.createPDF.checked : true,
                 consent_tratamiento_given: elements.consentTratamiento ? elements.consentTratamiento.checked : false,
                 consent_tratamiento_timestamp: new Date().toISOString()

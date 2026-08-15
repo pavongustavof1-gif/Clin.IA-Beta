@@ -16,15 +16,6 @@ class Config:
     GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 #    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
     
-    # Google Docs
-#    GOOGLE_CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), 'credentials.json')
-
-    # Try to load from an environment variable first, then fallback to a file
-    GOOGLE_CREDS_JSON = os.getenv('GOOGLE_CREDENTIALS_JSON') 
-    
-    # If you must keep a file path, make it flexible:
-    GOOGLE_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_PATH', 'credentials.json')
-    
     # WHO ICD-11 API
     ICD_CLIENT_ID        = os.environ.get('ICD_CLIENT_ID', '')
     ICD_CLIENT_SECRET    = os.environ.get('ICD_CLIENT_SECRET', '')
