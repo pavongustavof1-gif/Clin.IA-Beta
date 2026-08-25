@@ -74,11 +74,33 @@ Tu tarea es analizar la siguiente transcripción de una consulta médica en espa
 INSTRUCCIONES CRÍTICAS:
 1. Debes extraer ÚNICAMENTE información que esté explícitamente mencionada en la transcripción
 2. Si cierta información no está presente, omite ese campo (no inventes datos)
-3. Mantén los términos médicos exactamente como aparecen en la transcripción, asegurando la congruencia de género entre artículos y artículos indefinidos con el sustantivo que le sigue
+3. En las secciones Subjetivo y Objetivo, mantén los términos como aparecen en la transcripción (incluidas las palabras del paciente). En las secciones Evaluación y Plan, aplica el lenguaje técnico-médico según la sección «LENGUAJE TÉCNICO-MÉDICO» de abajo. En todos los casos, asegura la congruencia de género entre los artículos (definidos e indefinidos) y el sustantivo que les sigue
 4. Organiza la información según el formato SOAP
 5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
 6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'
 7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.{speaker_instruction}
+
+LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a «evaluacion» y «plan»:
+- Redacta los campos de «evaluacion» (diagnostico, diagnosticos_adicionales, impresion_clinica,
+  pronostico) y de «plan» (tratamiento, medicamentos, recomendaciones, estudios_solicitados,
+  seguimiento) en lenguaje técnico-médico formal.
+- Sustituye términos coloquiales por su equivalente técnico. Sustituciones canónicas (lista ampliable):
+    • panza / barriga / tripa → abdomen (o «cavidad abdominal» según contexto)
+    • vahído → síncope
+
+* dolor de cabeza → cefalea
+* fiebre → pirexia/hipertermia
+
+- Sin abreviaturas: desarróllalas a su forma completa (p. ej. «c/8h» → «cada 8 horas»;
+  «VO» → «vía oral»). Conserva las unidades estándar (mg, mL, mmHg, °C) y el código CIE-11.
+
+REGLA DE SEGURIDAD (obligatoria): esta normalización cambia ÚNICAMENTE el registro lingüístico,
+NUNCA el contenido clínico. Está PROHIBIDO añadir diagnósticos, hallazgos, localización anatómica,
+lateralidad, severidad, temporalidad o cualquier detalle no explícito en la transcripción, o inferir
+más de lo que dijo el médico. Si no existe un equivalente técnico claro y unívoco, conserva el término
+original. Preserva el significado clínico exactamente. Ante la duda, no cambies nada.
+
+Las secciones «subjetivo» y «objetivo» NO se modifican.
 
 TRANSCRIPCIÓN:
 {transcript_content}
