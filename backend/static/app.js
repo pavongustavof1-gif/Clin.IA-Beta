@@ -14,7 +14,12 @@ async function getAuthHeaders() {
     return { 'Authorization': 'Bearer ' + session?.access_token };
 }
 
-function logout() {
+async function logout() {
+    try {
+        await supabaseClient.auth.signOut();
+    } catch (e) {
+        console.error('Logout: signOut() failed', e);
+    }
     sessionStorage.removeItem('clinia_token');
     sessionStorage.removeItem('clinia_email');
     window.location.href = '/login';

@@ -1,4 +1,6 @@
 import json
+import threading
+import time
 import urllib.request
 import jwt
 from functools import wraps
@@ -7,31 +9,109 @@ from config import Config
 from logger import logger
 from pg_utils import pg_val
 
-# Cached public key — fetched once from Supabase JWKS on first request
-_jwks_public_key = None
+# ─────────────────────────────────────────────
+# JWKS cache — bounded TTL, kid-matched, debounced refresh, thread-safe.
+# A rotation at Supabase publishes a new key under a new kid; the old
+# key stays in the set for a transition window. _get_signing_key looks
+# up by kid (never blindly keys[0]) and refreshes on a cache miss or
+# TTL expiry, but at most once per _JWKS_REFRESH_DEBOUNCE_SECONDS
+# regardless of trigger or outcome — so a burst of tokens carrying
+# random/bogus kids, or a JWKS endpoint that's down, can't turn this
+# cache into an amplification vector against Supabase.
+# ─────────────────────────────────────────────
+_jwks_lock = threading.Lock()
+_jwks_keys_by_kid: dict = {}
+_jwks_fetched_at: float = 0.0        # monotonic time of last successful fetch (0 = never)
+_jwks_last_attempt_at: float = 0.0   # monotonic time of last fetch attempt, success or failure (0 = never)
 
-def _get_public_key():
-    """Fetch and cache the EC public key from Supabase's JWKS endpoint."""
-    global _jwks_public_key
-    if _jwks_public_key is not None:
-        return _jwks_public_key
+_JWKS_TTL_SECONDS = 3600             # normal cache lifetime
+_JWKS_REFRESH_DEBOUNCE_SECONDS = 30  # min gap between forced refetches, any trigger
+_JWKS_FETCH_TIMEOUT_SECONDS = 5
+
+_EXPECTED_ISSUER = f"{Config.SUPABASE_URL}/auth/v1"
+
+
+def _fetch_jwks() -> dict:
+    """Fetch the raw JWKS document from Supabase. Raises on network error/timeout."""
     jwks_url = f"{Config.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
-    with urllib.request.urlopen(jwks_url) as resp:
-        jwks = json.loads(resp.read())
-    _jwks_public_key = jwt.algorithms.ECAlgorithm.from_jwk(jwks["keys"][0])
-    logger.info("Auth: JWKS public key loaded and cached")
-    return _jwks_public_key
+    req = urllib.request.Request(jwks_url, headers={'Accept': 'application/json'})
+    with urllib.request.urlopen(req, timeout=_JWKS_FETCH_TIMEOUT_SECONDS) as resp:
+        return json.loads(resp.read())
+
+
+def _refresh_jwks_locked(now: float) -> None:
+    """Must be called while holding _jwks_lock. Fetches and rebuilds the kid->key map."""
+    global _jwks_keys_by_kid, _jwks_fetched_at, _jwks_last_attempt_at
+    _jwks_last_attempt_at = now
+    jwks = _fetch_jwks()
+    keys_by_kid = {}
+    for jwk in jwks.get('keys', []):
+        kid = jwk.get('kid')
+        if not kid:
+            continue
+        try:
+            keys_by_kid[kid] = jwt.algorithms.ECAlgorithm.from_jwk(jwk)
+        except Exception as e:
+            logger.warning(f"Auth: JWKS: could not parse key kid={kid}: {e}")
+    _jwks_keys_by_kid = keys_by_kid
+    _jwks_fetched_at = now
+    logger.info(f"Auth: JWKS refreshed — {len(keys_by_kid)} key(s) cached")
+
+
+def _get_signing_key(kid: str):
+    """
+    Return the EC public key matching `kid`, refreshing the cache as needed.
+    Thread-safe: the whole check-and-refresh sequence runs under
+    _jwks_lock, so concurrent requests can't trigger a thundering herd
+    of fetches during a rotation — one thread refreshes, the rest see
+    the fresh cache once they acquire the lock. Fails closed: returns
+    None (never raises) if the key can't be resolved; callers must
+    reject the token when this returns None.
+    """
+    now = time.monotonic()
+    with _jwks_lock:
+        key = _jwks_keys_by_kid.get(kid)
+        stale = (now - _jwks_fetched_at) > _JWKS_TTL_SECONDS
+
+        if key is None or stale:
+            never_attempted = _jwks_last_attempt_at == 0.0
+            debounced = (not never_attempted) and (now - _jwks_last_attempt_at) < _JWKS_REFRESH_DEBOUNCE_SECONDS
+            if not debounced:
+                try:
+                    _refresh_jwks_locked(now)
+                    key = _jwks_keys_by_kid.get(kid)
+                except Exception as e:
+                    logger.warning(f"Auth: JWKS fetch failed: {e}")
+                    key = _jwks_keys_by_kid.get(kid)  # whatever's still cached, if anything
+
+        return key
 
 
 def verify_jwt(token: str) -> dict | None:
     """Validate a Supabase JWT (ES256) and return the decoded payload, or None if invalid/expired."""
     try:
-        public_key = _get_public_key()
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+        except Exception as e:
+            logger.warning(f"Auth: JWT malformed header — {e}")
+            return None
+
+        kid = unverified_header.get("kid")
+        if not kid:
+            logger.warning("Auth: JWT missing kid in header")
+            return None
+
+        public_key = _get_signing_key(kid)
+        if public_key is None:
+            logger.warning(f"Auth: JWKS: no signing key for kid={kid}")
+            return None
+
         payload = jwt.decode(
             token,
             public_key,
             algorithms=["ES256"],
             audience="authenticated",
+            issuer=_EXPECTED_ISSUER,
         )
         return payload
     except jwt.ExpiredSignatureError:

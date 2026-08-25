@@ -32,7 +32,7 @@ class Config:
     SUPABASE_ANON_KEY    = os.getenv('SUPABASE_ANON_KEY')
 
     # Flask
-    SECRET_KEY = os.getenv('FLASK_SECRET_KEY', 'dev-secret-key-change-in-production')
+    SECRET_KEY = os.getenv('FLASK_SECRET_KEY')
     
     # Audio validation
     ALLOWED_AUDIO_EXTENSIONS = {'.wav', '.mp3', '.webm', '.m4a', '.ogg', '.mp4'}
@@ -68,6 +68,9 @@ class Config:
             errors.append("SUPABASE_SERVICE_KEY is required")
         if not cls.SUPABASE_ANON_KEY:
             errors.append("SUPABASE_ANON_KEY is required")
+
+        if not cls.SECRET_KEY:
+            errors.append("FLASK_SECRET_KEY is required")
 
         if errors:
             raise ValueError(f"Configuration errors: {', '.join(errors)}")
