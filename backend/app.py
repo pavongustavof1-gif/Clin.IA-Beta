@@ -881,6 +881,12 @@ def confirm_and_generate():
         session_id = data.get('session_id')
         structured_data = data.get('structured_data', {})
         create_pdf = data.get('create_pdf', False)
+        # send_email only toggles WHETHER the PDF is emailed — it never
+        # changes WHERE. The address itself is still never read from the
+        # client (doctor_email below, derived from g.usuario) — Stage 2
+        # fix #5 stays intact; this is a separate, later product request
+        # for an on/off toggle, not a reopening of that fix.
+        send_email = data.get('send_email', True)
         # doctor_email is NOT read from the client — a PHI document must
         # only go to the authenticated doctor's own registered address
         # (Stage 2 fix #5). Derived below from g.usuario, not the request.
@@ -1015,8 +1021,10 @@ def confirm_and_generate():
         # Send PDF to the authenticated doctor's own registered email only
         # (Stage 2 fix #5) — never a client-supplied address, to prevent
         # exfiltrating a PHI document to an arbitrary outside inbox.
+        # send_email is the doctor's own on/off choice for this note; it
+        # gates whether the send happens at all, not the address.
         doctor_email = g.usuario.get('email', '')
-        if pdf_bytes and doctor_email:
+        if pdf_bytes and doctor_email and send_email:
             patient_name = (structured_data
                 .get('informacion_paciente', {})
                 .get('nombre_del_paciente', 'Paciente'))

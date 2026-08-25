@@ -350,7 +350,20 @@
                         </label>
                     </div>
 
-                    <!-- Column 3: Personas selector -->
+                    <!-- Column 3: Correo toggle — on/off only, does NOT make
+                         the address editable (still server-derived from the
+                         doctor's own account, never client-supplied). -->
+                    <div class="options-col">
+                        <label class="toggle-label" for="sendEmailToggle">
+                            <span class="toggle-text">Correo</span>
+                            <span class="toggle-switch">
+                                <input type="checkbox" id="sendEmailToggle" checked role="switch">
+                                <span class="toggle-slider"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <!-- Column 4: Personas selector -->
                     <div class="options-col">
                         <div class="toggle-label" style="cursor:default;">
                             <span class="toggle-text">Personas</span>
@@ -364,11 +377,14 @@
 
                 </div>
 
-                <!-- Email delivery row — full width below the 3-col grid.
+                <!-- Email delivery row — full width below the options grid.
                      Read-only: the PDF always goes to the authenticated
                      doctor's own registered account email (server-derived,
-                     never client-supplied — see confirm-and-generate). -->
-                <div class="email-delivery-row">
+                     never client-supplied — see confirm-and-generate).
+                     The Correo toggle above only controls whether it's sent
+                     at all, grayed out here when off (see displayed via
+                     the .is-off class in app.js). -->
+                <div class="email-delivery-row" id="emailDeliveryRow">
                     <span class="email-delivery-label">
                         📧 El PDF se enviará a:
                     </span>

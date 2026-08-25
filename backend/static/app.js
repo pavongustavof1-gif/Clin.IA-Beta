@@ -131,6 +131,7 @@ const elements = {
     
     printRawTranscript: document.getElementById('printRawTranscript'),
     createPDF: document.getElementById('createPDF'),
+    sendEmailToggle: document.getElementById('sendEmailToggle'),
     downloadPdfBtn: document.getElementById('downloadPdfBtn'),
     
     progressSection: document.getElementById('progressSection'),
@@ -150,6 +151,7 @@ const elements = {
     downloadJsonBtn: document.getElementById('downloadJsonBtn'),
 
     doctorEmailDisplay: document.getElementById('doctorEmailDisplay'),
+    emailDeliveryRow: document.getElementById('emailDeliveryRow'),
     consentCheckbox: document.getElementById('consentCheckbox'),
     consentTratamiento: document.getElementById('consentTratamiento'),
     confirmAndGenerateBtn: document.getElementById('confirmAndGenerateBtn'),
@@ -195,6 +197,17 @@ async function init() {
     // the email captured at login — nothing to persist or edit.
     if (elements.doctorEmailDisplay) {
         elements.doctorEmailDisplay.textContent = sessionStorage.getItem('clinia_email') || '';
+    }
+
+    // Correo toggle — on/off only (does NOT make the address editable).
+    // Grays out the email-delivery row when off; the actual gate against
+    // sending is server-side (confirm-and-generate reads send_email).
+    if (elements.sendEmailToggle && elements.emailDeliveryRow) {
+        const syncEmailRowState = () => {
+            elements.emailDeliveryRow.classList.toggle('is-off', !elements.sendEmailToggle.checked);
+        };
+        syncEmailRowState();
+        elements.sendEmailToggle.addEventListener('change', syncEmailRowState);
     }
 
     // Record button starts disabled until patient consent is given
@@ -1071,6 +1084,7 @@ async function confirmAndGenerate() {
                 session_id: state.pendingResult.session_id,
                 structured_data: sd,
                 create_pdf: elements.createPDF ? elements.createPDF.checked : true,
+                send_email: elements.sendEmailToggle ? elements.sendEmailToggle.checked : true,
                 consent_tratamiento_given: elements.consentTratamiento ? elements.consentTratamiento.checked : false,
                 consent_tratamiento_timestamp: new Date().toISOString()
             })
@@ -1228,6 +1242,10 @@ function resetApplication() {
     // Reset PDF button and checkbox
     elements.downloadPdfBtn.style.display = 'none';
     if (elements.createPDF) elements.createPDF.checked = true;
+
+    // Reset Correo toggle and the email row's grayed-out state
+    if (elements.sendEmailToggle) elements.sendEmailToggle.checked = true;
+    if (elements.emailDeliveryRow) elements.emailDeliveryRow.classList.remove('is-off');
 
     // Reset patient/evaluation fields
     const numExpField = document.getElementById('review_numero_expediente');
