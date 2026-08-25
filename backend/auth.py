@@ -5,6 +5,7 @@ from functools import wraps
 from flask import request, jsonify, g
 from config import Config
 from logger import logger
+from pg_utils import pg_val
 
 # Cached public key — fetched once from Supabase JWKS on first request
 _jwks_public_key = None
@@ -64,7 +65,7 @@ def get_usuario_context(user_id: str) -> dict | None:
     url = (
         Config.SUPABASE_URL.rstrip('/')
         + '/rest/v1/usuarios'
-        + f'?id=eq.{user_id}'
+        + f'?id=eq.{pg_val(user_id)}'
         + '&select=id,clinica_id,rol,nombre,email,activo'
         + '&limit=1'
     )

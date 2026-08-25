@@ -8,6 +8,7 @@ from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email, send_invite_email
 from auth import require_auth, require_admin
+from pg_utils import pg_val, pg_path, pg_ilike_val
 from concurrent.futures import ThreadPoolExecutor
 import os
 import re
@@ -192,7 +193,7 @@ def _storage_headers(content_type: str = None) -> dict:
 
 def _storage_upload(bucket: str, path: str, data: bytes, content_type: str) -> bool:
     """POST raw bytes to Supabase Storage with x-upsert so a re-upload replaces the existing object."""
-    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{pg_val(bucket)}/{pg_path(path)}'
     headers = _storage_headers(content_type)
     headers['x-upsert'] = 'true'
     req = urllib.request.Request(url, data=data, headers=headers, method='POST')
@@ -210,7 +211,7 @@ def _storage_upload(bucket: str, path: str, data: bytes, content_type: str) -> b
 
 def _storage_download(bucket: str, path: str) -> tuple[bytes, str] | None:
     """GET from Supabase Storage. Returns (bytes, content_type) or None on any failure (incl. not-found)."""
-    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{pg_val(bucket)}/{pg_path(path)}'
     req = urllib.request.Request(url, headers=_storage_headers())
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -226,7 +227,7 @@ def _storage_download(bucket: str, path: str) -> tuple[bytes, str] | None:
 
 def _storage_delete(bucket: str, path: str) -> bool:
     """DELETE an object from Supabase Storage. Returns True on success."""
-    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{bucket}/{path}'
+    url = Config.SUPABASE_URL.rstrip('/') + f'/storage/v1/object/{pg_val(bucket)}/{pg_path(path)}'
     req = urllib.request.Request(url, headers=_storage_headers(), method='DELETE')
     try:
         with urllib.request.urlopen(req, timeout=10) as resp:
@@ -309,7 +310,7 @@ def _sb_set_user_ban(user_id: str, banned: bool) -> None:
     Raises on failure — caller applies the same partial-failure handling
     used elsewhere in this project (log which side succeeded/failed).
     """
-    url = Config.SUPABASE_URL.rstrip('/') + f'/auth/v1/admin/users/{user_id}'
+    url = Config.SUPABASE_URL.rstrip('/') + f'/auth/v1/admin/users/{pg_val(user_id)}'
     payload = json.dumps({
         'ban_duration': '876000h' if banned else 'none',
     }, ensure_ascii=False).encode()
@@ -339,7 +340,7 @@ def _sb_insert_usuario(body: dict) -> dict | None:
 def _sb_patch_job(job_id: str, body: dict) -> None:
     """PATCH a trabajos row. Logs silently on failure."""
     body['updated_at'] = datetime.now().isoformat()
-    _sb_patch(f'/rest/v1/trabajos?job_id=eq.{job_id}', body)
+    _sb_patch(f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}', body)
 
 
 # ── Background job worker ─────────────────────────────────────────────────────
@@ -523,7 +524,7 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
 
 def load_session(session_id: str) -> dict | None:
     """Retrieve a full session from Supabase. Returns None if not found."""
-    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=full_response&limit=1')
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}&select=full_response&limit=1')
     if not rows:
         return None
     return rows[0].get('full_response')
@@ -531,7 +532,7 @@ def load_session(session_id: str) -> dict | None:
 
 def load_structured_data(session_id: str) -> dict | None:
     """Retrieve only structured_data for a session — used by the export endpoint."""
-    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=structured_data&limit=1')
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}&select=structured_data&limit=1')
     if not rows:
         return None
     return rows[0].get('structured_data')
@@ -573,7 +574,7 @@ def get_clinica_context(clinica_id: str) -> dict:
     (not placeholder text) — an unfilled field must render as absent, not
     as a fake value.
     """
-    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=nombre,color_primario,direccion,telefono,logo_url&limit=1')
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}&select=nombre,color_primario,direccion,telefono,logo_url&limit=1')
     if rows:
         return {
             'nombre':         rows[0].get('nombre') or 'Consultorio Médico',
@@ -604,7 +605,7 @@ def fetch_clinica_logo_bytes(logo_storage_path: str) -> bytes | None:
 
 def get_usuario_cedula(usuario_id: str) -> str:
     """Fetch doctor's cédula professional from Supabase. Returns empty string on error."""
-    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{usuario_id}&select=cedula&limit=1')
+    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}&select=cedula&limit=1')
     if rows:
         return rows[0].get('cedula') or ''
     return ''
@@ -612,7 +613,7 @@ def get_usuario_cedula(usuario_id: str) -> str:
 
 def get_usuario_nombre(usuario_id: str) -> str:
     """Fetch a doctor's display name only — no email/cédula/other fields. Empty string on error."""
-    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{usuario_id}&select=nombre&limit=1')
+    rows = _sb_get(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}&select=nombre&limit=1')
     if rows:
         return rows[0].get('nombre') or ''
     return ''
@@ -842,7 +843,7 @@ def process_audio():
 def job_status(job_id):
     """Poll processing status for a background job."""
     rows = _sb_get(
-        f'/rest/v1/trabajos?job_id=eq.{job_id}'
+        f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}'
         f'&select=job_id,status,error_message,session_id,structured_data,transcript,usuario_id'
         f'&limit=1'
     )
@@ -905,7 +906,7 @@ def confirm_and_generate():
         # Reuses Stage 1's caller_can_addend_session rather than a parallel
         # check, since it's already exactly this owner-only rule.
         rows = _sb_get(
-            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
             f'&select=usuario_id,clinica_id,status,full_response&limit=1'
         )
         if not rows:
@@ -1004,7 +1005,7 @@ def confirm_and_generate():
         }), usuario_id=row['usuario_id'], clinica_id=row['clinica_id'])
 
         # Delete transcript text to minimize LFPDPPP exposure
-        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'transcript_text': None})
+        ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {'transcript_text': None})
         if ok:
             logger.info(f"DB: Transcript text deleted for session {session_id} — LFPDPPP minimization")
         else:
@@ -1015,7 +1016,7 @@ def confirm_and_generate():
         # reader once a session leaves pending_review — same reasoning
         # pending_sessions_discard already applies on discard. Best-effort:
         # its absence doesn't indicate anything is wrong (Stage H1 fix #10).
-        if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}'):
+        if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{pg_val(session_id)}'):
             logger.warning(f"DB: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
 
         # Send PDF to the authenticated doctor's own registered email only
@@ -1062,7 +1063,7 @@ def get_session(session_id):
     same convention as patient_history_detail."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     rows = _sb_get(
-        f'/rest/v1/sesiones?session_id=eq.{session_id}'
+        f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
         f'&select=usuario_id,clinica_id,full_response&limit=1'
     )
     if not rows:
@@ -1082,7 +1083,7 @@ def export_json(session_id):
     same rule as get_session, since this is the same data via another door."""
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     rows = _sb_get(
-        f'/rest/v1/sesiones?session_id=eq.{session_id}'
+        f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
         f'&select=usuario_id,clinica_id,structured_data&limit=1'
     )
     if not rows:
@@ -1120,7 +1121,7 @@ def download_pdf(session_id):
     logger.info(f"Auth: request by {g.usuario['email']} (clinica_id={g.usuario['clinica_id']})")
     try:
         rows = _sb_get(
-            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
             f'&select=usuario_id,clinica_id,status,addenda,cancelled_at,cancellation_reason&limit=1'
         )
         if not rows:
@@ -1210,13 +1211,13 @@ def patient_history_list():
     )
 
     if scope == 'clinica':
-        scope_filter = f'clinica_id=eq.{clinica_id}'
+        scope_filter = f'clinica_id=eq.{pg_val(clinica_id)}'
     else:
-        scope_filter = f'usuario_id=eq.{usuario_id}'
+        scope_filter = f'usuario_id=eq.{pg_val(usuario_id)}'
 
     path = (
         f'/rest/v1/sesiones'
-        f'?paciente_curp=eq.{curp}'
+        f'?paciente_curp=eq.{pg_val(curp)}'
         f'&{scope_filter}'
         f'&select={select}'
         f'&order=timestamp.desc'
@@ -1262,7 +1263,7 @@ def patient_history_detail(session_id):
 
     rows = _sb_get(
         f'/rest/v1/sesiones'
-        f'?session_id=eq.{session_id}'
+        f'?session_id=eq.{pg_val(session_id)}'
         f'&select=session_id,usuario_id,clinica_id,timestamp,status,structured_data,addenda'
         f'&limit=1'
     )
@@ -1313,7 +1314,7 @@ def pending_sessions_list():
     )
     rows = _sb_get(
         f'/rest/v1/sesiones'
-        f'?usuario_id=eq.{usuario_id}'
+        f'?usuario_id=eq.{pg_val(usuario_id)}'
         f'&status=eq.pending_review'
         f'&select={select}'
         f'&order=timestamp.desc'
@@ -1345,7 +1346,7 @@ def pending_sessions_detail(session_id):
     usuario_id = g.usuario['usuario_id']
     rows = _sb_get(
         f'/rest/v1/sesiones'
-        f'?session_id=eq.{session_id}'
+        f'?session_id=eq.{pg_val(session_id)}'
         f'&select=session_id,usuario_id,status,full_response'
         f'&limit=1'
     )
@@ -1394,7 +1395,7 @@ def pending_sessions_discard(session_id):
     usuario_id = g.usuario['usuario_id']
     rows = _sb_get(
         f'/rest/v1/sesiones'
-        f'?session_id=eq.{session_id}'
+        f'?session_id=eq.{pg_val(session_id)}'
         f'&select=usuario_id,status'
         f'&limit=1'
     )
@@ -1405,11 +1406,11 @@ def pending_sessions_discard(session_id):
     if row.get('usuario_id') != usuario_id or row.get('status') != 'pending_review':
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
-    trabajos_deleted = _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}')
+    trabajos_deleted = _sb_delete(f'/rest/v1/trabajos?session_id=eq.{pg_val(session_id)}')
     if not trabajos_deleted:
         logger.warning(f"Discard: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
 
-    ok = _sb_delete(f'/rest/v1/sesiones?session_id=eq.{session_id}')
+    ok = _sb_delete(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}')
     if not ok:
         return jsonify({'error': 'No se pudo descartar la nota'}), 500
 
@@ -1439,7 +1440,7 @@ def admin_usuarios():
     clinica_id = g.usuario['clinica_id']
     rows = _sb_get(
         f'/rest/v1/usuarios'
-        f'?clinica_id=eq.{clinica_id}'
+        f'?clinica_id=eq.{pg_val(clinica_id)}'
         f'&select=id,nombre,email,especialidad,cedula,rol,activo'
         f'&order=nombre'
     )
@@ -1493,7 +1494,7 @@ def admin_create_usuario():
     # so that scenario should only ever arise from a previous failed
     # invite attempt, which is already flagged for manual cleanup when it
     # happens (see the orphaned-user handling further down).
-    existing = _sb_get(f"/rest/v1/usuarios?email=ilike.{email}&select=id&limit=1")
+    existing = _sb_get(f"/rest/v1/usuarios?email=ilike.{pg_ilike_val(email)}&select=id&limit=1")
     if existing is None:
         return jsonify({'error': 'Error al validar el correo electrónico'}), 500
     if existing:
@@ -1581,7 +1582,7 @@ def admin_set_usuario_activo(usuario_id):
         return jsonify({'error': 'No puedes desactivar tu propia cuenta'}), 403
 
     rows = _sb_get(
-        f'/rest/v1/usuarios?id=eq.{usuario_id}'
+        f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}'
         f'&select=id,clinica_id&limit=1'
     )
     if not rows:
@@ -1602,7 +1603,7 @@ def admin_set_usuario_activo(usuario_id):
 
     # Layer 2: usuarios.activo — the layer that cuts off an already-issued
     # session on the doctor's next request, not just future logins.
-    updated = _sb_patch(f'/rest/v1/usuarios?id=eq.{usuario_id}', {'activo': nuevo_activo})
+    updated = _sb_patch(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}', {'activo': nuevo_activo})
     if not updated:
         logger.error(
             f"Admin: INCONSISTENT STATE — Supabase ban succeeded (banned={not nuevo_activo}) "
@@ -1631,7 +1632,7 @@ def admin_get_clinica():
     """Marca Stage 1 — read the admin's own clinic profile (name, color, address, phone)."""
     clinica_id = g.usuario['clinica_id']
     rows = _sb_get(
-        f'/rest/v1/clinicas?id=eq.{clinica_id}'
+        f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}'
         f'&select=nombre,color_primario,direccion,telefono&limit=1'
     )
     if not rows:
@@ -1672,7 +1673,7 @@ def admin_update_clinica():
     if not body:
         return jsonify({'error': 'No se proporcionaron campos para actualizar'}), 400
 
-    ok = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', body)
+    ok = _sb_patch(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}', body)
     if not ok:
         logger.error(f"Admin: could not update clinica {clinica_id}")
         return jsonify({'error': 'No se pudo guardar el perfil de la clínica'}), 500
@@ -1733,7 +1734,7 @@ def admin_upload_clinica_logo():
     if not ok:
         return jsonify({'error': 'No se pudo subir el logo'}), 500
 
-    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', {'logo_url': storage_path})
+    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}', {'logo_url': storage_path})
     if not updated:
         logger.error(f"Admin: logo uploaded to storage but clinicas.logo_url update failed for {clinica_id}")
         return jsonify({'error': 'Logo subido pero no se pudo guardar la referencia. Intente de nuevo.'}), 500
@@ -1752,7 +1753,7 @@ def admin_get_clinica_logo():
     with the Content-Type Storage has on record for that object.
     """
     clinica_id = g.usuario['clinica_id']
-    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=logo_url&limit=1')
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}&select=logo_url&limit=1')
     if not rows or not rows[0].get('logo_url'):
         return jsonify({'error': 'Esta clínica no tiene logo configurado'}), 404
 
@@ -1770,14 +1771,14 @@ def admin_get_clinica_logo():
 def admin_delete_clinica_logo():
     """Remove the clinic's logo from Storage and clear clinicas.logo_url."""
     clinica_id = g.usuario['clinica_id']
-    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{clinica_id}&select=logo_url&limit=1')
+    rows = _sb_get(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}&select=logo_url&limit=1')
     if not rows or not rows[0].get('logo_url'):
         return jsonify({'error': 'Esta clínica no tiene logo configurado'}), 404
 
     storage_path = rows[0]['logo_url']
     _storage_delete(CLINIC_LOGOS_BUCKET, storage_path)  # best-effort — clear logo_url regardless
 
-    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{clinica_id}', {'logo_url': None})
+    updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}', {'logo_url': None})
     if not updated:
         logger.error(f"Admin: could not clear logo_url for clinica {clinica_id}")
         return jsonify({'error': 'No se pudo actualizar la clínica'}), 500
@@ -1810,21 +1811,24 @@ def admin_sessions():
         desde = desde_dt.strftime('%Y-%m-%d')
         hasta = hasta_dt.strftime('%Y-%m-%d')
 
-    filters = [f'clinica_id=eq.{clinica_id}']
+    filters = [f'clinica_id=eq.{pg_val(clinica_id)}']
     if desde and hasta:
         # Explicit and=(...) combinator rather than repeating timestamp=
         # twice — PostgREST documents AND-by-default for repeated same-
         # column params, but also documents this explicit form as the
         # unambiguous way to combine multiple conditions on ONE column.
         # hasta is a date (YYYY-MM-DD); T23:59:59.999 makes it inclusive
-        # of the whole day.
-        filters.append(f'and=(timestamp.gte.{desde},timestamp.lte.{hasta}T23:59:59.999)')
+        # of the whole day. desde/hasta are unvalidated query params —
+        # pg_val() so a value like "2026-01-01&select=*" can't smuggle
+        # extra PostgREST parameters into this service_role query
+        # (Stage M1 fix #16); the and=(...) structure itself is untouched.
+        filters.append(f'and=(timestamp.gte.{pg_val(desde)},timestamp.lte.{pg_val(hasta)}T23:59:59.999)')
     elif desde:
-        filters.append(f'timestamp=gte.{desde}')
+        filters.append(f'timestamp=gte.{pg_val(desde)}')
     elif hasta:
-        filters.append(f'timestamp=lte.{hasta}T23:59:59.999')
+        filters.append(f'timestamp=lte.{pg_val(hasta)}T23:59:59.999')
     if usuario_id_filter:
-        filters.append(f'usuario_id=eq.{usuario_id_filter}')
+        filters.append(f'usuario_id=eq.{pg_val(usuario_id_filter)}')
 
     try:
         limit = int(request.args.get('limit', 20))
@@ -1896,7 +1900,7 @@ def admin_download_pdf(session_id):
     """
     try:
         rows = _sb_get(
-            f'/rest/v1/sesiones?session_id=eq.{session_id}'
+            f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
             f'&select=usuario_id,clinica_id,structured_data,addenda,status,cancelled_at,cancellation_reason&limit=1'
         )
         if not rows:
@@ -1972,7 +1976,7 @@ def admin_add_addendum(session_id):
     if len(texto) > MAX_ADDENDUM_LENGTH:
         return jsonify({'error': f'El texto no puede exceder {MAX_ADDENDUM_LENGTH} caracteres'}), 400
 
-    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,addenda&limit=1')
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}&select=clinica_id,addenda&limit=1')
     if not rows:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
@@ -1992,7 +1996,7 @@ def admin_add_addendum(session_id):
     }
     addenda.append(new_entry)  # append, never replace/overwrite existing entries
 
-    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {'addenda': addenda})
+    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {'addenda': addenda})
     if not ok:
         logger.error(f"Admin: could not save addendum for session {session_id}")
         return jsonify({'error': 'No se pudo guardar el adendum'}), 500
@@ -2030,7 +2034,7 @@ def admin_cancel_session(session_id):
     if not cancellation_reason:
         return jsonify({'error': 'El motivo de cancelación es obligatorio'}), 400
 
-    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{session_id}&select=clinica_id,status,full_response&limit=1')
+    rows = _sb_get(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}&select=clinica_id,status,full_response&limit=1')
     if not rows:
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
@@ -2056,7 +2060,7 @@ def admin_cancel_session(session_id):
     stripped_full_response = strip_transcript(row.get('full_response') or {})
     stripped_full_response['status'] = 'cancelled'
 
-    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{session_id}', {
+    ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {
         'status':                  'cancelled',
         'cancelled_at':            datetime.now().isoformat(),
         'cancellation_reason':     cancellation_reason,
@@ -2070,7 +2074,7 @@ def admin_cancel_session(session_id):
 
     # Same reasoning as confirm_and_generate — trabajos has no remaining
     # legitimate reader once a session leaves pending_review. Best-effort.
-    if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{session_id}'):
+    if not _sb_delete(f'/rest/v1/trabajos?session_id=eq.{pg_val(session_id)}'):
         logger.warning(f"DB: could not delete trabajos row(s) for session {session_id} (best-effort, continuing)")
 
     logger.info(f"Admin: session {session_id} cancelled by usuario_id={g.usuario['usuario_id']}")
