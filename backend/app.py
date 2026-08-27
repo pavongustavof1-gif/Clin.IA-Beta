@@ -1,6 +1,9 @@
 # backend/app.py
 from flask import Flask, request, jsonify, send_from_directory, render_template, g
 from flask_cors import CORS
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
@@ -21,6 +24,13 @@ from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from PIL import Image as PILImage, UnidentifiedImageError
+
+
+def _new_request_id() -> str:
+    """Short id for correlating a client-facing generic error with the
+    full exception in the server log (finding #20) — not a security
+    token, just a grep key."""
+    return secrets.token_hex(6)
 
 
 def _derive_initials(nombre: str) -> str:
@@ -80,6 +90,16 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
 app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB — matches Config.MAX_AUDIO_SIZE_BYTES
 
+# Render terminates TLS at its own edge and forwards exactly one proxy
+# hop, appending the real client IP as the LAST entry of X-Forwarded-For.
+# Without this, request.remote_addr is Render's proxy IP for every
+# request, which would collapse every caller into one shared rate-limit
+# bucket. x_for=1 trusts only that one hop (the entry Render itself
+# appends) — a client that prepends fake IPs to X-Forwarded-For can't
+# spoof an earlier hop into being trusted (verified locally: ProxyFix
+# reads the rightmost entry, not the client-controlled leftmost one).
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
+
 # Enable CORS for both local testing and production domains
 CORS(app, resources={
     r"/api/*": {
@@ -94,6 +114,60 @@ CORS(app, resources={
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
+
+
+def _rate_limit_key() -> str:
+    """
+    Key rate limits by authenticated usuario_id when available, so a
+    limit tracks the person rather than whatever IP/device they're
+    behind; falls back to client IP for routes with no @require_auth.
+
+    Safe to read g.usuario here: on every @limiter.limit()-decorated
+    route in this app, @require_auth is the outer decorator (applied
+    above @limiter.limit in the stack), so it runs first and sets
+    g.usuario before this key function is ever evaluated — Flask-Limiter's
+    per-route decorator behaves like an ordinary nested wrapper, not a
+    before_request hook that would run before the route's own decorators
+    (verified locally against this Flask-Limiter version).
+    """
+    usuario = getattr(g, 'usuario', None)
+    if usuario:
+        return f"user:{usuario['usuario_id']}"
+    return f"ip:{get_remote_address()}"
+
+
+# Rate limiting (finding #19). storage_uri defaults to memory://, which
+# is per-process — correct for today's deployment, where the Dockerfile's
+# gunicorn command (`gunicorn app:app`) sets no --workers/--threads and
+# so runs a single sync worker (confirmed in Stage M2's #17 work). If
+# this app ever scales to multiple gunicorn workers/threads or multiple
+# Render instances, each process gets its OWN independent counters and
+# every limit below effectively multiplies by the process count — at
+# that point the store must move to a shared backend (Redis, or a
+# Postgres-backed limiter). Logged so that migration isn't a silent
+# footgun if concurrency changes later without this being revisited.
+logger.warning(
+    "RateLimit: using in-memory (per-process) storage. Correct only "
+    "while the app runs a single gunicorn worker (current Dockerfile "
+    "CMD). If workers/threads/instances are ever added, move to a "
+    "shared store (e.g. Redis) or these limits will multiply per process."
+)
+limiter = Limiter(
+    _rate_limit_key,
+    app=app,
+    storage_uri="memory://",
+    default_limits=["200 per hour"],
+    headers_enabled=True,
+)
+
+
+@app.errorhandler(429)
+def rate_limit_exceeded(e):
+    return jsonify({
+        'error': 'Demasiadas solicitudes. Intente de nuevo más tarde.',
+        'error_code': 'RATE_LIMITED',
+    }), 429
+
 
 # Validate configuration on startup
 try:
@@ -360,7 +434,7 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
             )
         except Exception as e:
             logger.error(f"Job {job_id}: transcription failed — {e}")
-            _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Transcripción fallida: {str(e)}'})
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Transcripción fallida. Intente de nuevo.'})
             return
         finally:
             if os.path.exists(audio_path):
@@ -384,7 +458,7 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
             )
         except Exception as e:
             logger.error(f"Job {job_id}: LLM extraction failed — {e}")
-            _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Extracción de datos fallida: {str(e)}'})
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Extracción de datos fallida. Intente de nuevo.'})
             return
 
         if 'metadata' not in structured_data:
@@ -433,7 +507,7 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
     except Exception as e:
         logger.error(f"Job {job_id}: unexpected error — {e}")
         import traceback; traceback.print_exc()
-        _sb_patch_job(job_id, {'status': 'error', 'error_message': f'Error interno: {str(e)}'})
+        _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Error interno. Intente de nuevo.'})
         if os.path.exists(audio_path):
             os.remove(audio_path)
 
@@ -737,6 +811,7 @@ def account():
     )
 
 @app.route('/api/health', methods=['GET'])
+@limiter.exempt  # Render's own health/readiness polling hits this; must never 429
 def health_check():
     """Health check endpoint"""
     return jsonify({
@@ -748,6 +823,7 @@ def health_check():
 
 @app.route('/api/process-audio', methods=['POST'])
 @require_auth
+@limiter.limit("10 per minute;100 per hour")  # AI-spend: real AssemblyAI/Gemini cost per call (via _run_job)
 def process_audio():
     """
     Validates audio, saves to temp, captures request context, submits background job.
@@ -833,9 +909,10 @@ def process_audio():
         return jsonify({'job_id': job_id}), 202
 
     except Exception as e:
-        logger.error(f"process_audio: {e}")
+        rid = _new_request_id()
+        logger.error(f"process_audio [{rid}]: {e}")
         import traceback; traceback.print_exc()
-        return jsonify({'error': 'Error interno', 'details': str(e)}), 500
+        return jsonify({'error': 'Error interno', 'request_id': rid}), 500
 
 
 @app.route('/api/job-status/<job_id>', methods=['GET'])
@@ -869,6 +946,12 @@ def job_status(job_id):
 
 @app.route('/api/confirm-and-generate', methods=['POST'])
 @require_auth
+# Not itself an AI-spend call (verified: no Gemini/AssemblyAI/ICD-11 call
+# in this function — the LLM/transcription cost is in process_audio's
+# background job) but shares process_audio's limit since it's the natural
+# 1:1 follow-up per consultation and does its own real work (PDF render,
+# email send, several Supabase writes) worth the same protection.
+@limiter.limit("10 per minute;100 per hour")
 def confirm_and_generate():
     """
     Receives doctor-reviewed structured_data, returns final response.
@@ -1049,10 +1132,11 @@ def confirm_and_generate():
         return jsonify(response), 200
 
     except Exception as e:
-        logger.error(f"Orchestrator: CRITICAL ERROR in confirm: {str(e)}")
+        rid = _new_request_id()
+        logger.error(f"Orchestrator [{rid}]: CRITICAL ERROR in confirm: {str(e)}")
         import traceback
         traceback.print_exc()
-        return jsonify({'error': 'Internal server error', 'details': str(e)}), 500
+        return jsonify({'error': 'Internal server error', 'request_id': rid}), 500
 
 
 @app.route('/api/session/<session_id>', methods=['GET'])
@@ -1419,6 +1503,22 @@ def pending_sessions_discard(session_id):
 
 
 @app.route('/api/session-check', methods=['GET'])
+# This app has no server-side login route — the actual login/password
+# flow goes straight to Supabase Auth from the client, which rate-limits
+# itself. This is the closest analog to an "auth-adjacent app route":
+# hit right after every login and on every page load/pageshow. Note this
+# is request-flood / abuse protection, not credential-guessing defense —
+# a signed ES256 JWT can't be brute-forced (there's no signature to
+# guess), so this doesn't stop password attacks; it caps how much CPU
+# and DB lookup a script can burn per IP by hammering the endpoint with
+# junk/replayed tokens. Still worth it as defense-in-depth. Order
+# matters here and is deliberately the REVERSE of the AI-spend routes
+# below: @limiter.limit is OUTER (runs before @require_auth), so a
+# rejected (invalid/expired) attempt is counted too, not just a
+# successful one — @require_auth would short-circuit on a bad token
+# before an inner limiter ever ran. key_func is pinned to IP rather than
+# the module default, since a rejected attempt has no g.usuario to key by.
+@limiter.limit("30 per minute", key_func=get_remote_address)
 @require_auth
 def session_check():
     """Lightweight validity check — reload/bfcache-restore guard against a
@@ -1457,6 +1557,7 @@ def admin_usuarios():
 @app.route('/api/admin/usuarios', methods=['POST'])
 @require_auth
 @require_admin
+@limiter.limit("20 per hour")  # per inviting admin — email-bombing resistance
 def admin_create_usuario():
     """
     Invite a new doctor into the admin's own clinic. Creates the Supabase
@@ -2089,9 +2190,11 @@ def admin_cancel_session(session_id):
 
 @app.errorhandler(500)
 def internal_server_error(error):
+    rid = _new_request_id()
+    logger.exception(f"Unhandled 500 [{rid}]: {error}")
     return jsonify({
         'error': 'Internal server error',
-        'details': str(error)
+        'request_id': rid,
     }), 500
 
 
