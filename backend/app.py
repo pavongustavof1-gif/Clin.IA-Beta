@@ -17,6 +17,7 @@ import os
 import re
 import secrets
 import tempfile
+import glob
 import json
 import urllib.request
 import urllib.error
@@ -417,6 +418,162 @@ def _sb_patch_job(job_id: str, body: dict) -> None:
     _sb_patch(f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}', body)
 
 
+# ── Zombie-job reaper (Stage M4 fix #26) ───────────────────────────────────────
+# Pragmatic beta-scale reaping, deliberately NOT a durable queue (no
+# Celery/Redis) — this app runs everything in-process via a
+# ThreadPoolExecutor, so a crash/redeploy kills every in-flight job's
+# owning thread with the process. Two layers:
+#   1. Startup sweep — anything still in-flight AND already past a short
+#      minimum age when the process starts is presumed dead (see the
+#      deploy-overlap note below for why the age gate exists). Runs
+#      once, at import time, for every process (gunicorn worker or
+#      `python app.py`); see the call at the bottom of this file.
+#   2. Age-based, on-poll — job_status() calls _reap_if_stale() on every
+#      poll, so a job hung (but not crashed) past a generous ceiling
+#      self-heals the next time its own client polls it. There is no
+#      background timer: an abandoned job (client stopped polling) is
+#      only caught by the NEXT restart's startup sweep, not sooner. That
+#      gap is accepted for beta volume — a durable queue (survive
+#      restarts by resuming, reconcile with AssemblyAI on recovery) is
+#      the real long-term fix if beta shows frequent restarts or high
+#      job volume; not building that now.
+#
+# DEPLOY-OVERLAP CAVEAT (verified against Render's own docs, not assumed):
+# Render's deploys are NOT a hard stop-then-start even for a single,
+# unscaled instance — the OLD instance keeps serving traffic while the
+# NEW instance boots, and only gets SIGTERM once the new instance passes
+# its health check. So at the moment the new instance's startup sweep
+# runs, the old instance may still be alive and legitimately mid-job.
+# _STARTUP_SWEEP_MIN_AGE_MINUTES exists specifically to not race that
+# window: only rows already stale beyond it get reaped at startup, not
+# every in-flight row unconditionally. This narrows the risk but does not
+# eliminate it — a job the old instance has been legitimately working on
+# for longer than the gate (e.g. a slow health-check handoff overlapping
+# a long transcription) could still be wrongly reaped. The fully-correct
+# fix is a graceful-shutdown hook so the dying instance self-reports its
+# own in-flight jobs before exiting — that needs a gunicorn
+# post_worker_init hook or a custom worker class (a new gunicorn.conf.py
+# + Dockerfile CMD change), which is real infra restructuring, not a
+# pragmatic reaper tweak; flagging as a follow-up, not building it here.
+# A true crash (SIGKILL/OOM, no graceful handoff) is unaffected by any of
+# this — there is no "old instance" left to race, and the age gate still
+# reliably catches it once enough time has passed.
+#
+# SINGLE-INSTANCE ASSUMPTION: both layers still assume exactly one app
+# process is the long-run steady state (confirmed for the current
+# deployment in Stage M2 — the Dockerfile's gunicorn CMD sets no
+# --workers/--threads, and Render runs one instance; the deploy-overlap
+# window above is a brief, expected exception to that, not a case where
+# the app is actually scaled out). If the app ever runs multiple
+# steady-state instances, this whole scheme needs revisiting — same
+# caveat class as Stage M3's memory:// rate-limit store.
+
+_JOB_IN_FLIGHT_STATUSES = ('queued', 'transcribing', 'extracting')
+_JOB_MAX_AGE_MINUTES = 25  # frontend gives up polling at 15 min (360 x 2.5s); this is that ceiling + buffer
+_STARTUP_SWEEP_MIN_AGE_MINUTES = 3  # deploy-overlap gate — see caveat above
+_JOB_INTERRUPTED_MESSAGE = 'El procesamiento fue interrumpido. Por favor, intente de nuevo.'
+_JOB_TIMEOUT_MESSAGE = 'El procesamiento está tardando demasiado. Por favor, intente de nuevo.'
+_TEMP_AUDIO_GLOB = 'clinia_*'  # matches the naming used at temp_path creation in process_audio()
+
+
+def _job_age(updated_at: str | None) -> timedelta | None:
+    """Parse a trabajos.updated_at value and return its age, or None if
+    missing/unparsable (caller must treat that as 'don't reap on a guess')."""
+    if not updated_at:
+        return None
+    try:
+        return datetime.now() - datetime.fromisoformat(updated_at.replace('Z', '+00:00')).replace(tzinfo=None)
+    except Exception:
+        return None
+
+
+def _reap_if_stale(job_id: str, row: dict) -> dict:
+    """
+    If `row` is in an in-flight status and hasn't been updated in over
+    _JOB_MAX_AGE_MINUTES, mark it failed (DB + return value) so the
+    caller's response reflects the reap immediately instead of on the
+    next poll. Returns `row` unchanged otherwise.
+    """
+    status = row.get('status')
+    if status not in _JOB_IN_FLIGHT_STATUSES:
+        return row
+    age = _job_age(row.get('updated_at'))
+    if age is None or age < timedelta(minutes=_JOB_MAX_AGE_MINUTES):
+        return row
+
+    logger.warning(f"Job {job_id}: reaped — stuck at '{status}' for {age}, past the {_JOB_MAX_AGE_MINUTES}min ceiling")
+    _sb_patch_job(job_id, {'status': 'error', 'error_message': _JOB_TIMEOUT_MESSAGE})
+    return {**row, 'status': 'error', 'error_message': _JOB_TIMEOUT_MESSAGE}
+
+
+def _reap_stuck_jobs_on_startup() -> None:
+    """
+    Runs once per process start (see call at the bottom of this file).
+    Marks failed any trabajos row that is BOTH in an in-flight status AND
+    already past _STARTUP_SWEEP_MIN_AGE_MINUTES old — the age gate exists
+    because of Render's deploy-overlap behavior (see the module comment
+    above); without it, this sweep could wrongly kill a job the outgoing
+    instance is still legitimately working on. Also clears any orphaned
+    temp audio left behind (a completed/cleanly-failed job always removes
+    its own temp file — see _run_job's finally/except paths — so anything
+    matching the naming pattern still on disk at a fresh process start
+    cannot belong to a job this process is running). Note a genuine
+    Render redeploy gets a brand-new container with an empty disk, so
+    this glob is normally a no-op then — it only finds anything on an
+    in-place process restart within the same container/disk (e.g. a
+    crashed worker respawned by gunicorn). Either way it can't collide
+    with a still-live old instance during the deploy-overlap window:
+    that instance runs in its own separate container/disk entirely.
+    Best-effort: logs and continues on any failure, since a DB hiccup
+    here must never block the app from starting.
+    """
+    try:
+        in_flight = ','.join(pg_val(s) for s in _JOB_IN_FLIGHT_STATUSES)
+        candidates = _sb_get(f'/rest/v1/trabajos?status=in.({in_flight})&select=job_id,updated_at')
+        if candidates is None:
+            # _sb_get already logged the underlying error — distinguish
+            # "couldn't check" from "checked, found none" so a startup DB
+            # hiccup doesn't read in the log as a clean sweep.
+            logger.error("Startup reaper: could not query for stuck trabajos rows — skipping sweep this start")
+        else:
+            stale_ids = [
+                c['job_id'] for c in candidates
+                if (age := _job_age(c.get('updated_at'))) is not None
+                and age >= timedelta(minutes=_STARTUP_SWEEP_MIN_AGE_MINUTES)
+            ]
+            too_fresh = len(candidates) - len(stale_ids)
+            if too_fresh:
+                logger.info(f"Startup reaper: left {too_fresh} in-flight row(s) alone — under the {_STARTUP_SWEEP_MIN_AGE_MINUTES}min deploy-overlap gate, may still be owned by a live outgoing instance")
+            if stale_ids:
+                ids = ','.join(pg_val(j) for j in stale_ids)
+                ok = _sb_patch(
+                    f'/rest/v1/trabajos?job_id=in.({ids})',
+                    {
+                        'status': 'error',
+                        'error_message': _JOB_INTERRUPTED_MESSAGE,
+                        'updated_at': datetime.now().isoformat(),
+                    },
+                )
+                logger.info(f"Startup reaper: {'marked' if ok else 'FAILED to mark'} {len(stale_ids)} stuck trabajos row(s) as error")
+            elif not too_fresh:
+                logger.info("Startup reaper: no stuck trabajos rows found")
+    except Exception as e:
+        logger.error(f"Startup reaper: failed to sweep stuck jobs: {e}")
+
+    try:
+        temp_dir = tempfile.gettempdir()
+        orphans = glob.glob(os.path.join(temp_dir, _TEMP_AUDIO_GLOB))
+        for path in orphans:
+            try:
+                os.remove(path)
+            except OSError as e:
+                logger.warning(f"Startup reaper: could not remove orphaned temp file {path}: {e}")
+        if orphans:
+            logger.info(f"Startup reaper: removed {len(orphans)} orphaned temp audio file(s)")
+    except Exception as e:
+        logger.error(f"Startup reaper: failed to sweep orphaned temp audio: {e}")
+
+
 # ── Background job worker ─────────────────────────────────────────────────────
 
 def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_info):
@@ -458,6 +615,16 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
             )
         except Exception as e:
             logger.error(f"Job {job_id}: LLM extraction failed — {e}")
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Extracción de datos fallida. Intente de nuevo.'})
+            return
+
+        # A non-raising extraction can still be malformed/empty (Stage M4
+        # fix #24, step 3) — validate before it's allowed to become a
+        # persisted pending_review row, same failure path as an outright
+        # extraction exception above.
+        is_valid, validation_error = llm_processor.validate_against_schema(structured_data)
+        if not is_valid:
+            logger.error(f"Job {job_id}: extraction failed schema validation — {validation_error}")
             _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Extracción de datos fallida. Intente de nuevo.'})
             return
 
@@ -921,7 +1088,7 @@ def job_status(job_id):
     """Poll processing status for a background job."""
     rows = _sb_get(
         f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}'
-        f'&select=job_id,status,error_message,session_id,structured_data,transcript,usuario_id'
+        f'&select=job_id,status,error_message,session_id,structured_data,transcript,usuario_id,updated_at'
         f'&limit=1'
     )
     if not rows:
@@ -930,6 +1097,7 @@ def job_status(job_id):
     if row.get('usuario_id') != g.usuario['usuario_id']:
         return jsonify({'error': 'No autorizado'}), 403
 
+    row = _reap_if_stale(job_id, row)  # Stage M4 fix #26 — self-heals a hung job on poll
     status = row['status']
     resp   = {'job_id': job_id, 'status': status}
 
@@ -1062,7 +1230,14 @@ def confirm_and_generate():
             'structured_data': structured_data,
             'document': doc_info,
             'pdf_available': True,
-            'consent_grabacion': session.get('consent', {}),
+            # consent is stored top-level as consent_given/consent_timestamp
+            # (written at creation — see _run_job/save_session), never under
+            # a 'consent' key; that key was never written, so this always
+            # read {} (Stage M4 fix #25).
+            'consent_grabacion': {
+                'given': session.get('consent_given', False),
+                'timestamp': session.get('consent_timestamp'),
+            },
             'consent_tratamiento': consent_tratamiento
         }
 
@@ -2196,6 +2371,12 @@ def internal_server_error(error):
         'error': 'Internal server error',
         'request_id': rid,
     }), 500
+
+
+# Runs once per process start — both under gunicorn (module import) and
+# `python app.py` locally. Stage M4 fix #26; see the reaper section above
+# for the single-instance assumption this relies on.
+_reap_stuck_jobs_on_startup()
 
 
 if __name__ == '__main__':

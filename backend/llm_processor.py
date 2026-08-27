@@ -11,6 +11,17 @@ import os
 import time
 from typing import Dict, Optional
 
+
+class LLMProcessingError(Exception):
+    """Raised when Gemini extraction exhausts all retries without producing
+    a usable result. Callers must treat this as a hard failure and must
+    never persist whatever partial/error state exists (Stage M4 fix #24) —
+    previously extract_structured_data returned an error-shaped dict here
+    instead of raising, so it silently flowed through as if it were a real
+    structured_data result."""
+    pass
+
+
 class LLMProcessor:
     """Processes transcripts using Google Gemini for structured extraction"""
     
@@ -258,13 +269,15 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                 # If it's a completely different error (like a 404), break immediately
                 break
 
-        # Fallback: We now include "last_error" so you can see it in the UI/Logs!
+        # All retries exhausted — fail loudly (Stage M4 fix #24). This used
+        # to return an error-shaped dict, which the caller had no contract
+        # to check for, so it silently became "structured_data" for a
+        # pending_review session. Raising forces every caller to handle
+        # failure explicitly instead of trusting whatever came back.
         logger.error(f"LLM: All attempts failed. Final error: {last_error}")
-        return {
-            "error": "Processing failed",
-            "details": last_error, 
-            "raw_transcript_length": len(transcript)
-        }
+        raise LLMProcessingError(
+            f"Extraction failed after {max_retries} attempts: {last_error}"
+        )
 
     def _clean_json_response(self, response: str) -> str:
         """
@@ -332,6 +345,8 @@ if __name__ == "__main__":
     """
     
     processor = LLMProcessor()
-    result = processor.extract_structured_data(sample_transcript)
-    
-    logger.info("EXTRACTED STRUCTURED DATA:\n" + json.dumps(result, indent=2, ensure_ascii=False))
+    try:
+        result = processor.extract_structured_data(sample_transcript)
+        logger.info("EXTRACTED STRUCTURED DATA:\n" + json.dumps(result, indent=2, ensure_ascii=False))
+    except LLMProcessingError as e:
+        logger.error(f"Extraction failed: {e}")

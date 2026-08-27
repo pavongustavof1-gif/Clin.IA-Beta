@@ -747,12 +747,14 @@ async function checkResumedJob(jobId) {
 
         const data = await res.json();
 
-        if (data.status === 'transcribing' || data.status === 'extracting') {
+        if (data.status === 'transcribing' || data.status === 'extracting' || data.status === 'queued') {
             elements.progressSection.style.display = 'block';
             if (data.status === 'transcribing') {
                 updateProgress(30, 'Reanudando — transcribiendo audio...', 1);
-            } else {
+            } else if (data.status === 'extracting') {
                 updateProgress(70, 'Reanudando — extrayendo información médica...', 2);
+            } else {
+                updateProgress(10, 'Reanudando — en cola, esperando turno...', null);
             }
             startJobPolling(jobId);
         } else if (data.status === 'done') {
@@ -796,7 +798,9 @@ function startJobPolling(jobId) {
 
             const data = await res.json();
 
-            if (data.status === 'transcribing') {
+            if (data.status === 'queued') {
+                updateProgress(10, 'En cola — esperando turno para procesar...', null);
+            } else if (data.status === 'transcribing') {
                 updateProgress(30, 'Transcribiendo audio...', 1);
             } else if (data.status === 'extracting') {
                 updateProgress(70, 'Extrayendo información médica...', 2);
