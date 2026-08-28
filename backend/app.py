@@ -47,6 +47,39 @@ def _derive_initials(nombre: str) -> str:
     return ''.join(initials[:4])
 
 
+# Doctor-facing display labels for the review-screen transcript. Keys are
+# the normalized (lowercase, unaccented) values Gemini is asked to put in
+# structured_data['roles_detectados'] — see llm_processor.py's
+# speaker_instruction (Fix #30). This is a display-only mapping: the
+# extraction prompt and the SOAP logic both still use/produce neutral
+# "Hablante X" labels; this only changes what the doctor SEES in the
+# review transcript, built AFTER extraction so roles_detectados exists.
+_ROLE_DISPLAY_LABELS = {
+    'medico':    'Doctor',
+    'paciente':  'Paciente',
+    'familiar':  'Familiar',
+    'enfermera': 'Enfermera',
+}
+
+
+def _friendly_speaker_label(speaker: str, roles_detectados) -> str:
+    """
+    Map an AssemblyAI speaker label (A/B/C...) to a doctor-facing role
+    label, using Gemini's own roles_detectados inference — never a guess
+    of our own (that was the pre-Fix-#30 bug). Falls back to the neutral
+    'Hablante X' label whenever roles_detectados is missing, isn't a
+    dict, doesn't cover this speaker, or holds a value that isn't one of
+    the four expected roles — never crashes, never invents a role.
+    """
+    if not isinstance(roles_detectados, dict):
+        return f'Hablante {speaker}'
+    role_raw = roles_detectados.get(f'Hablante {speaker}')
+    if not isinstance(role_raw, str):
+        return f'Hablante {speaker}'
+    role_key = role_raw.strip().lower().replace('é', 'e')
+    return _ROLE_DISPLAY_LABELS.get(role_key, f'Hablante {speaker}')
+
+
 def validate_audio_file(file) -> tuple[bool, str]:
     """
     Validate an uploaded audio file before processing.
@@ -637,12 +670,17 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
 
         utterances = transcript_result.get('utterances', [])
 
-        # Neutral, anonymous speaker labels only — same convention Gemini
-        # itself was given in the extraction prompt (Fix #30). The actual
-        # clinical role determination now lives in
-        # structured_data['roles_detectados'], not here; this is just the
-        # raw diarized transcript for the doctor's own review.
-        labeled_text = "\n".join(f"[Hablante {u['speaker']}]: {u['text']}" for u in utterances) if utterances else None
+        # Doctor-facing labels, derived from Gemini's own roles_detectados
+        # inference (Fix #30 follow-up) — never our own guess. Built here,
+        # after extraction, specifically so structured_data['roles_detectados']
+        # already exists. The extraction prompt itself still uses/produces
+        # neutral "Hablante X" labels throughout (unchanged) — this only
+        # changes what the doctor SEES in the review transcript.
+        roles_detectados = structured_data.get('roles_detectados') if isinstance(structured_data, dict) else None
+        labeled_text = "\n".join(
+            f"[{_friendly_speaker_label(u['speaker'], roles_detectados)}]: {u['text']}"
+            for u in utterances
+        ) if utterances else None
 
         transcript_payload = {
             'text':             transcript_text,
