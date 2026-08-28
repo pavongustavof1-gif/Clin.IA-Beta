@@ -6,36 +6,6 @@ from logger import logger
 from typing import Dict
 
 
-def assign_speaker_roles(utterances: list, speakers_expected: int) -> dict:
-    """
-    Maps AssemblyAI speaker labels (A, B, C...) to clinical role names.
-    Assignment is based on word count — the speaker with the most words
-    is assumed to be the doctor (longest speaking time, medical terminology).
-
-    Returns a dict like: {'A': 'Doctor', 'B': 'Paciente', 'C': 'Familiar'}
-    """
-    if not utterances:
-        return {}
-
-    word_counts = {}
-    for utt in utterances:
-        speaker = utt.get('speaker', 'A')
-        words = len(utt.get('text', '').split())
-        word_counts[speaker] = word_counts.get(speaker, 0) + words
-
-    ranked = sorted(word_counts.keys(), key=lambda s: word_counts[s], reverse=True)
-
-    role_names = ['Doctor', 'Paciente', 'Familiar', 'Enfermera']
-
-    role_map = {}
-    for i, speaker in enumerate(ranked):
-        if i < len(role_names):
-            role_map[speaker] = role_names[i]
-        else:
-            role_map[speaker] = f'Hablante {i + 1}'
-
-    return role_map
-
 class TranscriptionService:
     """Handles audio transcription using AssemblyAI"""
 
@@ -115,10 +85,14 @@ class TranscriptionService:
                     for utt in transcript.utterances
                 ]
 
-            # Assign clinical role names to speaker labels
-            role_map = assign_speaker_roles(result["utterances"], speakers_expected)
-            result["speaker_role_map"] = role_map
-            logger.info(f"Transcription: Speaker role mapping: {role_map}")
+            # Clinical role naming (Doctor/Paciente/etc.) is no longer decided
+            # here — the AssemblyAI speaker labels (A, B, C...) already on
+            # each utterance are passed through as-is; Gemini infers the
+            # actual clinical role from the dialogue itself (Fix #30). This
+            # used to run a word-count heuristic ("most words = doctor"),
+            # which was frequently wrong — patients often talk more.
+            speaker_count = len({u['speaker'] for u in result["utterances"]})
+            logger.info(f"Transcription: {speaker_count} speaker(s) detected")
 
             # Metadata only — never transcript/utterance CONTENT, at any
             # log level (Stage H1 fix #11). This is the entire scope of

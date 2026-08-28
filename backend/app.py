@@ -610,8 +610,7 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
         try:
             structured_data = llm_processor.extract_structured_data(
                 transcript_text,
-                utterances=transcript_result.get('utterances', []),
-                role_map=transcript_result.get('speaker_role_map', {})
+                utterances=transcript_result.get('utterances', [])
             )
         except Exception as e:
             logger.error(f"Job {job_id}: LLM extraction failed — {e}")
@@ -637,12 +636,13 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
         session_id = f"SESSION-{datetime.now().strftime('%Y%m%d-%H%M%S')}-{initials}"
 
         utterances = transcript_result.get('utterances', [])
-        role_map   = transcript_result.get('speaker_role_map', {})
 
-        def _role(u):
-            return role_map.get(u['speaker'], 'Hablante ' + u['speaker'])
-
-        labeled_text = "\n".join(f"[{_role(u)}]: {u['text']}" for u in utterances) if utterances else None
+        # Neutral, anonymous speaker labels only — same convention Gemini
+        # itself was given in the extraction prompt (Fix #30). The actual
+        # clinical role determination now lives in
+        # structured_data['roles_detectados'], not here; this is just the
+        # raw diarized transcript for the doctor's own review.
+        labeled_text = "\n".join(f"[Hablante {u['speaker']}]: {u['text']}" for u in utterances) if utterances else None
 
         transcript_payload = {
             'text':             transcript_text,
@@ -650,7 +650,6 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_
             'confidence':       transcript_result.get('confidence'),
             'duration_seconds': transcript_result.get('audio_duration', 0) / 1000,
             'word_count':       transcript_result.get('words', 0),
-            'speaker_role_map': role_map,
         }
 
         save_session(session_id, {
@@ -686,8 +685,8 @@ def strip_transcript(payload: dict) -> dict:
     Return a shallow copy of a session payload with the raw transcript
     content removed from its 'transcript' sub-dict — 'text' and
     'labeled_text' only, the two PHI-bearing fields (confidence,
-    duration_seconds, word_count, speaker_role_map are metadata, not
-    patient speech, and are kept).
+    duration_seconds, word_count are metadata, not patient speech, and
+    are kept).
 
     Used at the two points a session leaves the pending_review window —
     confirm and cancel — so full_response never retains a live copy of

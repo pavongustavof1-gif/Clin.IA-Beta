@@ -43,40 +43,57 @@ class LLMProcessor:
         with open(schema_path, 'r', encoding='utf-8') as f:
             self.schema = json.load(f)
     
-    def create_extraction_prompt(self, transcript: str, utterances: list = None, role_map: dict = None) -> str:
+    def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
         """
         Create detailed prompt for Gemini to extract medical information
 
         Args:
             transcript: Raw Spanish transcript from AssemblyAI
             utterances: Optional speaker-labeled utterances from AssemblyAI
-            role_map: Optional dict mapping speaker labels to clinical role names
 
         Returns:
             Formatted prompt for LLM
         """
         if utterances:
-            role_map = role_map or {}
-            def _role(u):
-                spk = u['speaker']
-                return role_map.get(spk, 'Hablante ' + spk)
+            # Neutral, anonymous speaker labels only (Hablante A/B/...) —
+            # the raw AssemblyAI diarization label, no clinical-role guess.
+            # Gemini determines the actual role itself; see speaker_instruction
+            # below (Fix #30 — replaces the old word-count heuristic, which
+            # assumed "most words = doctor" and was frequently backwards,
+            # since patients often talk more than the doctor).
             transcript_content = "\n".join(
-                f"[{_role(u)}]: {u['text']}" for u in utterances
+                f"[Hablante {u['speaker']}]: {u['text']}" for u in utterances
             )
             speaker_instruction = (
-                "\n6. El transcript está etiquetado con roles clínicos:\n"
-                "[Doctor]: intervenciones del médico — diagnósticos, indicaciones, preguntas clínicas\n"
-                "[Paciente]: lo que dice el paciente — síntomas, respuestas, historia\n"
-                "[Familiar]: comentarios del familiar o acompañante, si está presente\n"
-                "[Enfermera]: intervenciones de enfermería, si está presente\n\n"
-                "Extrae la información SOAP basándote en estos roles:\n"
-                "- Subjetivo: principalmente de [Paciente] y [Familiar]\n"
-                "- Objetivo: de [Doctor] al describir hallazgos de exploración\n"
-                "- Evaluación y Plan: de [Doctor]"
+                "\n6. La transcripción está etiquetada por interlocutor anónimo "
+                "(Hablante A, Hablante B, …), sin asignar rol clínico alguno. "
+                "PRIMERO determina el rol clínico de cada interlocutor a partir "
+                "del diálogo: el médico hace las preguntas clínicas, conduce la "
+                "exploración, y da el diagnóstico, el pronóstico y el plan/"
+                "indicaciones; el paciente describe síntomas, antecedentes y "
+                "responde a las preguntas; puede haber un familiar o enfermera. "
+                "No asumas que quien más habla es el médico — el paciente con "
+                "frecuencia habla más. DESPUÉS extrae el SOAP según esa "
+                "determinación: Subjetivo principalmente del paciente (y "
+                "familiar, si está presente); Objetivo de los hallazgos de "
+                "exploración del médico; Evaluación y Plan del médico. "
+                "Reporta tu determinación en el campo \"roles_detectados\" del "
+                "JSON de salida (ver esquema abajo) — una entrada por cada "
+                "\"Hablante X\" que aparezca en la transcripción."
+            )
+            # Only meaningful when there are speaker-labeled utterances —
+            # omitted from the schema entirely in the flat-transcript
+            # fallback below, where there's no per-speaker role to report.
+            roles_detectados_field = (
+                '  "roles_detectados": {\n'
+                '    "Hablante A": "médico|paciente|familiar|enfermera",\n'
+                '    "Hablante B": "médico|paciente|familiar|enfermera"\n'
+                '  },\n'
             )
         else:
             transcript_content = transcript
             speaker_instruction = ""
+            roles_detectados_field = ""
 
         prompt = f"""Eres un asistente médico especializado en crear notas clínicas siguiendo el formato SOAP (Subjetivo, Objetivo, Evaluación, Plan).
 
@@ -120,7 +137,7 @@ FORMATO DE SALIDA:
 Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
 
 {{
-  "informacion_paciente": {{
+{roles_detectados_field}  "informacion_paciente": {{
     "nombre_del_paciente": "string (si se menciona)",
     "fecha_de_nacimiento": "string en formato DD/MM/YYYY (si se menciona)",
     "edad": "string (si se menciona)",
@@ -193,14 +210,14 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         
         return prompt
     
-    def extract_structured_data(self, transcript: str, utterances: list = None, role_map: dict = None, max_retries: int = 3) -> Dict:
+    def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
         """
         Extract structured medical data from transcript using Gemini
         """
         logger.info(f"LLM: Processing with {self.model_id}...")
         if utterances:
             logger.info(f"LLM: Using {len(utterances)} speaker-labeled utterances")
-        prompt = self.create_extraction_prompt(transcript, utterances, role_map)
+        prompt = self.create_extraction_prompt(transcript, utterances)
         
         last_error = "Unknown error"
         
