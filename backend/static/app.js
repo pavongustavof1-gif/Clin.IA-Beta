@@ -775,12 +775,31 @@ async function checkResumedJob(jobId) {
     }
 }
 
+// Poll delay backoff (Stage E2 fix #33) — starts fast so a short
+// recording still feels snappy, then steps up so a long-running job
+// doesn't burn a poll every 2.5s for its entire ~15min lifetime. The
+// give-up ceiling is tracked by ELAPSED WALL-CLOCK TIME (not poll
+// count), so it still gives up at ~15 minutes regardless of the
+// variable spacing between polls.
+const POLL_GIVE_UP_MS = 15 * 60 * 1000;
+function nextPollDelayMs(pollCount) {
+    if (pollCount < 8)  return 2000;   // first ~16s: fast, most short jobs finish here
+    if (pollCount < 20) return 4000;   // next ~48s
+    return 7000;                        // long-running jobs: settle at 7s
+}
+
 function startJobPolling(jobId) {
     let pollCount = 0;
-    const pollInterval = setInterval(async () => {
+    const startedAt = Date.now();
+    let pollTimer = null;
+
+    const scheduleNext = () => {
+        pollTimer = setTimeout(poll, nextPollDelayMs(pollCount));
+    };
+
+    const poll = async () => {
         pollCount++;
-        if (pollCount >= 360) {
-            clearInterval(pollInterval);
+        if (Date.now() - startedAt >= POLL_GIVE_UP_MS) {
             localStorage.removeItem('clinia_job_id');
             elements.progressSection.style.display = 'none';
             showError('El procesamiento está tardando más de lo esperado. Por favor intente subir el audio nuevamente.');
@@ -791,34 +810,39 @@ function startJobPolling(jobId) {
                 headers: await getAuthHeaders()
             });
             if (res.status === 401) {
-                clearInterval(pollInterval);
                 return handleSessionExpired();
             }
-            if (!res.ok) return; // transient error — keep polling
+            if (!res.ok) return scheduleNext(); // transient error — keep polling
 
             const data = await res.json();
 
             if (data.status === 'queued') {
                 updateProgress(10, 'En cola — esperando turno para procesar...', null);
+                scheduleNext();
             } else if (data.status === 'transcribing') {
                 updateProgress(30, 'Transcribiendo audio...', 1);
+                scheduleNext();
             } else if (data.status === 'extracting') {
                 updateProgress(70, 'Extrayendo información médica...', 2);
+                scheduleNext();
             } else if (data.status === 'done') {
-                clearInterval(pollInterval);
                 localStorage.removeItem('clinia_job_id');
                 await handleJobDone(data);
             } else if (data.status === 'error') {
-                clearInterval(pollInterval);
                 localStorage.removeItem('clinia_job_id');
                 elements.progressSection.style.display = 'none';
                 showError(data.error_message || 'Error durante el procesamiento');
+            } else {
+                scheduleNext(); // unrecognized status — keep polling rather than silently stopping
             }
         } catch (err) {
             // Network blip — keep polling silently
             console.warn('[ClinIA] Poll error (will retry):', err);
+            scheduleNext();
         }
-    }, 2500);
+    };
+
+    scheduleNext();
 }
 
 function updateProgress(percentage, text, step = null) {

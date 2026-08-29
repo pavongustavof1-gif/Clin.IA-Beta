@@ -10,7 +10,7 @@ from llm_processor import LLMProcessor
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email, send_invite_email
-from auth import require_auth, require_admin
+from auth import require_auth, require_admin, invalidate_usuario_cache
 from pg_utils import pg_val, pg_path, pg_ilike_val
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -19,6 +19,8 @@ import secrets
 import tempfile
 import glob
 import json
+import threading
+import time
 import urllib.request
 import urllib.error
 from datetime import datetime, timedelta
@@ -216,6 +218,20 @@ except ValueError as e:
 transcription_service = TranscriptionService()
 llm_processor = LLMProcessor()
 pdf_generator = PDFGenerator()
+# Stage E2 fix #38 — capacity note, verified not a code bug:
+# MAX_CONTENT_LENGTH (200MB) x these 4 worker threads is a real ceiling
+# on disk, not RAM, on a small Render instance. Verified: Werkzeug's
+# default multipart stream factory (SpooledTemporaryFile, max_size=
+# 500KB) only holds an upload in memory below 500KB — every real audio
+# upload here is far larger and spools to a real temp file on disk
+# almost immediately, so 4 concurrent max-size uploads is up to ~800MB
+# of transient disk usage, not RAM. Temp-file cleanup is prompt (the
+# _run_job finally/except paths + the Stage M4 startup-reaper sweep for
+# anything a crash left behind) — confirmed unchanged since M4. This is
+# a documented capacity ceiling, not a fix: the real levers if it
+# becomes a problem are the deferred audio-compression work, a smaller
+# MAX_AUDIO_SIZE_BYTES cap, or fewer workers — not something to change
+# here speculatively.
 _executor = ThreadPoolExecutor(max_workers=4)
 
 # ── Supabase REST helpers ────────────────────────────────────────────────────
@@ -609,7 +625,7 @@ def _reap_stuck_jobs_on_startup() -> None:
 
 # ── Background job worker ─────────────────────────────────────────────────────
 
-def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre, doctor_info):
+def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre):
     """Runs transcription + LLM pipeline in a background thread."""
     try:
         # Phase A — Transcription
@@ -864,6 +880,26 @@ def get_clinica_context(clinica_id: str) -> dict:
     return {'nombre': 'Consultorio Médico', 'color_primario': '#0F6E56', 'direccion': '', 'telefono': '', 'logo_url': ''}
 
 
+# ─────────────────────────────────────────────
+# Clinic logo cache — short TTL, thread-safe (Stage E2 fix #37). A PDF
+# is regenerated (and its clinic's logo re-fetched from Storage) on
+# every download, but the logo itself only changes when an admin
+# updates branding — keyed by the storage path itself, which is stable
+# per clinic (logos/{clinica_id}/logo, overwritten in place on upload,
+# not a fresh path each time — see submit_clinica_logo), so a TTL is
+# genuinely needed for staleness rather than the path naturally
+# changing. Only successful fetches are cached — a transient Storage
+# failure is retried next time rather than blacking out the logo for
+# the whole TTL window. Best-effort invalidation on upload keeps a
+# freshly-changed logo from waiting out the TTL. Per-process,
+# single-instance assumption — same caveat class as the auth.py/JWKS
+# caches, Stage M3's memory:// limiter, and Stage M4's reaper.
+# ─────────────────────────────────────────────
+_logo_cache_lock = threading.Lock()
+_logo_cache: dict = {}  # logo_storage_path -> (expires_at_monotonic, bytes)
+_LOGO_CACHE_TTL_SECONDS = 300  # a few minutes — staleness window after a logo update
+
+
 def fetch_clinica_logo_bytes(logo_storage_path: str) -> bytes | None:
     """
     Fetch clinic logo bytes from Supabase Storage for PDF rendering.
@@ -873,12 +909,31 @@ def fetch_clinica_logo_bytes(logo_storage_path: str) -> bytes | None:
     """
     if not logo_storage_path:
         return None
+
+    now = time.monotonic()
+    with _logo_cache_lock:
+        cached = _logo_cache.get(logo_storage_path)
+    if cached is not None and now < cached[0]:
+        return cached[1]
+
     result = _storage_download(CLINIC_LOGOS_BUCKET, logo_storage_path)
     if result is None:
         logger.warning(f"PDF: could not fetch clinic logo at '{logo_storage_path}' — rendering without it")
         return None
     image_bytes, _content_type = result
+    with _logo_cache_lock:
+        _logo_cache[logo_storage_path] = (time.monotonic() + _LOGO_CACHE_TTL_SECONDS, image_bytes)
     return image_bytes
+
+
+def _invalidate_logo_cache(logo_storage_path: str) -> None:
+    """Best-effort cache-clear on logo upload/removal, so the new logo
+    doesn't wait out the TTL to appear (Stage E2 fix #37, optional
+    nicety — cheap enough to include)."""
+    if not logo_storage_path:
+        return
+    with _logo_cache_lock:
+        _logo_cache.pop(logo_storage_path, None)
 
 
 def get_usuario_cedula(usuario_id: str) -> str:
@@ -895,6 +950,27 @@ def get_usuario_nombre(usuario_id: str) -> str:
     if rows:
         return rows[0].get('nombre') or ''
     return ''
+
+
+def get_usuarios_nombres(usuario_ids: list) -> dict:
+    """
+    Batch version of get_usuario_nombre — one query for N ids instead of
+    N sequential ones (Stage E2 fix #36). Returns {usuario_id: nombre};
+    an id with no matching row is simply absent, matching how callers
+    already do nombre_cache.get(uid, '') against this kind of map.
+
+    Composite in.() filter — same discipline M1 established: encode
+    each VALUE with pg_val, join with a literal structural comma, never
+    encode the in.() scaffolding itself.
+    """
+    ids = list({uid for uid in usuario_ids if uid})
+    if not ids:
+        return {}
+    id_list = ','.join(pg_val(uid) for uid in ids)
+    rows = _sb_get(f'/rest/v1/usuarios?id=in.({id_list})&select=id,nombre')
+    if not rows:
+        return {}
+    return {row['id']: (row.get('nombre') or '') for row in rows}
 
 # ────────────────────────────────────────────────────────────────────────────
 
@@ -1077,18 +1153,13 @@ def process_audio():
             'consent_timestamp':    request.form.get('consent_timestamp', ''),
         }
 
-        # Fetch clinic/cédula in request thread (g.usuario is available here)
-        clinica     = get_clinica_context(clinica_id)
-        cedula      = get_usuario_cedula(usuario_id)
-        doctor_info = {
-            'nombre':            nombre,
-            'cedula':            cedula,
-            'clinica_nombre':    clinica['nombre'],
-            'clinica_color':     clinica['color_primario'],
-            'clinica_direccion': clinica['direccion'],
-            'clinica_telefono':  clinica['telefono'],
-        }
-
+        # Stage E2 fix #34: process_audio used to fetch clinic context/
+        # cédula here to build a doctor_info dict passed into _run_job —
+        # traced whole-repo, _run_job never referenced it (confirm_and_
+        # generate, addendum, and admin-download PDF paths each build
+        # their own doctor_info independently at generation time, from
+        # g.usuario, which is where it's actually used). Removed as dead
+        # weight on the upload hot path.
         logger.info(f"Auth: upload by {email} (clinica_id={clinica_id})")
 
         filename  = secure_filename(audio_file.filename)
@@ -1107,7 +1178,7 @@ def process_audio():
             return jsonify({'error': 'No se pudo crear el trabajo de procesamiento'}), 500
 
         _executor.submit(_run_job, job_id, temp_path, params,
-                         usuario_id, clinica_id, nombre, doctor_info)
+                         usuario_id, clinica_id, nombre)
 
         logger.info(f"Job {job_id}: submitted to executor")
         return jsonify({'job_id': job_id}), 202
@@ -1122,10 +1193,18 @@ def process_audio():
 @app.route('/api/job-status/<job_id>', methods=['GET'])
 @require_auth
 def job_status(job_id):
-    """Poll processing status for a background job."""
+    """
+    Poll processing status for a background job. Polled every ~2-8s for
+    up to 15 minutes per upload (app.js's startJobPolling), so the query
+    shape here matters: while a job isn't terminal, only light fields
+    are selected — no structured_data/transcript — since the doctor
+    can't act on that payload until the note is actually done anyway
+    (Stage E2 fix #33). The heavy payload is fetched once, only on the
+    poll that finds status == 'done'.
+    """
     rows = _sb_get(
         f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}'
-        f'&select=job_id,status,error_message,session_id,structured_data,transcript,usuario_id,updated_at'
+        f'&select=job_id,status,error_message,usuario_id,updated_at'
         f'&limit=1'
     )
     if not rows:
@@ -1139,9 +1218,21 @@ def job_status(job_id):
     resp   = {'job_id': job_id, 'status': status}
 
     if status == 'done':
-        resp['session_id']       = row['session_id']
-        resp['structured_data']  = row['structured_data']
-        resp['transcript']       = row['transcript']
+        done_rows = _sb_get(
+            f'/rest/v1/trabajos?job_id=eq.{pg_val(job_id)}'
+            f'&select=session_id,structured_data,transcript'
+            f'&limit=1'
+        )
+        if done_rows:
+            resp['session_id']      = done_rows[0]['session_id']
+            resp['structured_data'] = done_rows[0]['structured_data']
+            resp['transcript']      = done_rows[0]['transcript']
+        else:
+            # Row vanished between the two queries — vanishingly unlikely
+            # once a job is 'done' (nothing deletes a trabajos row at
+            # this point in its lifecycle), but fail safe rather than
+            # KeyError if it ever happens.
+            logger.warning(f"Job {job_id}: status was 'done' but the follow-up payload query returned nothing")
 
     if status == 'error':
         resp['error_message'] = row.get('error_message', 'Error desconocido')
@@ -1527,13 +1618,15 @@ def patient_history_list():
     if rows is None:
         return jsonify({'error': 'Error al consultar historial'}), 500
 
-    # Resolve authoring doctor names only when needed, one lookup per distinct author
+    # Resolve authoring doctor names only when needed — one batch query
+    # for every distinct author instead of one query each (Stage E2 #36)
     nombre_cache = {}
     if scope == 'clinica':
-        for r in rows:
-            row_usuario_id = r.get('usuario_id')
-            if row_usuario_id and row_usuario_id != usuario_id and row_usuario_id not in nombre_cache:
-                nombre_cache[row_usuario_id] = get_usuario_nombre(row_usuario_id)
+        other_authors = {
+            r.get('usuario_id') for r in rows
+            if r.get('usuario_id') and r.get('usuario_id') != usuario_id
+        }
+        nombre_cache = get_usuarios_nombres(list(other_authors))
 
     result = []
     for r in rows:
@@ -1937,6 +2030,13 @@ def admin_set_usuario_activo(usuario_id):
             )
         }), 500
 
+    # Evict the cached usuario_context entry so this change takes effect
+    # on the doctor's very next request instead of waiting out the #32
+    # TTL — restores the exact immediacy property the uncached version
+    # had, for this one security-relevant action (same invalidate-on-
+    # change pattern as #37's logo cache).
+    invalidate_usuario_cache(usuario_id)
+
     return jsonify({'id': usuario_id, 'activo': nuevo_activo}), 200
 
 
@@ -2057,6 +2157,7 @@ def admin_upload_clinica_logo():
         logger.error(f"Admin: logo uploaded to storage but clinicas.logo_url update failed for {clinica_id}")
         return jsonify({'error': 'Logo subido pero no se pudo guardar la referencia. Intente de nuevo.'}), 500
 
+    _invalidate_logo_cache(storage_path)  # Stage E2 fix #37 — new logo visible immediately, not after the TTL
     logger.info(f"Admin: logo uploaded for clinica {clinica_id} by usuario_id={g.usuario['usuario_id']}")
     return jsonify({'logo_url': storage_path}), 200
 
@@ -2095,6 +2196,7 @@ def admin_delete_clinica_logo():
 
     storage_path = rows[0]['logo_url']
     _storage_delete(CLINIC_LOGOS_BUCKET, storage_path)  # best-effort — clear logo_url regardless
+    _invalidate_logo_cache(storage_path)  # Stage E2 fix #37
 
     updated = _sb_patch(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}', {'logo_url': None})
     if not updated:
@@ -2179,15 +2281,13 @@ def admin_sessions():
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    # Resolve doctor names via a plain second query per DISTINCT usuario_id
-    # (not a PostgREST embed — same reasoning as item 24 Stage 4: embeds
-    # couldn't be verified reliably). This is new caching logic for this
-    # stage, not reused/tested code from elsewhere.
-    nombre_cache = {}
-    for r in rows:
-        uid = r.get('usuario_id')
-        if uid and uid not in nombre_cache:
-            nombre_cache[uid] = get_usuario_nombre(uid)
+    # Resolve doctor names via a single batch query for every distinct
+    # usuario_id on this page (not a PostgREST embed — same reasoning as
+    # item 24 Stage 4: embeds couldn't be verified reliably). Was one
+    # sequential query per distinct id (up to ~20 round trips on a full
+    # admin page); now one round trip total (Stage E2 fix #36).
+    distinct_uids = {r.get('usuario_id') for r in rows if r.get('usuario_id')}
+    nombre_cache = get_usuarios_nombres(list(distinct_uids))
 
     sessions = [
         {
