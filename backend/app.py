@@ -1106,7 +1106,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.5.0-beta',
+        'version': '0.6.0-beta',
         'timestamp': datetime.now().isoformat()
     })
 
