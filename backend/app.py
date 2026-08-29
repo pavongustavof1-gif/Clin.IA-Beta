@@ -978,18 +978,27 @@ def get_usuarios_nombres(usuario_ids: list) -> dict:
 # ── Security headers / CSP (Stage 3, findings #7-#9) ─────────────────────────
 #
 # script-src is nonce-based, not 'self'-only: login.html, account.html, and
-# set-password.html carry their entire page logic (login, forgot-password,
-# password re-auth + change, invite-link session detection) as inline
-# <script> with no external .js file, and moving all of that out — plus
-# inventing a way to hand Jinja-rendered Supabase config to a static file —
-# was judged a larger, riskier refactor than the security gain over a
-# per-request nonce justifies. A nonce blocks any attacker-injected <script>
-# or event-handler attribute exactly as well as 'self'-only does; the extra
-# protection 'self'-only buys is against an attacker rewriting a *trusted*
-# inline block's own content, which isn't how the addenda/patient-data
-# stored-XSS vector (#7) works. Nonces do NOT cover inline handler
-# attributes (onclick=...) regardless — every one of those was refactored
-# to addEventListener as part of #7, so there is no 'unsafe-inline' here.
+# set-password.html each carry their own page-specific logic (login,
+# forgot-password, password re-auth + change, invite-link session
+# detection) as inline <script>, not moved to an external file. That
+# is now a narrower, deliberate carve-out than it used to be: the
+# shared auth plumbing every template used to duplicate inline
+# (createClient + getAuthHeaders/logout/handleSessionExpired) DID move
+# out, to static/auth-common.js, in Stage E3 — the "how do you hand
+# Jinja-rendered Supabase config to a static file" problem that
+# previously ruled this out is solved by a minimal nonce'd inline
+# window.CLINIA_CONFIG setter per template, read by auth-common.js.
+# What's left inline per-page is genuinely page-specific flow (not
+# shared, not duplicated across templates), where forcing it into a
+# shared abstraction was judged worse than the marginal security gain
+# a per-request nonce still fully provides: it blocks any attacker-
+# injected <script> or event-handler attribute exactly as well as
+# 'self'-only does; the extra protection 'self'-only buys is against
+# an attacker rewriting a *trusted* inline block's own content, which
+# isn't how the addenda/patient-data stored-XSS vector (#7) works.
+# Nonces do NOT cover inline handler attributes (onclick=...)
+# regardless — every one of those was refactored to addEventListener
+# as part of #7, so there is no 'unsafe-inline' here.
 #
 # style-src keeps 'unsafe-inline': inline style="..." attributes are
 # pervasive throughout the generated HTML (session-detail-render.js,

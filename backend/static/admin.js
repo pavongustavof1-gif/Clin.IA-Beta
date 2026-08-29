@@ -1,28 +1,9 @@
 // frontend/admin.js — ADM-1 Stage A: shell, role-gating, read-only doctor list
+// getAuthHeaders/logout/handleSessionExpired and supabaseClient itself
+// now come from auth-common.js (Stage E3), loaded before this file.
+// Previously duplicated here, in app.js, and in account.html.
 
 let clinicaLogoObjectUrl = null; // tracked so we can revoke the previous preview URL before replacing it
-
-async function getAuthHeaders() {
-    const { data: { session } } = await supabaseClient.auth.getSession();
-    return { 'Authorization': 'Bearer ' + session?.access_token };
-}
-
-async function logout() {
-    try {
-        await supabaseClient.auth.signOut();
-    } catch (e) {
-        console.error('Logout: signOut() failed', e);
-    }
-    sessionStorage.removeItem('clinia_token');
-    sessionStorage.removeItem('clinia_email');
-    window.location.href = '/login';
-}
-
-function handleSessionExpired() {
-    sessionStorage.removeItem('clinia_token');
-    sessionStorage.removeItem('clinia_email');
-    window.location.href = '/login';
-}
 
 document.addEventListener('DOMContentLoaded', () => {
     const logoutBtn = document.getElementById('logoutBtn');

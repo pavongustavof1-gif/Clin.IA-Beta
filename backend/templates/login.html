@@ -173,12 +173,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
     <script nonce="{{ csp_nonce }}">
-        const supabaseClient = window.supabase.createClient(
-            "{{ supabase_url }}",
-            "{{ supabase_anon_key }}",
-            { auth: { storage: window.sessionStorage, storageKey: 'clinia_token' } }
-        );
-
+        window.CLINIA_CONFIG = { supabaseUrl: "{{ supabase_url }}", supabaseAnonKey: "{{ supabase_anon_key }}" };
+    </script>
+    <script src="{{ url_for('static', filename='auth-common.js') }}"></script>
+    <script nonce="{{ csp_nonce }}">
+        // login.html's own flow (signInWithPassword, forgot-password) —
+        // legitimately page-specific, uses the shared supabaseClient from
+        // auth-common.js rather than being forced into a shared
+        // abstraction that doesn't fit a pre-auth page.
         const form = document.getElementById('loginForm');
         const errorBox = document.getElementById('loginError');
         const loginBtn = document.getElementById('loginBtn');
