@@ -2,11 +2,17 @@
 # Stage M5 fix #22 — keep local dev/build bloat and any stray secrets out
 # of the image layer (Dockerfile does `COPY . .` from this directory).
 #
-# CRITICAL: do NOT add schema.json, templates/, static/, requirements.txt,
-# pg_utils.py, or any other .py module here — all are loaded at runtime
-# (schema.json by llm_processor's __init__, templates/static by Flask
-# itself) and excluding any of them would break the app on boot or on
-# first request, not just at build time.
+# CRITICAL: do NOT add templates/, static/, requirements.txt, pg_utils.py,
+# or any other .py module here — all are loaded at runtime (templates/
+# static by Flask itself) and excluding any of them would break the app
+# on boot or on first request, not just at build time.
+#
+# schema.json is NOT excluded either, but as of Stage E1 it's no longer
+# loaded by anything (llm_processor's self.schema load was dead code —
+# validate_against_schema does its own manual field checks — and was
+# removed). Left un-excluded anyway since there's no cost to it staying
+# in the image; if it's still unused later, dropping it is a separate,
+# deliberate call, not a side effect of a .dockerignore edit.
 
 # Local virtualenv — ~165MB, never needed inside the image (requirements.txt
 # is installed fresh via pip in the Dockerfile)

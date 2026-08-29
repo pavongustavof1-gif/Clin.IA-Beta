@@ -1,13 +1,10 @@
 # backend/llm_processor.py
-# added logic to prompt, line 41
-# import google.generativeai as genai
 from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
 from icd_service import lookup_cie11
 import json
-import os
 import time
 from typing import Dict, Optional
 
@@ -27,22 +24,9 @@ class LLMProcessor:
     
     def __init__(self):
         """Initialize Gemini API"""
-# No bueno        genai.configure(api_key=Config.GEMINI_API_KEY)
-        
-        # Use Gemini flash-latest for fast, cost-effective processing
-        # self.model = genai.GenerativeModel('gemini-3-flash')
-
         self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
         self.model_id = 'gemini-2.5-flash'
-        
-        # Load JSON schema
-        # Look for the file in the current folder, wherever that may be
-        import os
-        base_dir = os.path.dirname(__file__)
-        schema_path = os.path.join(base_dir, 'schema.json')
-        with open(schema_path, 'r', encoding='utf-8') as f:
-            self.schema = json.load(f)
-    
+
     def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
         """
         Create detailed prompt for Gemini to extract medical information
@@ -202,7 +186,6 @@ REGLAS IMPORTANTES:
 - No incluyas ```json ni ningún otro formato de código
 - Si un campo no tiene información, omítelo del JSON
 - Asegúrate de que el JSON sea válido y pueda ser parseado
-# - Usa comillas dobles para strings, no comillas simples
 - Usa comillas dobles estrictamente para las llaves y estructura general del JSON.
 - Mantén los acentos y caracteres especiales del español
 

@@ -4,3 +4,10 @@ client_secrets.json
 oauth_credentials.json
 .env
 
+# Stage E1 cleanup — these were never ignored, which is how five
+# .DS_Store files and a Word lock-file artifact ended up tracked
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+venv/

@@ -105,8 +105,6 @@ class TranscriptionService:
             # LFPDPPP compliance: delete transcript from AssemblyAI servers immediately.
             # Patient audio data must not be retained on third-party servers beyond
             # what is strictly necessary for processing.
-            # Note: transcribe_from_bytes() calls this method, so deletion is
-            # covered for all callers — no separate handling needed there.
             try:
                 aai.Transcript.delete_by_id(transcript.id)
                 logger.info(f"AssemblyAI: Transcript {transcript.id} deleted from servers.")
@@ -119,47 +117,6 @@ class TranscriptionService:
         except Exception as e:
             logger.error(f"AssemblyAI: Error during transcription: {str(e)}")
             raise
-
-    def transcribe_from_bytes(self, audio_data: bytes, print_raw: bool = False, speakers_expected: int = 0) -> Dict:
-        """
-        Transcribe audio from bytes (for real-time recording)
-
-        Args:
-            audio_data: Raw audio bytes
-            print_raw: Whether to additionally log transcript metadata (see transcribe_audio)
-
-        Returns:
-            Dictionary containing transcript and metadata
-        """
-        # Save bytes to temporary file
-        import tempfile
-        import os
-
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_file:
-            tmp_file.write(audio_data)
-            tmp_path = tmp_file.name
-
-        try:
-            result = self.transcribe_audio(tmp_path, print_raw, speakers_expected)
-            return result
-        finally:
-            # Clean up temporary file
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
-
-    def estimate_cost(self, audio_duration_seconds: float) -> float:
-        """
-        Estimate transcription cost (AssemblyAI pricing as of 2024)
-
-        Args:
-            audio_duration_seconds: Duration in seconds
-
-        Returns:
-            Estimated cost in USD
-        """
-        # AssemblyAI charges per audio hour
-        # Approximate pricing: $0.00025 per second
-        return audio_duration_seconds * 0.00025
 
 
 # Example usage and testing

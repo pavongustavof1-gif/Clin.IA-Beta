@@ -1,13 +1,9 @@
 FROM python:3.11-slim
 
-# WeasyPrint system dependencies (Pango, Cairo, GDK-PixBuf)
-RUN apt-get update && apt-get install -y \
-    libpango-1.0-0 \
-    libpangoft2-1.0-0 \
-    libpangocairo-1.0-0 \
-    libcairo2 \
-    libgdk-pixbuf-2.0-0 \
-    && rm -rf /var/lib/apt/lists/*
+# Stage E1 cleanup: removed the Pango/Cairo/GDK-PixBuf apt install that
+# used to live here — those are WeasyPrint's system dependencies, and
+# WeasyPrint isn't in requirements.txt. PDFs are rendered by ReportLab
+# (a pure-Python library, no system rendering deps needed).
 
 WORKDIR /app
 

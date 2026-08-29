@@ -1,5 +1,4 @@
 # backend/config.py
-from email import errors
 import os
 import json
 from dotenv import load_dotenv
