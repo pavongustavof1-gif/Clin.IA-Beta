@@ -27,7 +27,12 @@ class Config:
 
     # Supabase
     # SUPABASE_JWT_SECRET is no longer needed — JWT verification uses the JWKS endpoint (ES256)
-    SUPABASE_URL         = os.getenv('SUPABASE_URL').rstrip('/')
+    # Guarded (Stage M5 fix #29): os.getenv() returns None if unset, and
+    # None.rstrip('/') raised an AttributeError right here at import time
+    # — before validate() below ever got a chance to run and print its
+    # intended friendly "SUPABASE_URL is required" message. An empty
+    # string still fails validate()'s falsy check the same way None did.
+    SUPABASE_URL         = (os.getenv('SUPABASE_URL') or '').rstrip('/')
     SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
     SUPABASE_ANON_KEY    = os.getenv('SUPABASE_ANON_KEY')
 

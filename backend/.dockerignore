@@ -1,0 +1,42 @@
+# backend/.dockerignore
+# Stage M5 fix #22 — keep local dev/build bloat and any stray secrets out
+# of the image layer (Dockerfile does `COPY . .` from this directory).
+#
+# CRITICAL: do NOT add schema.json, templates/, static/, requirements.txt,
+# pg_utils.py, or any other .py module here — all are loaded at runtime
+# (schema.json by llm_processor's __init__, templates/static by Flask
+# itself) and excluding any of them would break the app on boot or on
+# first request, not just at build time.
+
+# Local virtualenv — ~165MB, never needed inside the image (requirements.txt
+# is installed fresh via pip in the Dockerfile)
+venv/
+
+# Python bytecode/cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Local env / secrets — Render injects real env vars directly; a local
+# .env must never be baked into an image layer
+.env
+.env.*
+
+# Leftover/possible credential files from the removed Google Docs/Drive
+# integration (Stage H3) — token.json and client_secrets.json were found
+# still present on disk during this fix and have been deleted; excluded
+# here too as defense-in-depth against either reappearing locally
+token.json
+client_secrets.json
+credentials.json
+oauth_credentials.json
+
+# VCS / OS / editor artifacts
+.git/
+.gitignore
+.DS_Store
+*.swp
+
+# Local test/dev artifacts
+*.log
+.pytest_cache/

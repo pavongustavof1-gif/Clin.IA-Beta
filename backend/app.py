@@ -122,7 +122,7 @@ def validate_audio_file(file) -> tuple[bool, str]:
 # Initialize Flask app
 app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = Config.SECRET_KEY
-app.config['MAX_CONTENT_LENGTH'] = 200 * 1024 * 1024  # 200MB — matches Config.MAX_AUDIO_SIZE_BYTES
+app.config['MAX_CONTENT_LENGTH'] = Config.MAX_AUDIO_SIZE_BYTES  # single source of truth (Stage M5 fix #27)
 
 # Render terminates TLS at its own edge and forwards exactly one proxy
 # hop, appending the real client IP as the LAST entry of X-Forwarded-For.
@@ -144,7 +144,7 @@ CORS(app, resources={
             "https://www.clinianotes.com",
             "https://app.clinianotes.com",
         ],
-        "methods": ["GET", "POST", "DELETE", "OPTIONS"],
+        "methods": ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
         "allow_headers": ["Content-Type", "Authorization"]
     }
 })
@@ -1020,8 +1020,8 @@ def health_check():
     """Health check endpoint"""
     return jsonify({
         'status': 'healthy',
-        'service': 'ClinIA Alpha',
-        'version': '0.1.0',
+        'service': 'ClinIA Beta',
+        'version': '0.5.0-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -1473,9 +1473,14 @@ def download_pdf(session_id):
 # Error handlers
 @app.errorhandler(413)
 def request_entity_too_large(error):
+    # Derived from the same value Flask actually enforces the limit with
+    # (app.config['MAX_CONTENT_LENGTH'], itself sourced from
+    # Config.MAX_AUDIO_SIZE_BYTES) rather than a second hardcoded literal
+    # — this used to say 50 against a real 200MB cap (Stage M5 fix #27).
+    max_size_mb = app.config['MAX_CONTENT_LENGTH'] / (1024 * 1024)
     return jsonify({
         'error': 'File too large',
-        'max_size_mb': 50
+        'max_size_mb': max_size_mb
     }), 413
 
 
@@ -2422,4 +2427,8 @@ if __name__ == '__main__':
     logger.info("ClinIA Beta - Medical Note Taker (Local Mode) — starting Flask server")
 
     port = int(os.environ.get("PORT", 5000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    # debug=False (Stage M5 fix #23) — debug=True on a host reachable
+    # beyond localhost exposes the Werkzeug interactive debugger, which
+    # is RCE. Opt in explicitly and locally via FLASK_DEBUG if ever
+    # needed, rather than defaulting to it.
+    app.run(host='0.0.0.0', port=port, debug=os.environ.get('FLASK_DEBUG', 'false').lower() == 'true')
