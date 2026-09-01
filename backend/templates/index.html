@@ -244,9 +244,10 @@
                     </div>
                     <label class="consent-card-label" for="consentCheckbox">
                         <input type="checkbox" id="consentCheckbox">
-                        <span>El paciente ha sido informado y otorga su consentimiento para la
-                        <strong>grabación de voz y procesamiento de datos</strong> de esta consulta
-                        mediante ClinIA™, de conformidad con la LFPDPPP.
+                        <span>El paciente ha sido informado y otorga su consentimiento expreso, específico e informado
+                        para la <strong>grabación de voz y el procesamiento de sus datos de salud</strong> de esta consulta
+                        mediante Clin.IA™ —incluida su transcripción, análisis por inteligencia artificial y la codificación CIE-11—,
+                        conforme a la LFPDPPP vigente y al Aviso de Privacidad.
                         <a href="#" id="avisoInlineLink" class="aviso-inline-link">Ver Aviso de Privacidad</a></span>
                     </label>
                 </div>
@@ -453,7 +454,7 @@
                                 <input type="checkbox" id="consentTratamiento">
                                 <span>El médico declara haber obtenido el
                                 <strong>consentimiento informado del paciente para el acto médico</strong>
-                                realizado en esta consulta, conforme a la NOM-004-SSA3-2012. La carta de
+                                realizado en esta consulta, conforme a la NOM-004-SSA3-2012 y la LFPDPPP vigente. La carta de
                                 consentimiento informado firmada forma parte del expediente físico del paciente.</span>
                             </label>
                         </div>
@@ -815,20 +816,25 @@
                 <p><strong>Finalidades secundarias</strong> (opcionales, sujetas a consentimiento separado): mejora del servicio mediante análisis estadístico anonimizado.</p>
                 <p>El paciente puede oponerse al tratamiento para finalidades secundarias sin que ello afecte la prestación del servicio médico.</p>
 
-                <h3 class="aviso-section-title">4. Transferencia de datos a terceros</h3>
+                <h3 class="aviso-section-title">4. Encargados del tratamiento y transferencias</h3>
+                <p>Para la prestación del servicio, el Responsable se apoya en los siguientes encargados del tratamiento, quienes procesan los datos personales por cuenta del Responsable y conforme a sus instrucciones:</p>
                 <p><strong>AssemblyAI Inc. (Estados Unidos):</strong> transcripción de audio a texto. El audio es eliminado de sus servidores inmediatamente tras el procesamiento exitoso. La transcripción de texto es eliminada de los servidores de Clin.IA™ tras la confirmación de la nota clínica. AssemblyAI no utiliza los datos para entrenamiento de modelos (opt-out activo).</p>
-                <p><strong>Google LLC (Estados Unidos):</strong> procesamiento de lenguaje natural mediante Gemini API para extracción de información clínica, y almacenamiento opcional de documentos en Google Drive y Google Docs. Google LLC opera bajo certificaciones ISO 27001 y SOC 2.</p>
+                <p><strong>Google LLC (Estados Unidos):</strong> procesamiento de lenguaje natural mediante Gemini API para la extracción y estructuración de la información clínica a partir de la transcripción.</p>
                 <p><strong>Resend Inc. (Estados Unidos):</strong> servicio de envío de correo electrónico para la entrega de la nota clínica en PDF al médico Responsable.</p>
-                <p>La transferencia de datos a proveedores en Estados Unidos se realiza al amparo del artículo 37 de la LFPDPPP, bajo acuerdos contractuales que obligan a dichos proveedores a mantener niveles de protección equivalentes a los establecidos por la ley mexicana.</p>
+                <p><strong>Supabase (Estados Unidos):</strong> infraestructura de base de datos, autenticación y almacenamiento de archivos.</p>
+                <p><strong>Render (Estados Unidos):</strong> alojamiento de la aplicación y procesamiento de las solicitudes.</p>
+                <p>Además, el presente Aviso informa la siguiente transferencia a un tercero, distinta de los encargados anteriores:</p>
+                <p><strong>Organización Mundial de la Salud (OMS):</strong> con el fin de asignar el código de la Clasificación Internacional de Enfermedades (CIE-11) que exige la NOM-004-SSA3-2012, el texto del diagnóstico se transfiere a la API para CIE-11 de la OMS. Esta comunicación constituye una transferencia a un tercero, forma parte del tratamiento informado al que el titular otorga su consentimiento, y se limita al texto del diagnóstico, sin intercambiar información adicional que identifique al paciente.</p>
+                <p>La transferencia de datos a proveedores en Estados Unidos se realiza al amparo de los artículos 35 y 36 de la LFPDPPP vigente, bajo acuerdos contractuales que obligan a dichos proveedores a mantener niveles de protección equivalentes a los establecidos por la ley mexicana.</p>
 
                 <h3 class="aviso-section-title">5. Datos personales sensibles</h3>
-                <p>Los datos de salud recabados constituyen datos personales sensibles en términos del artículo 3, fracción VI de la LFPDPPP. Su tratamiento se realiza con base en el consentimiento expreso del titular y es estrictamente necesario para la prestación del servicio médico.</p>
+                <p>Los datos de salud recabados constituyen datos personales sensibles en términos del artículo 2, fracción VI de la LFPDPPP vigente. Su tratamiento se realiza con base en el consentimiento expreso del titular y es estrictamente necesario para la prestación del servicio médico.</p>
 
                 <h3 class="aviso-section-title">6. Consentimiento</h3>
                 <p>El consentimiento expreso del paciente es recabado en dos momentos: (1) <strong>Antes de iniciar la grabación:</strong> mediante confirmación electrónica del médico Responsable de que el paciente ha sido informado verbalmente y ha otorgado su autorización para la grabación y procesamiento de la consulta. La fecha y hora del consentimiento quedan registradas automáticamente. (2) <strong>Al confirmar la nota clínica:</strong> el médico Responsable confirma que el paciente ha firmado la Carta de Consentimiento Informado, misma que es generada como parte del PDF de la nota clínica y que debe ser firmada físicamente y conservada en el expediente del paciente.</p>
 
                 <h3 class="aviso-section-title">7. Derechos ARCO</h3>
-                <p>El titular tiene derecho a <strong>Acceder, Rectificar, Cancelar u Oponerse</strong> al tratamiento de sus datos personales conforme a los artículos 28–37 de la LFPDPPP. Para ejercer estos derechos, el titular deberá enviar una solicitud por escrito a <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a> indicando:</p>
+                <p>El titular tiene derecho a <strong>Acceder, Rectificar, Cancelar u Oponerse</strong> al tratamiento de sus datos personales conforme a los artículos 27–34 de la LFPDPPP vigente. Para ejercer estos derechos, el titular deberá enviar una solicitud por escrito a <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a> indicando:</p>
                 <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
                     <li>Nombre completo del paciente</li>
                     <li>Fecha de la consulta</li>
@@ -847,16 +853,16 @@
                     <li><strong>Inmutabilidad de notas clínicas:</strong> las notas confirmadas no pueden ser modificadas. Las correcciones se realizan exclusivamente mediante adéndum conforme a NOM-004-SSA3-2012.</li>
                     <li><strong>Control de acceso:</strong> acceso a documentos clínicos restringido al médico Responsable.</li>
                     <li><strong>Registro de consentimiento:</strong> marca de tiempo del consentimiento del paciente registrada en cada consulta para fines de auditoría.</li>
+                    <li><strong>Cifrado en reposo:</strong> la información almacenada se cifra en reposo a nivel de la infraestructura de datos (AES-256).</li>
                 </ul>
-                <p><em>Nota: el cifrado de datos en reposo (at rest) está programado para implementarse en la siguiente versión de la plataforma.</em></p>
 
                 <h3 class="aviso-section-title">9. Cambios al Aviso de Privacidad</h3>
-                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA™. <strong>Fecha de última actualización: Junio 2026.</strong></p>
+                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA™. <strong>Fecha de última actualización: Junio 2026.</strong> Cualquier modificación de las finalidades declaradas en el presente Aviso requerirá recabar nuevamente el consentimiento del titular, conforme a la ley vigente.</p>
 
                 <h3 class="aviso-section-title">10. Contacto</h3>
                 <p>Para ejercer derechos ARCO o dudas sobre el tratamiento de datos personales: <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a></p>
                 <p>Para información general sobre la plataforma Clin.IA™: <a href="mailto:info@clinianotes.com" class="aviso-email-link">info@clinianotes.com</a></p>
-                <p class="aviso-legal-note">Este Aviso de Privacidad ha sido elaborado de conformidad con la Ley Federal de Protección de Datos Personales en Posesión de Particulares (LFPDPPP), su Reglamento, y los Lineamientos del Aviso de Privacidad emitidos por el INAI. <strong>BORRADOR — Pendiente de revisión legal.</strong></p>
+                <p class="aviso-legal-note">Este Aviso de Privacidad ha sido elaborado conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares vigente (publicada en el DOF el 20 de marzo de 2025) y su normatividad aplicable. <strong>BORRADOR — Pendiente de revisión legal.</strong></p>
 
             </div><!-- /aviso-body -->
 

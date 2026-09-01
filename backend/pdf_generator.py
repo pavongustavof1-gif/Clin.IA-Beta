@@ -752,7 +752,7 @@ class PDFGenerator:
             'El paciente acude a consulta médica para evaluación, diagnóstico y/o tratamiento por parte del '
             'médico tratante. La presente carta documenta el consentimiento informado del paciente conforme a '
             'lo establecido en la NOM-004-SSA3-2012 (sección 10.1) y la Ley Federal de Protección de Datos '
-            'Personales en Posesión de los Particulares (LFPDPPP).', body_style
+            'Personales en Posesión de los Particulares (LFPDPPP) vigente (DOF 20/03/2025).', body_style
         ))
 
         # AI and data use
@@ -764,7 +764,10 @@ class PDFGenerator:
             '<b>eliminado automáticamente</b> tras la transcripción y no es almacenado. La transcripción de '
             'texto es eliminada tras la confirmación de la nota clínica. Los datos clínicos estructurados y el '
             'PDF de la nota son conservados durante el período mínimo de <b>5 años</b> conforme a '
-            'NOM-004-SSA3-2012 (10 años para pacientes menores de edad hasta 18+5 años).', body_style
+            'NOM-004-SSA3-2012 (10 años para pacientes menores de edad hasta 18+5 años). El procesamiento se '
+            'apoya en proveedores especializados que actúan por cuenta del médico Responsable (transcripción, '
+            'modelo de lenguaje, correo, infraestructura), y el diagnóstico se envía a la <b>API para CIE-11 '
+            'de la OMS</b> para su codificación, conforme al Aviso de Privacidad.', body_style
         ))
 
         # ARCO rights
@@ -775,15 +778,16 @@ class PDFGenerator:
             '(bloqueo conforme al período de retención legal), u <b>Oponerse</b> al uso secundario de sus '
             f'datos. Para ejercer estos derechos, contactar a: <b>admin@clinianotes.com</b> indicando nombre '
             f'completo, fecha de consulta e ID de nota: <b>{html.escape(session_label)}</b>. '
-            'El plazo de respuesta es de 20 días hábiles conforme a la LFPDPPP.', body_style
+            'El plazo de respuesta es de 20 días hábiles conforme a la LFPDPPP vigente.', body_style
         ))
 
         # Consent declaration
         elems.append(Paragraph('Declaración de Consentimiento', subtitle_style))
         elems.append(Paragraph(
             'El paciente declara haber leído y comprendido la presente carta, haber recibido explicación '
-            'verbal por parte del médico tratante, y otorgar su consentimiento libre, voluntario e informado '
-            'para la consulta médica y el procesamiento de sus datos personales con los fines descritos.',
+            'verbal por parte del médico tratante, y otorgar su consentimiento expreso, libre, específico e '
+            'informado para la consulta médica y el procesamiento de sus datos personales sensibles con los '
+            'fines descritos.',
             body_style
         ))
         elems.append(Spacer(1, 10 * mm))
