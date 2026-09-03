@@ -1,0 +1,6 @@
+# backend/requirements-test.txt
+# Test-only dependencies for the route-level authorization suite
+# (tests/). NOT installed in the production image — the Dockerfile
+# only installs requirements.txt. Install locally with:
+#   pip install -r requirements.txt -r requirements-test.txt
+pytest==8.3.3
