@@ -172,7 +172,7 @@ def test_admin_routes_reject_non_admin(client, entry):
 
 CROSS_CLINIC_CASES = [
     # (method, path, path_kwargs, caller_token, expected_status)
-    ('GET',  '/api/job-status/<job_id>',                {'job_id': JOB_A1},               DOCTOR_B1, 403),
+    ('GET',  '/api/job-status/<job_id>',                {'job_id': JOB_A1},               DOCTOR_B1, 404),
     ('POST', '/api/confirm-and-generate',                {},                                DOCTOR_B1, 404),
     ('GET',  '/api/session/<session_id>',                {'session_id': SESSION_CONFIRMED_A}, DOCTOR_B1, 404),
     ('GET',  '/api/export-json/<session_id>',            {'session_id': SESSION_CONFIRMED_A}, DOCTOR_B1, 404),
@@ -280,7 +280,18 @@ def test_confirm_and_generate_is_owner_only_even_within_same_clinic(client):
 
 def test_job_status_is_owner_only_even_within_same_clinic(client):
     resp = _call(client, 'GET', f'/api/job-status/{JOB_A1}', token=tokens.mint(DOCTOR_A2))
-    assert resp.status_code == 403
+    assert resp.status_code == 404
+
+
+def test_job_status_wrong_owner_is_indistinguishable_from_not_found(client):
+    """The existence-leak fix: a wrong-owner request against a job that
+    DOES exist must return the exact same status + body as a request
+    against a job_id that doesn't exist at all — otherwise the response
+    itself reveals the job_id is real."""
+    wrong_owner_resp = _call(client, 'GET', f'/api/job-status/{JOB_A1}', token=tokens.mint(DOCTOR_A2))
+    not_found_resp = _call(client, 'GET', '/api/job-status/does-not-exist-at-all', token=tokens.mint(DOCTOR_A2))
+    assert wrong_owner_resp.status_code == not_found_resp.status_code == 404
+    assert wrong_owner_resp.get_json() == not_found_resp.get_json()
 
 
 def test_pending_session_detail_is_owner_only_even_within_same_clinic(client):

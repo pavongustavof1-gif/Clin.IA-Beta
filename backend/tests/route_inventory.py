@@ -49,7 +49,9 @@ ROUTE_INVENTORY = [
 
     # ── Owner-only (in-flight jobs / not-yet-signed drafts) ─────────────
     {'path': '/api/job-status/<job_id>', 'methods': ['GET'], 'auth_required': True, 'admin_required': False,
-     'resource': 'trabajos row (background job)', 'rule': 'owner only', 'scope': 'owner', 'miss_status': 403},
+     'resource': 'trabajos row (background job)',
+     'rule': 'owner only — 404 for wrong-owner, indistinguishable from not-found (normalized from a leaking 403)',
+     'scope': 'owner', 'miss_status': 404},
     {'path': '/api/confirm-and-generate', 'methods': ['POST'], 'auth_required': True, 'admin_required': False,
      'resource': 'sesiones row (sign a pending draft)', 'rule': 'owner only (caller_can_addend_session)', 'scope': 'owner', 'miss_status': 404},
     {'path': '/api/pending-sessions', 'methods': ['GET'], 'auth_required': True, 'admin_required': False,

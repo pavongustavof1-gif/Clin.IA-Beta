@@ -1220,7 +1220,13 @@ def job_status(job_id):
         return jsonify({'error': 'Trabajo no encontrado'}), 404
     row = rows[0]
     if row.get('usuario_id') != g.usuario['usuario_id']:
-        return jsonify({'error': 'No autorizado'}), 403
+        # Same status + body as the not-found case above, deliberately —
+        # a wrong-owner request against a job that DOES exist must be
+        # indistinguishable from one that doesn't, or the response itself
+        # leaks the job_id's existence (a route-authorization test-suite
+        # finding; every other data-bearing route already uses this same
+        # uniform 404 for both "not found" and "out of scope").
+        return jsonify({'error': 'Trabajo no encontrado'}), 404
 
     row = _reap_if_stale(job_id, row)  # Stage M4 fix #26 — self-heals a hung job on poll
     status = row['status']
