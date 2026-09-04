@@ -676,8 +676,8 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre):
             _sb_patch_job(job_id, {'status': 'error', 'error_message': 'Extracción de datos fallida. Intente de nuevo.'})
             return
 
-        if 'metadata' not in structured_data:
-            structured_data['metadata'] = {}
+        # llm_processor.validate_against_schema (just above) already
+        # guarantees structured_data['metadata'] is a dict.
         structured_data['metadata']['fecha_hora_consulta'] = params['consultation_timestamp']
 
         # Build session

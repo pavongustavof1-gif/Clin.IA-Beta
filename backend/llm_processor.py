@@ -297,18 +297,49 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
     
     def validate_against_schema(self, data: Dict) -> tuple[bool, Optional[str]]:
         """
-        Validate extracted data against JSON schema
-        
+        Validate extracted data against JSON schema, normalizing in place
+        for non-clinical fields that can legitimately be missing.
+
+        The extraction prompt tells Gemini to omit ANY field it has no
+        info for (create_extraction_prompt, instruction #2) — so every
+        top-level section is a candidate for this, not just patient
+        identity. Enumerated here:
+          - informacion_paciente: non-clinical, normalized to {} if
+            missing/malformed. A consultation whose audio never states
+            the patient's name is normal input — the doctor fills gaps
+            on the existing review screen.
+          - metadata: non-clinical, normalized to {} if missing/malformed
+            for the same reason (previously defaulted ad hoc in app.py's
+            _run_job right before writing fecha_hora_consulta into it —
+            centralized here instead so there's one place that owns
+            "which fields can be structurally absent").
+          - roles_detectados, actualizacion_antecedentes: non-clinical,
+            but genuinely optional/not-applicable rather than "omitted
+            despite being expected" (roles_detectados only exists at all
+            for speaker-diarized transcripts; actualizacion_antecedentes
+            is a conditional detector field) — every reader already uses
+            .get()/optional-chaining, so there's no crash to guard
+            against and normalizing them here would misrepresent
+            "not applicable" as "empty".
+          - subjetivo/objetivo/evaluacion/plan: clinical content, NOT
+            individually required — see the has_content check below,
+            which requires at least one of the four, not all. That is
+            the real "did we extract anything at all" failure and must
+            stay a hard failure, not be normalized away.
+
+        Never invent values: this only fills in structural emptiness,
+        never clinical content.
+
         Args:
             data: Extracted data dictionary
-        
+
         Returns:
             Tuple of (is_valid, error_message)
         """
-        # Basic validation - check required fields
-        if "informacion_paciente" not in data:
-            return False, "Missing required field: informacion_paciente"
-        
+        for section in ("informacion_paciente", "metadata"):
+            if not isinstance(data.get(section), dict):
+                data[section] = {}
+
         # Check that at least some meaningful data was extracted
         has_content = False
         for section in ["subjetivo", "objetivo", "evaluacion", "plan"]:

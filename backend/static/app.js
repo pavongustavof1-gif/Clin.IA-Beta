@@ -1267,7 +1267,8 @@ function resetApplication() {
     if (numExpField) numExpField.value = '';
     const curpField = document.getElementById('review_curp');
     if (curpField) curpField.value = '';
-    setVal('review_codigo_cie11', '');
+    const cie11Field = document.getElementById('review_codigo_cie11');
+    if (cie11Field) cie11Field.value = '';
     document.getElementById('review_titulo_cie11').value = '';
 
     // Clear file input
