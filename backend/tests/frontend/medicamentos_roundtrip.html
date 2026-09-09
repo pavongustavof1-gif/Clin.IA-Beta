@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/medicamentos_roundtrip.html
+
+  Regression test for the medicamentos textarea join/split delimiter bug:
+  a hyphen WITH surrounding spaces (" - ") separates fields; a hyphen
+  WITHOUT surrounding spaces (as in "8-12 horas") is a legitimate part of
+  a dose/frequency/duration value and must never be treated as a field
+  boundary.
+
+  There is no JS test runner in this repo (no package.json / Jest) — the
+  backend has a pytest suite under backend/tests/, but this bug lives
+  entirely in static/app.js, which pytest cannot exercise. This harness
+  loads the REAL static/app.js (unmodified, via <script src>) against a
+  minimal stand-in DOM and drives displayReviewScreen ->
+  buildStructuredDataFromForm exactly as the real review screen does, so
+  it is testing the actual shipped code, not a re-implementation of it.
+
+  How to run:
+    1. Serve backend/ over HTTP (e.g. `cd backend && python3 app.py`,
+       or any static server) so static/app.js and static/utils.js load
+       with a real origin — file:// pages can't run <script src> here.
+    2. Open this file through that same server, e.g.
+       http://localhost:5000/tests/frontend/medicamentos_roundtrip.html
+       (or serve backend/tests/frontend/ directly and load app.js/
+       utils.js via an absolute http://<backend-host>/static/... URL).
+    3. Open the browser console, or read the on-page summary — each
+       case prints PASS or FAIL with the expected vs. actual medication.
+
+  No PHI: every medication/patient value below is synthetic.
+-->
+<html>
+<head><title>medicamentos round-trip regression</title></head>
+<body>
+  <div id="progressSection"></div>
+  <div id="resultsSection"></div>
+  <div id="errorSection"></div>
+  <div id="reviewSection"></div>
+  <div id="reviewActionsSection"></div>
+  <div id="recordingStatus"></div>
+  <button id="pauseBtn"></button>
+  <input type="checkbox" id="consentCheckbox">
+  <input type="checkbox" id="consentTratamiento">
+  <button id="confirmAndGenerateBtn"></button>
+  <button id="recordBtn"></button>
+  <button id="downloadPdfBtn"></button>
+  <input type="checkbox" id="createPDF">
+  <input type="checkbox" id="sendEmailToggle">
+  <div id="emailDeliveryRow"></div>
+  <input type="file" id="audioFileInput">
+  <div id="audioPlayerContainer"></div>
+  <button id="processBtn"></button>
+  <div id="reviewTranscriptText"></div>
+
+  <form id="reviewForm">
+    <input type="text" id="review_numero_expediente">
+    <input type="text" id="review_nombre_del_paciente">
+    <input type="text" id="review_fecha_de_nacimiento">
+    <input type="text" id="review_curp">
+    <input type="text" id="review_edad">
+    <input type="text" id="review_genero">
+    <textarea id="review_motivo_de_consulta"></textarea>
+    <textarea id="review_sintomas"></textarea>
+    <textarea id="review_historia_de_enfermedad_actual"></textarea>
+    <input type="text" id="review_duracion_sintomas">
+    <input type="text" id="review_presion_arterial">
+    <input type="text" id="review_frecuencia_cardiaca">
+    <input type="text" id="review_temperatura">
+    <input type="text" id="review_frecuencia_respiratoria">
+    <input type="text" id="review_saturacion_oxigeno">
+    <input type="text" id="review_peso">
+    <input type="text" id="review_talla">
+    <textarea id="review_habitus"></textarea>
+    <textarea id="review_examen_fisico"></textarea>
+    <input type="text" id="review_diagnostico">
+    <input type="text" id="review_codigo_cie11">
+    <input type="hidden" id="review_titulo_cie11">
+    <textarea id="review_impresion_clinica"></textarea>
+    <input type="text" id="review_pronostico">
+    <textarea id="review_tratamiento"></textarea>
+    <textarea id="review_medicamentos"></textarea>
+    <textarea id="review_recomendaciones"></textarea>
+    <textarea id="review_estudios_solicitados"></textarea>
+    <textarea id="review_seguimiento"></textarea>
+    <input type="text" id="review_fecha_hora_consulta">
+  </form>
+
+  <pre id="summary">Running...</pre>
+
+  <script>
+    // Skip the real auth-guard entirely (no Supabase/network available or
+    // needed here) — same stub pattern used for the resetApplication and
+    // review round-trip investigations this bug was found during.
+    const supabaseClient = { auth: { getSession: async () => ({ data: { session: { fake: true } } }) } };
+    async function getAuthHeaders() { return {}; }
+    function handleSessionExpired() {}
+    function logout() {}
+    window.fetch = async () => { throw new Error('[harness] network disabled by design'); };
+  </script>
+  <script src="../../static/utils.js"></script>
+  <script src="../../static/app.js"></script>
+  <script>
+    function deepEqual(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+    function roundTripMeds(medicamentos, { edit } = {}) {
+      displayReviewScreen({
+        structured_data: { plan: { medicamentos } },
+        transcript: { text: '' },
+        session_id: 'TEST',
+      });
+      if (edit) {
+        const el = document.getElementById('review_medicamentos');
+        el.value = edit(el.value);
+      }
+      const rebuilt = buildStructuredDataFromForm();
+      return (rebuilt.plan && rebuilt.plan.medicamentos) || [];
+    }
+
+    const cases = [];
+
+    // Case 1 — untouched, dosing values contain literal hyphens with NO
+    // surrounding spaces ("8-12", "2-3"). Must round-trip byte-for-byte.
+    (function () {
+      const original = [
+        { nombre: 'Ibuprofeno', dosis: '2-3 tabletas', frecuencia: 'cada 8-12 horas', duracion: '5 dias (fixture)' },
+      ];
+      const result = roundTripMeds(original);
+      cases.push({
+        name: 'hyphenated dose/frequency, untouched, round-trips unchanged (original-preservation path)',
+        pass: deepEqual(result, original),
+        expected: original,
+        actual: result,
+      });
+    })();
+
+    // Case 1b — same hyphenated values, but with a real (unrelated) edit
+    // to duracion so the field genuinely differs from the original and
+    // MUST go through the textarea parser rather than the "untouched,
+    // reuse the original objects" shortcut. This is what actually proves
+    // the " - " delimiter fix itself, independent of that shortcut.
+    (function () {
+      const original = [
+        { nombre: 'Ibuprofeno', dosis: '2-3 tabletas', frecuencia: 'cada 8-12 horas', duracion: '5 dias (fixture)' },
+      ];
+      const result = roundTripMeds(original, {
+        edit: (text) => text.replace('5 dias (fixture)', '7 dias (fixture, edited)'),
+      });
+      const expected = [
+        { nombre: 'Ibuprofeno', dosis: '2-3 tabletas', frecuencia: 'cada 8-12 horas', duracion: '7 dias (fixture, edited)' },
+      ];
+      cases.push({
+        name: 'hyphenated dose/frequency SURVIVES the parser itself when duracion is actually edited',
+        pass: deepEqual(result, expected),
+        expected,
+        actual: result,
+      });
+    })();
+
+    // Case 2 — a hand-typed line with a missing trailing field (no
+    // duracion at all), with no matching original structured medication
+    // (forces the parser, no preservation shortcut available). Must not
+    // throw and must not shift frecuencia into duracion's slot.
+    (function () {
+      let threw = null, result = [];
+      try {
+        result = roundTripMeds([], {
+          edit: () => 'Complejo B (fixture) - 1 tableta - diario',
+        });
+      } catch (e) {
+        threw = e.message;
+      }
+      const expected = [{ nombre: 'Complejo B (fixture)', dosis: '1 tableta', frecuencia: 'diario', duracion: '' }];
+      cases.push({
+        name: 'missing trailing field (duracion) does not throw or shift values',
+        pass: threw === null && deepEqual(result, expected),
+        expected,
+        actual: threw ? `THREW: ${threw}` : result,
+      });
+    })();
+
+    // Case 3 — an edited medication with a duracion that itself legitimately
+    // contains " - " (the field separator) must not be truncated: the
+    // overflow folds back into duracion instead of being dropped.
+    (function () {
+      const original = [{ nombre: 'Prednisona (fixture)', dosis: '10 mg', frecuencia: 'diario', duracion: 'reducir gradualmente' }];
+      // Simulate the doctor editing the duracion to literally contain " - ".
+      const result = roundTripMeds(original, {
+        edit: (text) => text.replace('reducir gradualmente', 'semana 1 - dosis completa, semana 2 - reducir a la mitad'),
+      });
+      const expected = [{
+        nombre: 'Prednisona (fixture)', dosis: '10 mg', frecuencia: 'diario',
+        duracion: 'semana 1 - dosis completa, semana 2 - reducir a la mitad',
+      }];
+      cases.push({
+        name: 'edited duracion containing the field separator is preserved whole, not truncated',
+        pass: deepEqual(result, expected),
+        expected,
+        actual: result,
+      });
+    })();
+
+    // Case 4 — full-fixture sanity: multiple medications, untouched,
+    // still round-trip exactly (nothing else regressed).
+    (function () {
+      const original = [
+        { nombre: 'Amoxicilina', dosis: '500 mg', frecuencia: 'cada 8 horas', duracion: '7 dias' },
+        { nombre: 'Paracetamol', dosis: '500 mg', frecuencia: 'cada 8 horas', duracion: '3 dias' },
+      ];
+      const result = roundTripMeds(original);
+      cases.push({
+        name: 'multi-medication untouched round-trip (no hyphens) still exact',
+        pass: deepEqual(result, original),
+        expected: original,
+        actual: result,
+      });
+    })();
+
+    const lines = cases.map(c => `[${c.pass ? 'PASS' : 'FAIL'}] ${c.name}` +
+      (c.pass ? '' : `\n  expected: ${JSON.stringify(c.expected)}\n  actual:   ${JSON.stringify(c.actual)}`));
+    const allPass = cases.every(c => c.pass);
+    const summary = `${allPass ? 'ALL PASS' : 'FAILURES PRESENT'} (${cases.filter(c => c.pass).length}/${cases.length})\n\n` + lines.join('\n');
+    document.getElementById('summary').textContent = summary;
+    console.log(summary);
+    window.__medsTestCases = cases;
+    window.__medsTestAllPass = allPass;
+  </script>
+</body>
+</html>

@@ -895,6 +895,29 @@ function displayResults(result) {
 }
 
 // ─────────────────────────────────────────────
+// Medicamentos textarea — shared join/split delimiter
+//
+// The review textarea packs each medication's nombre/dosis/frecuencia/
+// duracion onto one line. Dosing text routinely contains a literal
+// hyphen with NO surrounding spaces ("8-12 horas", "2-3 tabletas"), so
+// " - " (hyphen WITH a space on each side) is used as the field
+// separator instead of a bare "-" — an intra-value hyphen never
+// collides with it. Both sides (display join in displayReviewScreen,
+// re-parse in buildStructuredDataFromForm) must use this exact same
+// delimiter, via this one shared function, so they can never drift
+// apart the way join(" - ")/split("-") previously did (that mismatch
+// silently dropped/shifted dose, frequency, and duration values).
+const MEDICAMENTO_FIELD_SEPARATOR = ' - ';
+
+function formatMedicamentosForTextarea(meds) {
+    return (Array.isArray(meds) ? meds : []).map(m =>
+        typeof m === 'object'
+            ? [m.nombre, m.dosis, m.frecuencia, m.duracion].filter(Boolean).join(MEDICAMENTO_FIELD_SEPARATOR)
+            : String(m)
+    ).join('\n');
+}
+
+// ─────────────────────────────────────────────
 // Review screen
 // ─────────────────────────────────────────────
 function displayReviewScreen(result) {
@@ -959,12 +982,7 @@ function displayReviewScreen(result) {
     // Plan
     setVal('review_tratamiento', plan.tratamiento);
 
-    const meds = Array.isArray(plan.medicamentos) ? plan.medicamentos : [];
-    setVal('review_medicamentos', meds.map(m =>
-        typeof m === 'object'
-            ? [m.nombre, m.dosis, m.frecuencia, m.duracion].filter(Boolean).join(' - ')
-            : String(m)
-    ).join('\n'));
+    setVal('review_medicamentos', formatMedicamentosForTextarea(plan.medicamentos));
 
     setVal('review_recomendaciones',
         Array.isArray(plan.recomendaciones) ? plan.recomendaciones.join('\n') : (plan.recomendaciones || ''));
@@ -1059,10 +1077,35 @@ function buildStructuredDataFromForm() {
     // plan
     const plan = {};
     if (getVal('review_tratamiento')) plan.tratamiento = getVal('review_tratamiento');
-    const meds = parseLines('review_medicamentos').map(line => {
-        const parts = line.split('-').map(s => s.trim());
-        return { nombre: parts[0] || '', dosis: parts[1] || '', frecuencia: parts[2] || '', duracion: parts[3] || '' };
-    }).filter(m => m.nombre);
+    // Belt-and-suspenders: if the textarea is byte-for-byte what
+    // formatMedicamentosForTextarea would still produce from the
+    // original extraction, the doctor never touched this field — use
+    // those original medication objects verbatim instead of re-parsing
+    // free text at all. Only a field the doctor actually edited goes
+    // through the (necessarily lossy-on-ambiguity) textarea parser below.
+    const originalMeds = state.pendingResult?.structured_data?.plan?.medicamentos;
+    const medsTextarea  = getVal('review_medicamentos');
+    let meds;
+    if (Array.isArray(originalMeds) && originalMeds.length
+        && formatMedicamentosForTextarea(originalMeds) === medsTextarea) {
+        meds = originalMeds;
+    } else {
+        meds = parseLines('review_medicamentos').map(line => {
+            // MEDICAMENTO_FIELD_SEPARATOR (" - ") — NOT a bare "-" — so a
+            // literal in-value hyphen with no surrounding spaces ("8-12
+            // horas", "2-3 tabletas") is never mistaken for a field
+            // boundary. Destructure strictly by position — nombre, dosis,
+            // frecuencia — and fold any remaining pieces back into
+            // duracion (joined on the same separator) rather than
+            // truncating them, so a duracion that itself legitimately
+            // contains " - " round-trips whole instead of being cut off.
+            // A short line (missing trailing fields) just leaves later
+            // fields '', it never shifts a value into the wrong slot.
+            const [nombre = '', dosis = '', frecuencia = '', ...rest] =
+                line.split(MEDICAMENTO_FIELD_SEPARATOR).map(s => s.trim());
+            return { nombre, dosis, frecuencia, duracion: rest.join(MEDICAMENTO_FIELD_SEPARATOR) };
+        }).filter(m => m.nombre);
+    }
     if (meds.length) plan.medicamentos = meds;
     const recomendaciones = parseLines('review_recomendaciones');
     if (recomendaciones.length) plan.recomendaciones = recomendaciones;
