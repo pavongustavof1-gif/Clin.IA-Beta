@@ -276,15 +276,6 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.85rem 2rem;
-            /* Brushed aluminum texture */
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.25) 0px,
-                    rgba(255,255,255,0.25) 1px,
-                    rgba(120,130,140,0.10) 2px,
-                    rgba(120,130,140,0.10) 3px),
-                linear-gradient(180deg, #fbfcfd 0%, #e4e8ec 44%, #cfd6dd 56%, #eef1f4 100%);
-            color: #2b3644 !important;
             font-family: 'Outfit', sans-serif;
             font-size: 1rem;
             font-weight: 600;
@@ -292,56 +283,32 @@
             border-radius: var(--radius-md);
             text-decoration: none;
             transition: all var(--transition);
-            border: 1px solid #b6bec6;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 2px rgba(0,0,0,0.10), var(--shadow-btn);
             cursor: pointer;
         }
 
-        /* Primary CTA — brushed aluminum */
-        .btn-cta {
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.25) 0px,
-                    rgba(255,255,255,0.25) 1px,
-                    rgba(120,130,140,0.10) 2px,
-                    rgba(120,130,140,0.10) 3px),
-                linear-gradient(180deg, #fbfcfd 0%, #e4e8ec 44%, #cfd6dd 56%, #eef1f4 100%);
-            color: #2b3644 !important;
-            border: 1px solid #b6bec6;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 2px rgba(0,0,0,0.10), var(--shadow-btn);
-        }
-
-        .btn-cta:hover {
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.30) 0px,
-                    rgba(255,255,255,0.30) 1px,
-                    rgba(120,130,140,0.13) 2px,
-                    rgba(120,130,140,0.13) 3px),
-                linear-gradient(180deg, #ffffff 0%, #e0e5ea 46%, #c6ced6 60%, #f3f5f8 100%);
-            border-color: #9aa3ac;
-            transform: translateY(-1px);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 4px 12px rgba(15,23,42,0.12);
+        /* Brushed aluminum texture — mirrors .btn in backend/static/style.css */
+        .btn-primary,
+        .btn-secondary,
+        .btn-submit {
+            background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #e2e8f0 100%);
+            color: #334155 !important;
+            border: 1px solid #cbd5e1;
+            box-shadow: inset 0 1px 0 #ffffff, var(--shadow-btn);
         }
 
         .btn-primary:hover,
-        .btn-secondary:hover {
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.30) 0px,
-                    rgba(255,255,255,0.30) 1px,
-                    rgba(120,130,140,0.13) 2px,
-                    rgba(120,130,140,0.13) 3px),
-                linear-gradient(180deg, #ffffff 0%, #e0e5ea 46%, #c6ced6 60%, #f3f5f8 100%);
-            border-color: #9aa3ac;
+        .btn-secondary:hover,
+        .btn-submit:hover {
+            background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 40%, #cbd5e1 100%);
+            border-color: #94a3b8;
+            box-shadow: inset 0 1px 0 #ffffff, 0 4px 12px rgba(15, 23, 42, 0.08);
             transform: translateY(-1px);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 4px 12px rgba(15,23,42,0.12);
         }
 
         .btn-primary:active,
         .btn-secondary:active,
-        .btn-cta:active {
-            transform: translateY(1px);
+        .btn-submit:active {
+            transform: translateY(1px) scale(0.985);
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
         }
 
@@ -543,36 +510,13 @@
             align-items: center;
             gap: 0.5rem;
             padding: 0.95rem 2rem;
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.25) 0px,
-                    rgba(255,255,255,0.25) 1px,
-                    rgba(120,130,140,0.10) 2px,
-                    rgba(120,130,140,0.10) 3px),
-                linear-gradient(180deg, #fbfcfd 0%, #e4e8ec 44%, #cfd6dd 56%, #eef1f4 100%);
-            color: #2b3644;
             font-family: 'Outfit', sans-serif;
             font-size: 1rem;
             font-weight: 700;
             letter-spacing: 0.06em;
             border-radius: var(--radius-md);
-            border: 1px solid #b6bec6;
-            box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), inset 0 -1px 2px rgba(0,0,0,0.10), var(--shadow-btn);
             cursor: pointer;
             transition: all var(--transition);
-        }
-
-        .btn-submit:hover {
-            background:
-                repeating-linear-gradient(90deg,
-                    rgba(255,255,255,0.30) 0px,
-                    rgba(255,255,255,0.30) 1px,
-                    rgba(120,130,140,0.13) 2px,
-                    rgba(120,130,140,0.13) 3px),
-                linear-gradient(180deg, #ffffff 0%, #e0e5ea 46%, #c6ced6 60%, #f3f5f8 100%);
-            border-color: #9aa3ac;
-            transform: translateY(-1px);
-            box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 4px 12px rgba(15,23,42,0.12);
         }
 
         .form-note {
@@ -1282,6 +1226,21 @@
                         </div>
 
                         <div class="form-field">
+                            <label for="f-email">Email (mandatorio)</label>
+                            <input type="email" id="f-email" name="email" placeholder="tu@correo.com" autocomplete="email" required>
+                        </div>
+
+                        <div class="form-field">
+                            <label for="f-cedula">Cédula Profesional <span id="cedula-req">(mandatorio)</span></label>
+                            <input type="text" id="f-cedula" name="cedula" inputmode="numeric" placeholder="Ej. 12345678" required>
+                        </div>
+
+                        <div class="form-field full">
+                            <label for="f-clinica">Nombre o razón social de la Clínica o consultorio</label>
+                            <input type="text" id="f-clinica" name="clinica" placeholder="Opcional" autocomplete="organization">
+                        </div>
+
+                        <div class="form-field">
                             <label for="f-especialidad">Especialidad</label>
                             <select id="f-especialidad" name="especialidad" data-other="other-especialidad" required>
                                 <option value="" disabled selected>Selecciona…</option>
@@ -1300,6 +1259,7 @@
                                 <option>Otorrinolaringología</option>
                                 <option>Pediatría</option>
                                 <option>Psiquiatría</option>
+                                <option>Administrador</option>
                                 <option value="Otra">Otra…</option>
                             </select>
                             <input type="text" id="other-especialidad" class="other-input" placeholder="Escribe tu especialidad">
@@ -1310,7 +1270,12 @@
                             <input type="number" id="f-consultas" name="consultas" min="1" max="500" placeholder="Ej. 40">
                         </div>
 
-                        <div class="form-field full">
+                        <div class="form-field">
+                            <label for="f-telefono">Teléfono</label>
+                            <input type="tel" id="f-telefono" name="telefono" placeholder="Opcional" autocomplete="tel">
+                        </div>
+
+                        <div class="form-field">
                             <label for="f-ciudad">Ciudad</label>
                             <select id="f-ciudad" name="ciudad" data-other="other-ciudad" required>
                                 <option value="" disabled selected>Selecciona…</option>
@@ -1613,10 +1578,10 @@
                 <div class="cta-card">
                     <div class="cta-urgency">
                         <span class="dot"></span>
-                        20 spots · cierra el 31 de agosto de 2026
+                        20 spots disponibles
                     </div>
                     <h2>¿Quieres empezar a atender más pacientes? ¡Actúa hoy!</h2>
-                    <p>Clin.IA™ está en Beta con invitación limitada (20 spots disponibles hasta el 31 de agosto de 2026). Acceso inmediato, sin costo, durante Beta. Te enviaremos un correo si hay cambios de precio.</p>
+                    <p>Clin.IA™ está en Beta con invitación limitada (20 spots disponibles). Acceso inmediato, sin costo, durante Beta. Te enviaremos un correo si hay cambios de precio.</p>
                     <a href="#acceso" class="btn-primary btn-cta">
                         Acceder a Beta ahora
                         <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
@@ -1845,18 +1810,39 @@
             });
         });
 
+        // ── Cédula is optional for Administrador ──
+        const esAdministrador = () => document.getElementById('f-especialidad').value === 'Administrador';
+        document.getElementById('f-especialidad').addEventListener('change', () => {
+            const admin = esAdministrador();
+            document.getElementById('f-cedula').required = !admin;
+            document.getElementById('cedula-req').textContent = admin ? '(opcional)' : '(mandatorio)';
+        });
+
         // ── Form submit → mailto pre-llenado ──
         document.getElementById('beta-form').addEventListener('submit', e => {
             e.preventDefault();
             const nombre = document.getElementById('f-nombre').value.trim();
+            const emailInput = document.getElementById('f-email');
+            const email = emailInput.value.trim();
+            const cedula = document.getElementById('f-cedula').value.trim();
+            const clinica = document.getElementById('f-clinica').value.trim();
+            const telefono = document.getElementById('f-telefono').value.trim();
             let especialidad = document.getElementById('f-especialidad').value;
             if (especialidad === 'Otra') especialidad = document.getElementById('other-especialidad').value.trim();
             const consultas = document.getElementById('f-consultas').value.trim();
             let ciudad = document.getElementById('f-ciudad').value;
             if (ciudad === 'Otra') ciudad = document.getElementById('other-ciudad').value.trim();
 
-            if (!nombre || !especialidad || !ciudad) {
-                alert('Por favor completa Nombre, Especialidad y Ciudad.');
+            if (!nombre || !email || !especialidad || !ciudad) {
+                alert('Por favor completa Nombre, Email, Especialidad y Ciudad.');
+                return;
+            }
+            if (!cedula && !esAdministrador()) {
+                alert('Por favor ingresa tu Cédula Profesional.');
+                return;
+            }
+            if (!emailInput.checkValidity()) {
+                alert('Por favor ingresa un email válido.');
                 return;
             }
 
@@ -1871,6 +1857,10 @@
             const subject = 'Solicitud de acceso Beta — Clin.IA™';
             const body =
                 'Nombre: ' + nombre + '\n' +
+                'Email: ' + email + '\n' +
+                'Cédula Profesional: ' + (cedula || '(no especificado)') + '\n' +
+                'Clínica o consultorio: ' + (clinica || '(no especificado)') + '\n' +
+                'Teléfono: ' + (telefono || '(no especificado)') + '\n' +
                 'Especialidad: ' + especialidad + '\n' +
                 'Consultas por semana: ' + (consultas || '(no especificado)') + '\n' +
                 'Ciudad: ' + ciudad + '\n';
