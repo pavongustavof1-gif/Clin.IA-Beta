@@ -99,9 +99,17 @@ LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a �
 - Sustituye términos coloquiales por su equivalente técnico. Sustituciones canónicas (lista ampliable):
     • panza / barriga / tripa → abdomen (o «cavidad abdominal» según contexto)
     • vahído → síncope
-
-* dolor de cabeza → cefalea
-* fiebre → pirexia/hipertermia
+    • dolor de cabeza → cefalea
+    • fiebre → pirexia/hipertermia (o síndrome febril)
+    • zumbido en los oídos → acúfenos (o tinnitus)
+    • ver lucesitas brillantes → fosfenos
+    • mareo con sensación de que todo gira → vértigo
+    • falta de aire / ahogo → disnea
+    • moretón → equimosis
+    • roncha con picazón → urticaria (la lesión física en sí se llama habón)
+    • sangrado por la nariz → epistaxis
+    • mal aliento → halitosis
+    • caída del cabello → alopecia
 
 - Sin abreviaturas: desarróllalas a su forma completa (p. ej. «c/8h» → «cada 8 horas»;
   «VO» → «vía oral»). Conserva las unidades estándar (mg, mL, mmHg, °C) y el código CIE-11.
