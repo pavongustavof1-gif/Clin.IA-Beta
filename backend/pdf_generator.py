@@ -681,11 +681,11 @@ class PDFGenerator:
         title_style = ParagraphStyle('consent_title', fontName='Helvetica-Bold', fontSize=14,
                                       textColor=self.TEAL, alignment=TA_CENTER, spaceAfter=6 * mm)
         subtitle_style = ParagraphStyle('consent_subtitle', fontName='Helvetica-Bold', fontSize=10,
-                                         textColor=colors.black, spaceAfter=3 * mm, spaceBefore=5 * mm)
+                                         textColor=colors.black, spaceAfter=1 * mm, spaceBefore=2 * mm)
         body_style = ParagraphStyle('consent_body', fontName='Helvetica', fontSize=9,
-                                     textColor=colors.black, leading=14, spaceAfter=3 * mm)
+                                     textColor=colors.black, leading=12, spaceAfter=2 * mm)
         small_style = ParagraphStyle('consent_small', fontName='Helvetica-Oblique', fontSize=7,
-                                      textColor=self.GRAY_TEXT, alignment=TA_CENTER, spaceBefore=4 * mm)
+                                      textColor=self.GRAY_TEXT, alignment=TA_CENTER, spaceBefore=1 * mm)
         sig_label = ParagraphStyle('csl', fontName='Helvetica',      fontSize=8,
                                     textColor=colors.black, alignment=TA_CENTER)
         sig_name  = ParagraphStyle('csn', fontName='Helvetica-Bold', fontSize=8,
@@ -733,7 +733,7 @@ class PDFGenerator:
             ('RIGHTPADDING',  (0, 0), (-1, -1), 4 * mm),
         ]))
         elems.append(banner)
-        elems.append(Spacer(1, 6 * mm))
+        elems.append(Spacer(1, 2 * mm))
 
         # Patient identification
         elems.append(Paragraph('Datos del Paciente', subtitle_style))
@@ -744,7 +744,7 @@ class PDFGenerator:
         curp = self._safe(info.get('curp'))
         if curp:
             elems.append(Paragraph(f'CURP: <b>{html.escape(curp)}</b>', body_style))
-        elems.append(Spacer(1, 4 * mm))
+        elems.append(Spacer(1, 1.5 * mm))
 
         # Purpose
         elems.append(Paragraph('Propósito de la Consulta', subtitle_style))
@@ -790,7 +790,7 @@ class PDFGenerator:
             'fines descritos.',
             body_style
         ))
-        elems.append(Spacer(1, 10 * mm))
+        elems.append(Spacer(1, 5 * mm))
 
         # Signature block — Patient + Doctor
         doctor_nombre = self._doctor('nombre') or self._safe(meta.get('medico')) or 'Médico Tratante'
@@ -799,6 +799,9 @@ class PDFGenerator:
         left_sig = [
             Paragraph(sig_line, sig_label),
             Paragraph('Firma del Paciente', sig_name),
+            # NOM-004-SSA3-2012 §10.1.1: the patient's signature may be
+            # given by a relative / guardian / legal representative.
+            Paragraph('o, en su caso, familiar / tutor / representante legal', sig_sub),
             Paragraph(html.escape(paciente), sig_sub),
             Paragraph('Huella digital (si aplica)', sig_sub),
         ]
@@ -809,7 +812,19 @@ class PDFGenerator:
         ]
         if doctor_cedula:
             right_sig.append(Paragraph(f'Céd. Prof. {html.escape(doctor_cedula)}', sig_sub))
-        sig_table = Table([[left_sig, right_sig]],
+
+        # Two witnesses — NOM-004-SSA3-2012 §10.1.1 ("Nombre completo y
+        # firma de dos testigos"). Name is a blank line filled in by hand,
+        # not a data field: witnesses aren't known to the app.
+        def witness_cell(n: int) -> list:
+            return [
+                Paragraph(sig_line, sig_label),
+                Paragraph(f'Testigo {n}', sig_name),
+                Paragraph('Nombre completo: ______________________', sig_sub),
+            ]
+
+        sig_table = Table([[left_sig, right_sig],
+                           [witness_cell(1), witness_cell(2)]],
                           colWidths=[page_width * 0.50, page_width * 0.50])
         sig_table.setStyle(TableStyle([
             ('VALIGN',        (0, 0), (-1, -1), 'TOP'),
@@ -818,9 +833,11 @@ class PDFGenerator:
             ('RIGHTPADDING',  (0, 0), (-1, -1), 8 * mm),
             ('TOPPADDING',    (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            # Room above the witness signature lines to actually sign.
+            ('TOPPADDING',    (0, 1), (-1, 1), 10 * mm),
         ]))
         elems.append(sig_table)
-        elems.append(Spacer(1, 6 * mm))
+        elems.append(Spacer(1, 2 * mm))
 
         # Beta watermark
         elems.append(Paragraph(

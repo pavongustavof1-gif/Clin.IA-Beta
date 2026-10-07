@@ -4,3 +4,5 @@
 # only installs requirements.txt. Install locally with:
 #   pip install -r requirements.txt -r requirements-test.txt
 pytest==8.3.3
+# Reads the generated note PDF back in tests/test_pdf_consent.py
+pypdf==6.16.2
