@@ -1,6 +1,6 @@
 # Clin.IA — guide for Claude Code
 
-Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.6.4-beta); **Beta 2** is being planned/built.
+Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.7.0-beta); **Beta 2** is being planned/built.
 
 **Source of truth for Beta 2 scope and strategy:** `ClinIA_Hoja_de_Ruta_Beta2_v<latest>.md` in iCloud: `~/Library/Mobile Documents/com~apple~CloudDocs/AI/TAS/ClinIA/Roadmap/Beta 2/` (not in this repo; highest version number wins; items are numbered `#45…`). Read it before starting any Beta 2 work.
 
@@ -13,7 +13,7 @@ Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consul
 
 ## Run the tests
 ```
-cd backend && venv/bin/python -m pytest tests/ -q      # 166 tests, offline, ~0.2 s
+cd backend && venv/bin/python -m pytest tests/ -q      # 168 tests, offline, ~0.2 s
 ```
 - Fully offline: `conftest.py` mocks Supabase/AssemblyAI/Gemini/Resend and JWT verification. No real credentials exist or are needed in this sandbox.
 - **`tests/route_inventory.py` lists every route and its auth policy; a test fails if a route exists without an entry.** Adding a route means adding an inventory entry (and cross-clinic/auth cases in `test_route_authorization.py`).

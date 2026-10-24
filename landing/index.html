@@ -1138,9 +1138,81 @@
             .nav-links { gap: 0.25rem; }
             .nav-link  { font-size: 0.72rem; }
         }
+
+        /* ── #45 aviso Beta 2 ── informational, not a warning: teal on
+           teal-light, never amber. Scoped classes only — the bare `nav`
+           rule above must not reach it. Not sticky: scrolls away. */
+        .aviso-beta2 {
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            gap: 0.75rem;
+            padding: 0.6rem var(--spacing-md);
+            background: #E1F5EE;
+            color: #0F6E56;
+            border-bottom: 1px solid rgba(15, 110, 86, 0.18);
+            font-family: 'Outfit', sans-serif;
+            font-size: 0.8rem;
+            line-height: 1.5;
+        }
+
+        .aviso-beta2[hidden] { display: none; }
+
+        .aviso-beta2__text {
+            margin: 0;
+            max-width: 820px;
+            overflow-wrap: anywhere;
+        }
+
+        .aviso-beta2__link {
+            display: inline;
+            padding: 0;
+            border: none;
+            background: none;
+            font: inherit;
+            color: inherit;
+            text-decoration: underline;
+            text-underline-offset: 2px;
+            cursor: pointer;
+        }
+
+        .aviso-beta2__close {
+            flex-shrink: 0;
+            min-width: 32px;
+            min-height: 32px;
+            margin: -0.35rem -0.5rem -0.35rem 0;
+            padding: 0;
+            border: none;
+            border-radius: var(--radius-sm);
+            background: none;
+            color: inherit;
+            font-size: 1.25rem;
+            line-height: 1;
+            cursor: pointer;
+        }
+
+        .aviso-beta2__close:hover,
+        .aviso-beta2__close:focus-visible { background: rgba(15, 110, 86, 0.1); }
     </style>
 </head>
 <body>
+
+    <!-- ── #45 Aviso Beta 2 ── first element so it sits above the sticky
+         nav; the "Términos de Servicio" button is bound by the [data-modal]
+         loop at the end of the page like the footer links. -->
+    <div class="aviso-beta2" id="avisoBeta2" role="note" aria-label="Aviso">
+        <p class="aviso-beta2__text">Apreciado usuario: gracias a tu retroalimentación, estamos desarrollando la siguiente versión, Beta 2. Conforme a los <button type="button" class="aviso-beta2__link" data-modal="modal-tos">Términos de Servicio</button>, Clin.IA™ puede presentar cambios, interrupciones o limitaciones.</p>
+        <button type="button" class="aviso-beta2__close" id="avisoBeta2Close" aria-label="Cerrar aviso">×</button>
+    </div>
+    <script>
+        // Hide before first paint for visitors who already dismissed it.
+        // Any storage error (private mode, blocked storage) leaves it visible.
+        try {
+            if (localStorage.getItem('clinia_aviso_beta2_v1') === '1') {
+                document.getElementById('avisoBeta2').hidden = true;
+            }
+        } catch (e) { /* stays visible */ }
+    </script>
 
     <!-- ── Nav ── -->
     <nav>
@@ -1889,6 +1961,12 @@
             if (e.key === 'Escape') {
                 document.querySelectorAll('.modal-overlay.open').forEach(closeModal);
             }
+        });
+
+        // ── #45 Aviso Beta 2: dismiss ──
+        document.getElementById('avisoBeta2Close').addEventListener('click', () => {
+            document.getElementById('avisoBeta2').hidden = true;
+            try { localStorage.setItem('clinia_aviso_beta2_v1', '1'); } catch (e) { /* not remembered */ }
         });
     </script>
 

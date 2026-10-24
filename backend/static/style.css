@@ -1789,3 +1789,48 @@ body {
     border-radius: var(--radius-sm);
     margin-bottom: 1rem;
 }
+
+/* ── #45 aviso Beta 2 ──────────────────────────────────────────────────
+   Informational, not a warning: teal on teal-light, never amber like
+   .pending-banner. Literal colors on purpose — the --teal-NNN and
+   --gold-NNN variables used elsewhere in this file are not defined
+   in :root. */
+.aviso-beta2 {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 0.75rem;
+    padding: 0.6rem var(--spacing-md);
+    background: #E1F5EE;
+    color: #0F6E56;
+    border-bottom: 1px solid rgba(15, 110, 86, 0.18);
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.aviso-beta2[hidden] { display: none; }
+
+.aviso-beta2__text {
+    margin: 0;
+    max-width: 820px;
+    overflow-wrap: anywhere;
+}
+
+.aviso-beta2__close {
+    flex-shrink: 0;
+    min-width: 32px;
+    min-height: 32px;
+    margin: -0.35rem -0.5rem -0.35rem 0;
+    padding: 0;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: inherit;
+    font-family: inherit;
+    font-size: 1.25rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.aviso-beta2__close:hover,
+.aviso-beta2__close:focus-visible { background: rgba(15, 110, 86, 0.1); }

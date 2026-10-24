@@ -207,6 +207,14 @@
         </div>
     </nav>
 
+    <!-- #45 Aviso Beta 2 — full width, outside .container. Hidden until
+         login by body.auth-pending like the rest of the page; dismiss
+         logic lives in static/aviso-beta2.js (CSP: no inline script). -->
+    <div class="aviso-beta2" id="avisoBeta2" role="note" aria-label="Aviso">
+        <p class="aviso-beta2__text">Apreciado usuario: gracias a tu retroalimentación, estamos desarrollando la siguiente versión, Beta 2. Conforme a los Términos de Servicio, Clin.IA™ puede presentar cambios, interrupciones o limitaciones.</p>
+        <button type="button" class="aviso-beta2__close" id="avisoBeta2Close" aria-label="Cerrar aviso">×</button>
+    </div>
+
     <div class="container">
         <!-- Header -->
         <header class="header">
@@ -215,7 +223,7 @@
             </div>
             <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
-            <div class="version-badge">Beta v0.6.4</div>
+            <div class="version-badge">Beta v0.7.0</div>
         </header>
 
         <!-- Main Content -->
@@ -779,7 +787,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA™ Beta v0.6.4 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.7.0 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
@@ -881,5 +889,6 @@
     <script src="{{ url_for('static', filename='utils.js') }}"></script>
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
+    <script src="{{ url_for('static', filename='aviso-beta2.js') }}"></script>
 </body>
 </html>
