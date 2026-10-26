@@ -8,6 +8,16 @@ FROM python:3.11-slim
 WORKDIR /app
 
 COPY requirements.txt .
+
+# #82 (eMudhra CA compromise): the compromised intermediates must be
+# distrusted in BOTH trust stores — the system store (urllib → all Supabase
+# REST/Storage/Auth/JWKS calls) and certifi (requests/httpx → ICD-11,
+# Resend, Gemini, AssemblyAI; floor set in requirements.txt). Placed after
+# the requirements COPY so this layer is rebuilt, not reused from cache,
+# whenever requirements.txt changes.
+RUN apt-get update && apt-get install -y --only-upgrade ca-certificates openssl \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .

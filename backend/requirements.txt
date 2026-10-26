@@ -10,6 +10,8 @@ Pillow==12.2.0
 resend==2.0.0
 requests==2.32.3
 urllib3==2.2.3
+# #82: floor, not a pin — eMudhra intermediates distrusted from 2026.10.19
+certifi>=2026.10.19
 PyJWT==2.10.1
 cryptography==42.0.5
 Flask-Limiter==4.1.1

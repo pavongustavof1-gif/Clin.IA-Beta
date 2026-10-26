@@ -1,6 +1,6 @@
 # Clin.IA — guide for Claude Code
 
-Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.7.0-beta); **Beta 2** is being planned/built.
+Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.7.1-beta); **Beta 2** is being planned/built.
 
 **Source of truth for Beta 2 scope and strategy:** `ClinIA_Hoja_de_Ruta_Beta2_v<latest>.md` in iCloud: `~/Library/Mobile Documents/com~apple~CloudDocs/AI/TAS/ClinIA/Roadmap/Beta 2/` (not in this repo; highest version number wins; items are numbered `#45…`). Read it before starting any Beta 2 work.
 
