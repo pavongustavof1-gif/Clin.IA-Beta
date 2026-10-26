@@ -11,3 +11,6 @@ __pycache__/
 *.pyo
 .DS_Store
 venv/
+
+# Local working copies of roadmap documents — never committed
+Claude outputs/
