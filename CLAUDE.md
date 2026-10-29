@@ -1,6 +1,6 @@
 # Clin.IA — guide for Claude Code
 
-Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.7.1-beta); **Beta 2** is being planned/built.
+Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.7.2-beta); **Beta 2** is being planned/built.
 
 **Source of truth for Beta 2 scope and strategy:** `ClinIA_Hoja_de_Ruta_Beta2_v<latest>.md` in iCloud: `~/Library/Mobile Documents/com~apple~CloudDocs/AI/TAS/ClinIA/Roadmap/Beta 2/` (not in this repo; highest version number wins; items are numbered `#45…`). Read it before starting any Beta 2 work.
 
@@ -13,11 +13,11 @@ Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consul
 
 ## Run the tests
 ```
-cd backend && venv/bin/python -m pytest tests/ -q      # 168 tests, offline, ~0.2 s
+cd backend && venv/bin/python -m pytest tests/ -q      # 257 tests, offline, ~0.4 s
 ```
 - Fully offline: `conftest.py` mocks Supabase/AssemblyAI/Gemini/Resend and JWT verification. No real credentials exist or are needed in this sandbox.
 - **`tests/route_inventory.py` lists every route and its auth policy; a test fails if a route exists without an entry.** Adding a route means adding an inventory entry (and cross-clinic/auth cases in `test_route_authorization.py`).
-- JS has no test runner. `backend/tests/frontend/medicamentos_roundtrip.html` loads the real `static/app.js` against a stand-in DOM; serve `backend/` over HTTP (e.g. `python3 -m http.server`) and open it. It can't run from `file://`. Wiring JS tests into CI is roadmap item #49.
+- JS has no test runner. `backend/tests/frontend/medicamentos_roundtrip.html` and `auxiliar_redirect.html` load the real `static/app.js` against a stand-in DOM/stubbed fetch; serve `backend/` over HTTP (e.g. `python3 -m http.server`) and open them. They can't run from `file://`. Wiring JS tests into CI is roadmap item #49.
 - Local dev server without real credentials: set dummy values for `SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY, GEMINI_API_KEY, ASSEMBLYAI_API_KEY, FLASK_SECRET_KEY, RESEND_API_KEY` (see the CI workflow) and run `venv/bin/python app.py`. Real login/Storage/email can only be tested in the user's own environment.
 
 ## Working rules (user's explicit preferences)
@@ -33,7 +33,8 @@ cd backend && venv/bin/python -m pytest tests/ -q      # 168 tests, offline, ~0.
 
 ## Codebase gotchas
 - **`service_role` GRANTs:** Supabase PostgREST needs explicit GRANTs. Before a new table, or the first use of a new operation type (SELECT/INSERT/UPDATE/DELETE) on an existing table, check grants and hand the user the exact `GRANT` SQL. From 30 Oct 2026 Supabase stops auto-exposing new tables: every new table needs `GRANT SELECT, INSERT, UPDATE, DELETE ON public.<table> TO service_role` (never anon/authenticated; serial columns also need the sequence GRANT; missing grants fail with 42501). A past DELETE route failed 100% in prod this way.
-- **Authorization conventions:** every data route uses `@require_auth` (+ `@require_admin` for admin). Out-of-scope or missing resources return a uniform **404, never 403** (a distinguishable 403 leaks existence). Read scope = owner OR same clinic (`caller_can_read_session`); write/sign scope = owner only (`caller_can_addend_session`). Admin routes are limited to the admin's own clinic with server-built filters.
+- **Roles (`usuarios.rol`):** `admin` = clinic admin who is also a doctor (records notes, admin panel); `medico` = doctor; `auxiliar` = clinic admin who is NOT a doctor (admin panel only, no cédula, never records/confirms/reads notes as a doctor — `/` redirects them to `/admin`). Never compare rol strings: use `auth.is_admin_role` (admin, auxiliar) / `auth.is_medico_role` (admin, medico), and `isAdminRole`/`isMedicoRole` in `utils.js`. `POST /api/admin/usuarios` creates only `medico` or `auxiliar`, never `admin`. A clinic must keep ≥1 active admin/auxiliar (`_would_leave_clinic_without_admin`).
+- **Authorization conventions:** every data route uses `@require_auth` (+ `@require_admin` for admin routes, or `@require_medico` for routes that record, confirm or read the caller's notes — an auxiliar gets 404 there). Out-of-scope or missing resources return a uniform **404, never 403** (a distinguishable 403 leaks existence; `require_admin`'s 403 predates this and is left as is). Read scope = owner OR same clinic (`caller_can_read_session`); write/sign scope = owner only (`caller_can_addend_session`). Admin routes are limited to the admin's own clinic with server-built filters.
 - **Single-instance assumption:** the rate limiter (`memory://`), JWKS cache, `_usuario_cache`, logo cache and startup job reaper are per-process. Correct only with one gunicorn worker/instance (current Dockerfile).
 - **Render deploys keep the old instance alive until the new one is healthy**, but jobs running on the old instance are interrupted — don't deploy with `trabajos` rows in `queued/transcribing/extracting`.
 - **CSP:** inline scripts need the per-request nonce (`g.csp_nonce`); same-origin external scripts are fine. Page config reaches static JS through `window.CLINIA_CONFIG`.
@@ -41,6 +42,7 @@ cd backend && venv/bin/python -m pytest tests/ -q      # 168 tests, offline, ~0.
 - **`llm_processor.validate_against_schema` normalizes** `informacion_paciente` and `metadata` to `{}` when Gemini omits them (it is told to omit empty fields); an extraction with no S/O/A/P content still fails on purpose.
 - **Medications textarea** joins/splits fields on `" - "` via `MEDICAMENTO_FIELD_SEPARATOR` (a bare `-` collided with "8-12 horas"); untouched medications are sent back as the original objects. The proper fix (separate fields) is roadmap #73.
 - **Consent page (PDF):** `_build_consent_page` must fit on page 1 with the note starting on page 2; headroom is only ~2.5 mm in the worst case (roadmap #58 frees space). `tests/test_pdf_consent.py` enforces it.
+- **Cédula on PDFs (#55):** `get_usuario_cedula` returns `''` for "no cédula" and `None` for "lookup failed". Every PDF path (confirm, doctor download, admin download) returns 503 "No se pudo generar el PDF. Intente de nuevo." on `None` and never renders; confirm does the lookup before any write, so the note stays `pending_review`. Addendum authors' cédulas are looked up at render time from `author_usuario_id` (never written to `addenda`).
 - **Test pitfall:** `conftest.py` patches `app_module.pdf_generator.generate_pdf`; to exercise the real PDF code instantiate `pdf_generator.PDFGenerator()` directly.
 - New/independent UI or tables get their own scoped CSS/logic, not edits to shared rules.
 - Prefer ref-based element clicks (`read_page`/`find`) over screenshot pixel coordinates when driving the Browser tool.

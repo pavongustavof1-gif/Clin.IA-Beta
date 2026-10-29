@@ -285,12 +285,55 @@ def require_auth(f):
     return decorated
 
 
+# ─────────────────────────────────────────────
+# Roles (usuarios.rol). Two independent capabilities, so every gate
+# asks one of these two questions instead of comparing rol strings:
+#   admin    — clinic admin who is also a doctor: both capabilities
+#   medico   — doctor: records, confirms and reads notes
+#   auxiliar — clinic admin who is NOT a doctor: admin panel only, no
+#              cédula, never records, confirms or reads notes as an author
+# ─────────────────────────────────────────────
+ROL_ADMIN    = 'admin'
+ROL_MEDICO   = 'medico'
+ROL_AUXILIAR = 'auxiliar'
+
+ADMIN_ROLES  = frozenset({ROL_ADMIN, ROL_AUXILIAR})
+MEDICO_ROLES = frozenset({ROL_ADMIN, ROL_MEDICO})
+
+
+def is_admin_role(rol) -> bool:
+    """True for roles that may use the clinic admin panel and /api/admin/*."""
+    return rol in ADMIN_ROLES
+
+
+def is_medico_role(rol) -> bool:
+    """True for roles that may record, confirm and read their own notes."""
+    return rol in MEDICO_ROLES
+
+
 def require_admin(f):
-    """Decorator that gates on g.usuario['rol'] == 'admin'. Stack after @require_auth."""
+    """Decorator that gates on is_admin_role(g.usuario['rol']). Stack after @require_auth."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        if g.usuario.get('rol') != 'admin':
+        if not is_admin_role(g.usuario.get('rol')):
             return jsonify({"error": "No autorizado"}), 403
+        return f(*args, **kwargs)
+
+    return decorated
+
+
+def require_medico(f):
+    """
+    Decorator that gates on is_medico_role(g.usuario['rol']). Stack after
+    @require_auth. An auxiliar gets 404, not 403 — same uniform-miss
+    convention as every out-of-scope resource here, so the response
+    never confirms a doctor-only route exists for a non-doctor account.
+    (require_admin's 403 predates that convention and is left as is.)
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not is_medico_role(g.usuario.get('rol')):
+            return jsonify({"error": "No encontrado"}), 404
         return f(*args, **kwargs)
 
     return decorated

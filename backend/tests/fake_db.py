@@ -12,6 +12,7 @@
 # understand, extend _match_row rather than special-casing the route.
 
 from __future__ import annotations
+import re
 import urllib.parse
 
 
@@ -63,6 +64,14 @@ class FakeDB:
             inner = value.strip('()')
             allowed = [x for x in inner.split(',') if x]
             return str(actual) in allowed
+        if op == 'ilike':
+            # Only the exact-match use pg_ilike_val produces (the
+            # admin_create_usuario duplicate-email check): LIKE escapes
+            # undone, no wildcards — an unescaped % or _ fails loud.
+            if re.search(r'(?<!\\)[%_]', value):
+                raise NotImplementedError(f"FakeDB: ilike wildcards not supported ('{value}')")
+            literal = re.sub(r'\\(.)', r'\1', value)
+            return actual is not None and str(actual).lower() == literal.lower()
         # Unrecognized operator — fail loud rather than silently match
         # everything, which would make a test pass for the wrong reason.
         raise NotImplementedError(f"FakeDB: unhandled PostgREST operator '{op}' on field '{field}'")

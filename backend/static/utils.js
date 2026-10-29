@@ -17,6 +17,26 @@ function escapeHtml(value) {
     }[c]));
 }
 
+// Roles (usuarios.rol), mirroring auth.py's is_admin_role/is_medico_role
+// so no page compares rol strings on its own. UI hints only — the real
+// boundary is require_admin/require_medico on the server.
+//   admin    — clinic admin who is also a doctor
+//   medico   — doctor
+//   auxiliar — clinic admin who is not a doctor (no recording, no notes)
+const ROL_LABELS = {
+    admin:    'Administrador y médico',
+    medico:   'Médico',
+    auxiliar: 'Auxiliar administrativo',
+};
+
+function isAdminRole(rol) {
+    return rol === 'admin' || rol === 'auxiliar';
+}
+
+function isMedicoRole(rol) {
+    return rol === 'admin' || rol === 'medico';
+}
+
 // Guards a URL before it's assigned to href/src — blocks javascript: and
 // other script-executing schemes. Allows relative URLs (no scheme) and
 // http(s). Returns '#' for anything else so a bad value can never execute,

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/auxiliar_redirect.html
+
+  Onboarding Review A: an 'auxiliar' (clinic admin who is not a doctor)
+  landing on / must be sent to /admin, and the recording UI must never
+  become visible on the way (body keeps class auth-pending until the
+  page is gone). 'admin' and 'medico' must stay on /.
+
+  Loads the REAL static/utils.js + static/app.js (unmodified) inside one
+  iframe per rol. In each iframe, only the boundary app.js talks to is
+  stubbed: supabaseClient.auth.getSession (a fake session), getAuthHeaders,
+  handleSessionExpired, and fetch — /api/session-check answers with the
+  iframe's ?rol=; every other call gets a 404 so init() has nothing to load.
+
+  How to run (same as medicamentos_roundtrip.html):
+    1. Serve backend/ over HTTP, e.g. `cd backend && python3 -m http.server 8765`.
+    2. Open http://localhost:8765/tests/frontend/auxiliar_redirect.html
+    3. Read the on-page summary (or console): each rol prints PASS/FAIL.
+       The auxiliar iframe ends on /admin, which a static server 404s —
+       expected; only the iframe's pathname is checked.
+
+  No PHI: no patient data at all.
+-->
+<html>
+<head><meta charset="utf-8"><title>auxiliar redirect</title></head>
+<body class="auth-pending">
+<script>
+const params = new URLSearchParams(location.search);
+const ROL = params.get('rol');
+
+if (ROL) {
+    // ── Child: the page app.js thinks it's running on ────────────────
+    window.supabaseClient = {
+        auth: { getSession: async () => ({ data: { session: { access_token: 'fake' } } }) },
+    };
+    window.getAuthHeaders = async () => ({ Authorization: 'Bearer fake' });
+    window.handleSessionExpired = () => parent.postMessage({ rol: ROL, event: 'expired' }, '*');
+    window.fetch = async (url) => {
+        const json = (status, body) => new Response(JSON.stringify(body), {
+            status, headers: { 'Content-Type': 'application/json' },
+        });
+        if (String(url).endsWith('/api/session-check')) {
+            return json(200, { valid: true, rol: ROL, clinica_id: 'clinic-fixture' });
+        }
+        return json(404, { error: 'No encontrado' });
+    };
+    // Recorded as the page unloads (i.e. at the redirect), so it captures
+    // whether the recording UI was ever un-hidden before leaving.
+    window.addEventListener('pagehide', () => {
+        parent.postMessage({ rol: ROL, event: 'left', authPending: document.body.classList.contains('auth-pending') }, '*');
+    });
+    // Cache-busted, so an edit to app.js is always what gets tested.
+    const v = Date.now();
+    document.write(`<script src="/static/utils.js?v=${v}"><\/script><script src="/static/app.js?v=${v}"><\/script>`);
+} else {
+    // ── Runner ───────────────────────────────────────────────────────
+    document.body.classList.remove('auth-pending');
+    const CASES = [
+        { rol: 'auxiliar', expectRedirect: true },
+        { rol: 'admin',    expectRedirect: false },
+        { rol: 'medico',   expectRedirect: false },
+    ];
+    const left = {};
+    window.addEventListener('message', (e) => {
+        if (e.data && e.data.event === 'left') left[e.data.rol] = e.data;
+    });
+    const out = document.createElement('pre');
+    document.body.appendChild(out);
+    const results = [];
+    CASES.forEach(c => {
+        const frame = document.createElement('iframe');
+        frame.src = `${location.pathname}?rol=${c.rol}`;
+        frame.width = 200; frame.height = 60;
+        document.body.appendChild(frame);
+        c.frame = frame;
+    });
+    setTimeout(() => {
+        CASES.forEach(c => {
+            let pathname;
+            try { pathname = c.frame.contentWindow.location.pathname; } catch (e) { pathname = '(unreadable)'; }
+            const redirected = pathname === '/admin';
+            let ok = redirected === c.expectRedirect;
+            let detail = `ended on ${pathname}`;
+            if (c.expectRedirect) {
+                const hiddenAtExit = left[c.rol] && left[c.rol].authPending === true;
+                ok = ok && hiddenAtExit;
+                detail += `, recording UI hidden until redirect: ${hiddenAtExit}`;
+            }
+            results.push({ rol: c.rol, ok, detail });
+        });
+        const allOk = results.every(r => r.ok);
+        out.textContent = results.map(r => `${r.ok ? 'PASS' : 'FAIL'}  ${r.rol}: ${r.detail}`).join('\n')
+            + `\n\n${allOk ? 'ALL PASS' : 'SOME FAILED'}`;
+        console.log(out.textContent);
+        window.__RESULT__ = { allOk, results };
+    }, 2500);
+}
+</script>
+</body>
+</html>

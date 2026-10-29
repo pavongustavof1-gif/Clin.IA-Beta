@@ -181,6 +181,7 @@ CROSS_CLINIC_CASES = [
     ('GET',  '/api/pending-sessions/<session_id>',       {'session_id': SESSION_PENDING_A},   DOCTOR_B1, 404),
     ('DELETE', '/api/pending-sessions/<session_id>',     {'session_id': SESSION_PENDING_A},   DOCTOR_B1, 404),
     ('PATCH', '/api/admin/usuarios/<usuario_id>/activo', {'usuario_id': DOCTOR_A1},           ADMIN_B, 404),
+    ('GET',  '/api/admin/session/<session_id>',          {'session_id': SESSION_CONFIRMED_A}, ADMIN_B, 404),
     ('GET',  '/api/admin/session/<session_id>/pdf',      {'session_id': SESSION_CONFIRMED_A}, ADMIN_B, 404),
     ('POST', '/api/admin/session/<session_id>/addendum', {'session_id': SESSION_CONFIRMED_A}, ADMIN_B, 404),
     ('POST', '/api/admin/session/<session_id>/cancel',   {'session_id': SESSION_CONFIRMED_A}, ADMIN_B, 404),

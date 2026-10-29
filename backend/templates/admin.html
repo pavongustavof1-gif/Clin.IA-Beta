@@ -288,12 +288,25 @@
                         <input id="newDoctorEmail" class="review-input" type="email" autocomplete="off">
                     </div>
                     <div>
+                        <label class="review-label" for="newDoctorRol">Rol</label>
+                        <select id="newDoctorRol" class="review-input">
+                            <option value="medico" selected>Médico</option>
+                            <option value="auxiliar">Auxiliar administrativo (no es médico)</option>
+                        </select>
+                    </div>
+                    <!-- Médico-only fields: hidden, and never sent, for an auxiliar
+                         (admin.js applyNewDoctorRol). The server enforces the same. -->
+                    <div class="medico-only-field">
                         <label class="review-label" for="newDoctorEspecialidad">Especialidad</label>
                         <input id="newDoctorEspecialidad" class="review-input" type="text" autocomplete="off">
                     </div>
-                    <div>
+                    <div class="medico-only-field">
                         <label class="review-label" for="newDoctorCedula">Cédula profesional</label>
                         <input id="newDoctorCedula" class="review-input" type="text" autocomplete="off">
+                    </div>
+                    <div class="medico-only-field">
+                        <label class="review-label" for="newDoctorUniversidad">Universidad (opcional)</label>
+                        <input id="newDoctorUniversidad" class="review-input" type="text" autocomplete="off" maxlength="160">
                     </div>
                 </div>
                 <div id="addDoctorError" style="display: none; color: #c0392b; font-size: 0.85rem; margin-top: 0.75rem;"></div>

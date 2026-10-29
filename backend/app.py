@@ -10,7 +10,10 @@ from llm_processor import LLMProcessor
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import send_pdf_email, send_invite_email
-from auth import require_auth, require_admin, invalidate_usuario_cache
+from auth import (
+    require_auth, require_admin, require_medico, invalidate_usuario_cache,
+    is_admin_role, ROL_MEDICO, ROL_AUXILIAR, ADMIN_ROLES,
+)
 from pg_utils import pg_val, pg_path, pg_ilike_val
 from concurrent.futures import ThreadPoolExecutor
 import os
@@ -459,6 +462,95 @@ def _sb_insert_usuario(body: dict) -> dict | None:
     except Exception as e:
         logger.error(f"DB: Could not insert usuarios row: {e}")
         return None
+
+
+def _sb_insert_clinica(nombre: str, direccion: str, telefono: str) -> dict | None:
+    """
+    Insert a clinicas row and return it (Prefer: return=representation),
+    or None on error. color_primario/logo_url are left to their column
+    defaults — get_clinica_context already renders absent values as the
+    house color and no logo. Groundwork for superadmin approval (#53);
+    no route calls it yet. Needs INSERT on clinicas for service_role.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/clinicas'
+    payload = json.dumps({
+        'nombre':    nombre,
+        'direccion': direccion,
+        'telefono':  telefono,
+    }, ensure_ascii=False).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers=_sb_headers(extra={'Prefer': 'return=representation'}),
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            rows = json.loads(resp.read())
+        return rows[0] if rows else None
+    except Exception as e:
+        logger.error(f"DB: Could not insert clinicas row: {e}")
+        return None
+
+
+class ProvisioningError(Exception):
+    """
+    Raised by _provision_usuario. `stage` says which side failed, because
+    the two need different handling by the caller:
+      'invite' — generate_link failed; nothing was created anywhere.
+      'insert' — the auth user EXISTS but has no usuarios row (orphan,
+                 already logged here for manual cleanup in Supabase).
+    """
+    def __init__(self, stage: str):
+        super().__init__(stage)
+        self.stage = stage
+
+
+def _provision_usuario(nombre: str, email: str, rol: str, clinica_id: str,
+                       cedula: str = None, especialidad: str = None,
+                       universidad: str = None) -> tuple[dict, str]:
+    """
+    Create one account: the Supabase auth identity + invite link, then
+    its usuarios row (activo=True). Returns (usuarios_row, action_link);
+    raises ProvisioningError otherwise. Does NOT validate input, check
+    for a duplicate email, or send the invite — callers own those, since
+    each caller has its own rules for who may create which rol where
+    (admin_create_usuario: never 'admin', always the caller's clinic).
+
+    Optional fields left as None are omitted from the insert rather than
+    sent as null, so a médico's payload is exactly what it was before
+    this helper existed and an auxiliar's simply has no cédula/especialidad.
+    """
+    try:
+        user_id, action_link = _sb_generate_invite_link(email)
+    except Exception as e:
+        logger.error(f"Admin: generate_link failed for {email}: {e}")
+        raise ProvisioningError('invite')
+
+    body = {
+        'id':         user_id,
+        'nombre':     nombre,
+        'email':      email,
+        'rol':        rol,
+        'clinica_id': clinica_id,
+        'activo':     True,
+    }
+    for key, value in (('cedula', cedula), ('especialidad', especialidad),
+                       ('universidad', universidad)):
+        if value is not None:
+            body[key] = value
+
+    nuevo_usuario = _sb_insert_usuario(body)
+    if nuevo_usuario is None:
+        logger.error(
+            f"Admin: ORPHANED AUTH USER — generate_link succeeded for {email} "
+            f"(auth user_id={user_id}) but the usuarios insert failed. This "
+            f"auth user now exists in Supabase with no matching usuarios row "
+            f"and needs manual cleanup in the Supabase dashboard (Authentication "
+            f"> Users) before this email can be invited again."
+        )
+        raise ProvisioningError('insert')
+
+    return nuevo_usuario, action_link
 
 
 def _sb_patch_job(job_id: str, body: dict) -> None:
@@ -936,12 +1028,68 @@ def _invalidate_logo_cache(logo_storage_path: str) -> None:
         _logo_cache.pop(logo_storage_path, None)
 
 
-def get_usuario_cedula(usuario_id: str) -> str:
-    """Fetch doctor's cédula professional from Supabase. Returns empty string on error."""
+def get_usuario_cedula(usuario_id: str) -> str | None:
+    """
+    Fetch a doctor's cédula profesional for the PDF (#55). Two outcomes
+    that used to be indistinguishable are now kept apart:
+      ''   — the lookup worked and there is no cédula (null/empty column,
+             or no usuarios row: an auxiliar, a hand-seeded account, a
+             deleted author on a historical note). The PDF renders
+             without the "Céd. Prof." line, as it always has.
+      None — the lookup itself FAILED (Supabase error/timeout). Callers
+             must not render a PDF at all: a signed note silently missing
+             a cédula that does exist is worse than "intente de nuevo".
+    """
     rows = _sb_get(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}&select=cedula&limit=1')
+    if rows is None:
+        return None
     if rows:
         return rows[0].get('cedula') or ''
     return ''
+
+
+def get_usuarios_cedulas(usuario_ids: list) -> dict | None:
+    """
+    Batch cédula lookup for addendum authors (#55) — one query for N ids,
+    same in.() discipline as get_usuarios_nombres. Returns {usuario_id:
+    cedula} with '' for an id that has no cédula or no row; None if the
+    lookup itself failed (same fail-closed contract as get_usuario_cedula).
+    """
+    ids = list({uid for uid in usuario_ids if uid})
+    if not ids:
+        return {}
+    id_list = ','.join(pg_val(uid) for uid in ids)
+    rows = _sb_get(f'/rest/v1/usuarios?id=in.({id_list})&select=id,cedula')
+    if rows is None:
+        return None
+    found = {row['id']: (row.get('cedula') or '') for row in rows}
+    return {uid: found.get(uid, '') for uid in ids}
+
+
+PDF_LOOKUP_FAILED_ERROR = 'No se pudo generar el PDF. Intente de nuevo.'
+
+
+def _adenda_with_author_cedulas(adenda: list) -> list | None:
+    """
+    Copy of a session's addenda with each entry's author cédula attached
+    under 'author_cedula', for the PDF only — never written back to
+    sesiones.addenda. Looked up at render time from author_usuario_id
+    (the field admin_add_addendum already stores) rather than snapshotted
+    at write time, the same way the note author's cédula is resolved at
+    render time — so existing addenda get it too, with no schema change.
+    Entries without author_usuario_id (none should exist; the field has
+    been written since ADM-1 Stage F) simply get no cédula. Returns None
+    if the lookup failed, so the caller fails closed like the note cédula.
+    """
+    if not adenda:
+        return []
+    cedulas = get_usuarios_cedulas([e.get('author_usuario_id') for e in adenda])
+    if cedulas is None:
+        return None
+    return [
+        {**e, 'author_cedula': cedulas.get(e.get('author_usuario_id'), '')}
+        for e in adenda
+    ]
 
 
 def get_usuario_nombre(usuario_id: str) -> str:
@@ -1106,12 +1254,13 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.7.1-beta',
+        'version': '0.7.2-beta',
         'timestamp': datetime.now().isoformat()
     })
 
 @app.route('/api/process-audio', methods=['POST'])
 @require_auth
+@require_medico
 @limiter.limit("10 per minute;100 per hour")  # AI-spend: real AssemblyAI/Gemini cost per call (via _run_job)
 def process_audio():
     """
@@ -1201,6 +1350,7 @@ def process_audio():
 
 @app.route('/api/job-status/<job_id>', methods=['GET'])
 @require_auth
+@require_medico
 def job_status(job_id):
     """
     Poll processing status for a background job. Polled every ~2-8s for
@@ -1257,6 +1407,7 @@ def job_status(job_id):
 
 @app.route('/api/confirm-and-generate', methods=['POST'])
 @require_auth
+@require_medico
 # Not itself an AI-spend call (verified: no Gemini/AssemblyAI/ICD-11 call
 # in this function — the LLM/transcription cost is in process_audio's
 # background job) but shares process_audio's limit since it's the natural
@@ -1337,13 +1488,26 @@ def confirm_and_generate():
         # case before this removal).
         doc_info = None
 
+        # #55: resolve the signing doctor's cédula BEFORE anything below
+        # writes — the PDF render, save_session's status='confirmed', the
+        # transcript/trabajos deletes and the email all come after this.
+        # A failed lookup (None, not '') returns here with the note still
+        # pending_review and untouched, so the doctor just presses Confirmar
+        # again; the frontend already restores the review form on any
+        # non-2xx. Only needed when a PDF is requested at all.
+        cedula = ''
+        if create_pdf:
+            cedula = get_usuario_cedula(g.usuario['usuario_id'])
+            if cedula is None:
+                logger.warning(f"PDF: cédula lookup failed for session {session_id} — note left unconfirmed")
+                return jsonify({'error': PDF_LOOKUP_FAILED_ERROR, 'error_code': 'PDF_LOOKUP_FAILED'}), 503
+
         # PDF generation
         pdf_bytes = None
         if create_pdf:
             logger.info("Orchestrator: PHASE C2 — PDF Generation")
             try:
                 clinica  = get_clinica_context(g.usuario['clinica_id'])
-                cedula   = get_usuario_cedula(g.usuario['usuario_id'])
                 doctor_info = {
                     'nombre':            g.usuario.get('nombre', ''),
                     'cedula':            cedula,
@@ -1459,6 +1623,7 @@ def confirm_and_generate():
 
 @app.route('/api/session/<session_id>', methods=['GET'])
 @require_auth
+@require_medico
 def get_session(session_id):
     """Retrieve session data by ID. Owner-or-clinic scoped — see
     caller_can_read_session. 404 on any miss (not-found or out-of-scope),
@@ -1480,6 +1645,7 @@ def get_session(session_id):
 
 @app.route('/api/export-json/<session_id>', methods=['GET'])
 @require_auth
+@require_medico
 def export_json(session_id):
     """Export structured data as downloadable JSON. Owner-or-clinic scoped —
     same rule as get_session, since this is the same data via another door."""
@@ -1510,6 +1676,7 @@ def export_json(session_id):
 
 @app.route('/api/download-pdf/<session_id>', methods=['GET'])
 @require_auth
+@require_medico
 def download_pdf(session_id):
     """
     Regenerate and stream PDF for a confirmed session. Accessible if the
@@ -1544,8 +1711,14 @@ def download_pdf(session_id):
         # downloading doctor — matches the Stage E admin-route convention.
         # A covering doctor downloading a colleague's note should get a
         # PDF correctly attributed to whoever actually saw that patient.
+        # #55: a failed lookup never renders — see get_usuario_cedula.
+        cedula = get_usuario_cedula(autor_usuario_id)
+        adenda = _adenda_with_author_cedulas(row.get('addenda') or [])
+        if cedula is None or adenda is None:
+            logger.warning(f"PDF: cédula lookup failed for session {session_id} — download refused")
+            return jsonify({'error': PDF_LOOKUP_FAILED_ERROR, 'error_code': 'PDF_LOOKUP_FAILED'}), 503
+
         clinica      = get_clinica_context(g.usuario['clinica_id'])
-        cedula       = get_usuario_cedula(autor_usuario_id)
         doctor_info  = {
             'nombre':          get_usuario_nombre(autor_usuario_id),
             'cedula':          cedula,
@@ -1560,7 +1733,7 @@ def download_pdf(session_id):
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
-            adenda=row.get('addenda') or [],
+            adenda=adenda,
             status=row.get('status'),
             cancelled_at=row.get('cancelled_at'),
             cancellation_reason=row.get('cancellation_reason'),
@@ -1592,6 +1765,7 @@ def request_entity_too_large(error):
 
 @app.route('/api/patient-history', methods=['GET'])
 @require_auth
+@require_medico
 def patient_history_list():
     """
     GET /api/patient-history?curp=<curp>&scope=mine|clinica
@@ -1661,6 +1835,7 @@ def patient_history_list():
 
 @app.route('/api/patient-history/<session_id>', methods=['GET'])
 @require_auth
+@require_medico
 def patient_history_detail(session_id):
     """
     GET /api/patient-history/<session_id>
@@ -1685,28 +1860,38 @@ def patient_history_detail(session_id):
     if not (is_owner or is_clinic):
         return jsonify({'error': 'Sesión no encontrada'}), 404
 
-    # Log the read — fire-and-forget, never fails the request. Logs the
-    # READER's usuario_id regardless of which branch (owner/clinic) authorized it.
+    return jsonify(_session_detail_response(row, usuario_id)), 200
+
+
+def _session_detail_response(row: dict, reader_usuario_id: str) -> dict:
+    """
+    Shared body of the two session-detail reads — patient_history_detail
+    (doctors) and admin_session_detail (admin panel) — once the caller's
+    route has already scope-checked the row. Logs the read (fire-and-
+    forget, never fails the request) under the READER's usuario_id, and
+    names the author when the reader isn't them.
+    """
+    session_id = row['session_id']
     try:
-        _sb_log_lectura(session_id, usuario_id)
+        _sb_log_lectura(session_id, reader_usuario_id)
     except Exception as e:
         logger.warning(f"DB: Could not log lectura for session {session_id}: {e}")
 
     response = {
-        'session_id':      row['session_id'],
+        'session_id':      session_id,
         'timestamp':       row.get('timestamp'),
         'status':          row.get('status'),
         'structured_data': row['structured_data'],
         'addenda':         row.get('addenda') or [],
     }
-    if not is_owner:
+    if row.get('usuario_id') != reader_usuario_id:
         response['autor_nombre'] = get_usuario_nombre(row.get('usuario_id'))
-
-    return jsonify(response), 200
+    return response
 
 
 @app.route('/api/pending-sessions', methods=['GET'])
 @require_auth
+@require_medico
 def pending_sessions_list():
     """
     List the CALLER'S OWN pending_review sessions — ownership-based, not
@@ -1743,6 +1928,7 @@ def pending_sessions_list():
 
 @app.route('/api/pending-sessions/<session_id>', methods=['GET'])
 @require_auth
+@require_medico
 def pending_sessions_detail(session_id):
     """
     Full structured_data + transcript for one of the caller's own
@@ -1777,6 +1963,7 @@ def pending_sessions_detail(session_id):
 
 @app.route('/api/pending-sessions/<session_id>', methods=['DELETE'])
 @require_auth
+@require_medico
 def pending_sessions_discard(session_id):
     """
     Permanently discard one of the caller's own pending_review sessions —
@@ -1885,22 +2072,42 @@ def admin_usuarios():
 @limiter.limit("20 per hour")  # per inviting admin — email-bombing resistance
 def admin_create_usuario():
     """
-    Invite a new doctor into the admin's own clinic. Creates the Supabase
-    auth identity via generate_link (invite type), inserts the usuarios
-    row, and emails the invite link via Resend.
+    Invite a new doctor or auxiliar into the admin's own clinic. Creates
+    the Supabase auth identity via generate_link (invite type), inserts
+    the usuarios row (both via _provision_usuario), and emails the invite
+    link via Resend.
 
-    rol is ALWAYS forced to 'medico' and clinica_id ALWAYS taken from
-    g.usuario — neither is ever read from the request body, so a tampered
-    request cannot create an admin or a cross-clinic user.
+    rol is 'medico' (the default, so older clients that send no rol keep
+    working) or 'auxiliar' — anything else, 'admin' included, is a 400:
+    this route can never create an admin. clinica_id is ALWAYS taken from
+    g.usuario, never the request body, so a tampered request cannot
+    create a cross-clinic user.
+
+    médico: cédula and especialidad required, universidad optional.
+    auxiliar: none of the three may be sent — an auxiliar is not a doctor
+    and must never end up with a cédula a PDF could print.
     """
+    MAX_UNIVERSIDAD_LENGTH = 160
+
     data = request.get_json(silent=True) or {}
     nombre       = (data.get('nombre') or '').strip()
     email        = (data.get('email') or '').strip().lower()
+    rol          = data.get('rol') or ROL_MEDICO
+    rol          = rol.strip().lower() if isinstance(rol, str) else None
     especialidad = (data.get('especialidad') or '').strip()
     cedula       = (data.get('cedula') or '').strip()
+    universidad  = (data.get('universidad') or '').strip()
 
-    if not nombre or not email or not especialidad or not cedula:
+    if rol not in (ROL_MEDICO, ROL_AUXILIAR):
+        return jsonify({'error': 'Rol inválido'}), 400
+    if not nombre or not email:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+    if rol == ROL_MEDICO and (not especialidad or not cedula):
+        return jsonify({'error': 'Todos los campos son obligatorios'}), 400
+    if rol == ROL_AUXILIAR and (especialidad or cedula or universidad):
+        return jsonify({'error': 'Un auxiliar no lleva cédula, especialidad ni universidad'}), 400
+    if len(universidad) > MAX_UNIVERSIDAD_LENGTH:
+        return jsonify({'error': f'La universidad no puede exceder {MAX_UNIVERSIDAD_LENGTH} caracteres'}), 400
     if '@' not in email or '.' not in email.split('@')[-1]:
         return jsonify({'error': 'Correo electrónico inválido'}), 400
 
@@ -1926,32 +2133,20 @@ def admin_create_usuario():
     if existing:
         return jsonify({'error': 'Este correo ya está registrado'}), 409
 
-    # Step (a): create the auth identity + invite link
+    # Steps (a)+(c): auth identity + invite link, then the usuarios row.
+    # Orphan logging for an insert failure lives in _provision_usuario.
     try:
-        user_id, action_link = _sb_generate_invite_link(email)
-    except Exception as e:
-        logger.error(f"Admin: generate_link failed for {email}: {e}")
-        return jsonify({'error': 'No se pudo crear la invitación. Intente de nuevo.'}), 500
-
-    # Step (c): insert the usuarios row
-    nuevo_usuario = _sb_insert_usuario({
-        'id':           user_id,
-        'nombre':       nombre,
-        'email':        email,
-        'especialidad': especialidad,
-        'cedula':       cedula,
-        'rol':          'medico',
-        'clinica_id':   clinica_id,
-        'activo':       True,
-    })
-    if nuevo_usuario is None:
-        logger.error(
-            f"Admin: ORPHANED AUTH USER — generate_link succeeded for {email} "
-            f"(auth user_id={user_id}) but the usuarios insert failed. This "
-            f"auth user now exists in Supabase with no matching usuarios row "
-            f"and needs manual cleanup in the Supabase dashboard (Authentication "
-            f"> Users) before this email can be invited again."
-        )
+        if rol == ROL_MEDICO:
+            nuevo_usuario, action_link = _provision_usuario(
+                nombre, email, rol, clinica_id,
+                cedula=cedula, especialidad=especialidad,
+                universidad=universidad or None,
+            )
+        else:
+            nuevo_usuario, action_link = _provision_usuario(nombre, email, rol, clinica_id)
+    except ProvisioningError as e:
+        if e.stage == 'invite':
+            return jsonify({'error': 'No se pudo crear la invitación. Intente de nuevo.'}), 500
         return jsonify({
             'error': (
                 'La invitación se creó en el sistema de autenticación pero no '
@@ -1971,8 +2166,9 @@ def admin_create_usuario():
         'id':           nuevo_usuario['id'],
         'nombre':       nuevo_usuario['nombre'],
         'email':        nuevo_usuario['email'],
-        'especialidad': nuevo_usuario['especialidad'],
-        'cedula':       nuevo_usuario['cedula'],
+        'especialidad': nuevo_usuario.get('especialidad'),
+        'cedula':       nuevo_usuario.get('cedula'),
+        'universidad':  nuevo_usuario.get('universidad'),
         'rol':          nuevo_usuario['rol'],
         'activo':       nuevo_usuario['activo'],
     }
@@ -1981,6 +2177,35 @@ def admin_create_usuario():
         response['warning'] = 'Doctor creado pero el correo de invitación no pudo enviarse.'
 
     return jsonify(response), 200
+
+
+LAST_ADMIN_ERROR = 'La clínica debe tener al menos un administrador activo.'
+
+
+def _would_leave_clinic_without_admin(clinica_id: str, usuario_id: str) -> bool | None:
+    """
+    Last-admin guard: True if deactivating usuario_id would leave the
+    clinic with no active admin or auxiliar — nobody left to invite,
+    reactivate or answer ARCO requests for it. None if the lookup failed
+    (callers fail closed). activo is filtered here in Python rather than
+    in the query, so the rule reads plainly: "is anyone ELSE in this
+    clinic an active admin-role user?"
+
+    Through admin_set_usuario_activo today this can only trip in a stale
+    or racing state: the caller is itself an active admin of the clinic
+    and can't target itself. It becomes the real boundary once a
+    superadmin can deactivate users from outside the clinic (#53). Code
+    check only, no DB trigger — two admins deactivating each other at
+    the same instant can both pass it; accepted for now.
+    """
+    admin_role_list = ','.join(sorted(ADMIN_ROLES))
+    admins = _sb_get(
+        f'/rest/v1/usuarios?clinica_id=eq.{pg_val(clinica_id)}'
+        f'&rol=in.({admin_role_list})&select=id,activo'
+    )
+    if admins is None:
+        return None
+    return not any(a.get('activo') is True and a.get('id') != usuario_id for a in admins)
 
 
 @app.route('/api/admin/usuarios/<usuario_id>/activo', methods=['PATCH'])
@@ -2009,12 +2234,19 @@ def admin_set_usuario_activo(usuario_id):
 
     rows = _sb_get(
         f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}'
-        f'&select=id,clinica_id&limit=1'
+        f'&select=id,clinica_id,rol&limit=1'
     )
     if not rows:
         return jsonify({'error': 'Usuario no encontrado'}), 404
     if rows[0].get('clinica_id') != g.usuario['clinica_id']:
         return jsonify({'error': 'Usuario no encontrado'}), 404
+
+    if not nuevo_activo and is_admin_role(rows[0].get('rol')):
+        sin_admin = _would_leave_clinic_without_admin(g.usuario['clinica_id'], usuario_id)
+        if sin_admin is None:
+            return jsonify({'error': 'No se pudo verificar los administradores de la clínica. Intente de nuevo.'}), 500
+        if sin_admin:
+            return jsonify({'error': LAST_ADMIN_ERROR}), 409
 
     # Layer 1: Supabase ban/unban
     try:
@@ -2317,6 +2549,34 @@ def admin_sessions():
     return jsonify({'sessions': sessions, 'has_more': has_more}), 200
 
 
+@app.route('/api/admin/session/<session_id>', methods=['GET'])
+@require_auth
+@require_admin
+def admin_session_detail(session_id):
+    """
+    Read-only detail of any session in the admin's own clinic, for the
+    admin panel's session viewer (ARCO search → open a note). Same body
+    and same lecturas_sesion logging as GET /api/patient-history/<id>,
+    which the admin panel used to call directly — that route is now
+    doctor-only (@require_medico), and an auxiliar admin, who is not a
+    doctor, still needs to open notes here to answer ARCO requests.
+    """
+    rows = _sb_get(
+        f'/rest/v1/sesiones'
+        f'?session_id=eq.{pg_val(session_id)}'
+        f'&select=session_id,usuario_id,clinica_id,timestamp,status,structured_data,addenda'
+        f'&limit=1'
+    )
+    if not rows:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    row = rows[0]
+    if row.get('clinica_id') != g.usuario['clinica_id']:
+        return jsonify({'error': 'Sesión no encontrada'}), 404
+
+    return jsonify(_session_detail_response(row, g.usuario['usuario_id'])), 200
+
+
 @app.route('/api/admin/session/<session_id>/pdf', methods=['GET'])
 @require_auth
 @require_admin
@@ -2348,8 +2608,14 @@ def admin_download_pdf(session_id):
             return jsonify({'error': 'Datos de sesión no disponibles'}), 404
 
         autor_usuario_id = row.get('usuario_id')
+        # #55: a failed lookup never renders — see get_usuario_cedula.
+        cedula = get_usuario_cedula(autor_usuario_id)
+        adenda = _adenda_with_author_cedulas(row.get('addenda') or [])
+        if cedula is None or adenda is None:
+            logger.warning(f"PDF: cédula lookup failed for session {session_id} — admin download refused")
+            return jsonify({'error': PDF_LOOKUP_FAILED_ERROR, 'error_code': 'PDF_LOOKUP_FAILED'}), 503
+
         clinica      = get_clinica_context(row.get('clinica_id'))
-        cedula       = get_usuario_cedula(autor_usuario_id)
         logo_bytes   = fetch_clinica_logo_bytes(clinica['logo_url'])
         doctor_info  = {
             'nombre':            get_usuario_nombre(autor_usuario_id),
@@ -2364,7 +2630,7 @@ def admin_download_pdf(session_id):
 
         pdf_bytes = pdf_generator.generate_pdf(
             structured_data, session_id=session_id, doctor_info=doctor_info,
-            adenda=row.get('addenda') or [],
+            adenda=adenda,
             status=row.get('status'),
             cancelled_at=row.get('cancelled_at'),
             cancellation_reason=row.get('cancellation_reason'),

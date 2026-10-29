@@ -36,6 +36,12 @@ document.addEventListener('DOMContentLoaded', () => {
         submitBtn.addEventListener('click', submitAddDoctor);
     }
 
+    const rolSelect = document.getElementById('newDoctorRol');
+    if (rolSelect) {
+        rolSelect.addEventListener('change', applyNewDoctorRol);
+        applyNewDoctorRol();
+    }
+
     // Pre-fill Desde/Hasta with today's actual committed value, not just a
     // visual default — item 38's real bug was that a native <input
     // type="date">'s calendar picker highlights today in the grid as a
@@ -136,9 +142,9 @@ async function searchSessionById() {
         return;
     }
 
-    // Reuses the same GET /api/patient-history/<id> endpoint and detail
-    // panel already used for date-range results — no new backend route,
-    // no second detail-rendering path. loadAndRenderSessionDetail() already
+    // Reuses the same GET /api/admin/session/<id> endpoint and detail
+    // panel already used for date-range results — no second
+    // detail-rendering path. loadAndRenderSessionDetail() already
     // shows "Sesión no encontrada" inside the panel on 404, so no separate
     // not-found handling needed here.
     document.getElementById('sessionSearchTableWrap').style.display = 'none';
@@ -295,7 +301,7 @@ async function loadAndRenderSessionDetail(sessionId) {
     content.innerHTML = '<p style="color: var(--text-secondary);">Cargando...</p>';
 
     try {
-        const res = await fetch(`${window.location.origin}/api/patient-history/${sessionId}`, {
+        const res = await fetch(`${window.location.origin}/api/admin/session/${sessionId}`, {
             headers: await getAuthHeaders()
         });
 
@@ -403,7 +409,21 @@ function resetAddDoctorForm() {
     document.getElementById('newDoctorEmail').value = '';
     document.getElementById('newDoctorEspecialidad').value = '';
     document.getElementById('newDoctorCedula').value = '';
+    document.getElementById('newDoctorUniversidad').value = '';
+    document.getElementById('newDoctorRol').value = 'medico';
+    applyNewDoctorRol();
     hideAddDoctorMessages();
+}
+
+// Médico: especialidad + cédula required, universidad optional.
+// Auxiliar (non-doctor admin): those fields are hidden and never sent —
+// submitAddDoctor builds the body from the selected rol, not from
+// whatever happens to be typed in a hidden input.
+function applyNewDoctorRol() {
+    const isMedico = document.getElementById('newDoctorRol').value === 'medico';
+    document.querySelectorAll('#addDoctorForm .medico-only-field').forEach(el => {
+        el.style.display = isMedico ? '' : 'none';
+    });
 }
 
 function hideAddDoctorMessages() {
@@ -414,18 +434,25 @@ function hideAddDoctorMessages() {
 async function submitAddDoctor() {
     const nombre = document.getElementById('newDoctorNombre').value.trim();
     const email = document.getElementById('newDoctorEmail').value.trim();
+    const rol = document.getElementById('newDoctorRol').value;
     const especialidad = document.getElementById('newDoctorEspecialidad').value.trim();
     const cedula = document.getElementById('newDoctorCedula').value.trim();
+    const universidad = document.getElementById('newDoctorUniversidad').value.trim();
+    const isMedico = rol === 'medico';
 
     const errorEl = document.getElementById('addDoctorError');
     const successEl = document.getElementById('addDoctorSuccess');
     hideAddDoctorMessages();
 
-    if (!nombre || !email || !especialidad || !cedula) {
+    if (!nombre || !email || (isMedico && (!especialidad || !cedula))) {
         errorEl.textContent = 'Todos los campos son obligatorios.';
         errorEl.style.display = 'block';
         return;
     }
+
+    const body = isMedico
+        ? { nombre, email, rol, especialidad, cedula, ...(universidad ? { universidad } : {}) }
+        : { nombre, email, rol };
 
     const submitBtn = document.getElementById('submitAddDoctorBtn');
     submitBtn.disabled = true;
@@ -435,7 +462,7 @@ async function submitAddDoctor() {
         const res = await fetch(`${window.location.origin}/api/admin/usuarios`, {
             method: 'POST',
             headers: { ...(await getAuthHeaders()), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nombre, email, especialidad, cedula })
+            body: JSON.stringify(body)
         });
 
         if (res.status === 401) return handleSessionExpired();
@@ -459,6 +486,7 @@ async function submitAddDoctor() {
         document.getElementById('newDoctorEmail').value = '';
         document.getElementById('newDoctorEspecialidad').value = '';
         document.getElementById('newDoctorCedula').value = '';
+        document.getElementById('newDoctorUniversidad').value = '';
 
     } catch (err) {
         console.error('[ClinIA Admin] submitAddDoctor error:', err);
@@ -481,7 +509,7 @@ function doctorRowHtml(u) {
         <td>${escapeHtml(u.email) || '—'}</td>
         <td>${escapeHtml(u.especialidad) || '—'}</td>
         <td>${escapeHtml(u.cedula) || '—'}</td>
-        <td>${escapeHtml(u.rol) || '—'}</td>
+        <td>${escapeHtml(ROL_LABELS[u.rol] || u.rol) || '—'}</td>
         <td><span class="admin-status-badge ${badgeClass}">${badgeLabel}</span></td>
         <td>
             <button class="btn ${actionClass} btn-small toggle-activo-btn"
@@ -585,7 +613,7 @@ window.addEventListener('pageshow', async function(event) {
         }
 
         const data = await res.json();
-        if (data.rol !== 'admin') {
+        if (!isAdminRole(data.rol)) {
             window.location.href = '/';
             return;
         }

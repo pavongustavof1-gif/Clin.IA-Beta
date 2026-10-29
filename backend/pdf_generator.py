@@ -1001,6 +1001,13 @@ class PDFGenerator:
             leading=8.5 * 1.4,
             spaceAfter=3 * mm,
         )
+        entry_cedula = ParagraphStyle(
+            'adenda_cedula',
+            fontName='Helvetica',
+            fontSize=7.5,
+            textColor=self.GRAY_TEXT,
+            spaceAfter=1 * mm,
+        )
 
         for entry in adenda:
             timestamp = entry.get('timestamp')
@@ -1016,6 +1023,12 @@ class PDFGenerator:
             story.append(Paragraph(
                 f'{html.escape(str(fecha))} — {html.escape(autor)}', entry_meta
             ))
+            # #55: 'author_cedula' is attached at render time by app.py
+            # (_adenda_with_author_cedulas), never stored in sesiones.addenda.
+            # Empty for an auxiliar author, so no line at all.
+            autor_cedula = self._safe(entry.get('author_cedula'))
+            if autor_cedula:
+                story.append(Paragraph(f'Céd. Prof. {html.escape(autor_cedula)}', entry_cedula))
             story.append(Paragraph(html.escape(texto), entry_text))
 
         return story

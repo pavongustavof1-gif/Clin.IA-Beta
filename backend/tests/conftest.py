@@ -42,6 +42,7 @@ ADMIN_A   = 'admin-a-55555555'     # clinic A, rol admin
 DOCTOR_B1 = 'doctor-b1-66666666'   # clinic B, rol medico
 ADMIN_B   = 'admin-b-77777777'     # clinic B, rol admin
 INACTIVE_DOCTOR = 'inactive-88888888'  # clinic A, activo=False
+AUXILIAR_A = 'auxiliar-a-99999999'    # clinic A, rol auxiliar — non-doctor admin, no cédula/especialidad
 
 SESSION_CONFIRMED_A = 'SESSION-CONFIRMED-A'   # confirmed, authored by DOCTOR_A1, clinic A
 SESSION_PENDING_A   = 'SESSION-PENDING-A'     # pending_review, authored by DOCTOR_A1, clinic A
@@ -75,6 +76,8 @@ def db():
         _usuario_row(DOCTOR_B1, CLINIC_B, 'medico'),
         _usuario_row(ADMIN_B, CLINIC_B, 'admin'),
         _usuario_row(INACTIVE_DOCTOR, CLINIC_A, 'medico', activo=False),
+        {**_usuario_row(AUXILIAR_A, CLINIC_A, 'auxiliar', nombre='Aux. Fixture A'),
+         'especialidad': None, 'cedula': None},
     ])
     fake_structured_data = {
         'informacion_paciente': {'nombre_del_paciente': 'Paciente de Prueba', 'curp': 'FAKE000101HDFXXX01'},

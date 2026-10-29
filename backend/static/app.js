@@ -43,7 +43,15 @@ window.addEventListener('pageshow', async function(event) {
 
         try {
             const data = await res.json();
-            if (data.rol === 'admin') {
+            // An auxiliar is a non-doctor admin: nothing on this page is
+            // theirs (every recording/notes route 404s for them), so go
+            // straight to /admin. Returning here keeps auth-pending on the
+            // body, so the recording UI never flashes before the redirect.
+            if (isAdminRole(data.rol) && !isMedicoRole(data.rol)) {
+                window.location.replace('/admin');
+                return;
+            }
+            if (isAdminRole(data.rol)) {
                 const adminBtn = document.getElementById('adminBtn');
                 const adminSep = document.getElementById('adminSep');
                 if (adminBtn) adminBtn.style.display = '';
