@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Unlinked and unindexed until the doctor privacy notice is final (#53/#54). -->
+    <meta name="robots" content="noindex">
+    <title>Solicitar acceso - Clin.IA™</title>
+
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-touch-icon.png') }}">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='solicitud.css') }}">
+</head>
+<body class="sol-page">
+    <main class="sol-card">
+        <header class="sol-header">
+            <h1>Clin.IA<sup>™</sup></h1>
+            <p>Solicitud de acceso</p>
+        </header>
+
+        <div id="solFormWrap">
+            <p class="sol-intro">Cuéntanos quién eres y de qué clínica o consultorio. Revisamos cada solicitud y te escribimos al correo que indiques.</p>
+
+            <form id="solForm" novalidate>
+                <div class="sol-field">
+                    <label class="sol-label" for="solNombre">Nombre completo</label>
+                    <input id="solNombre" name="nombre" class="sol-input" type="text"
+                           autocomplete="name" maxlength="120" required>
+                    <p class="sol-error" data-error-for="nombre"></p>
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-label" for="solEmail">Correo electrónico</label>
+                    <input id="solEmail" name="email" class="sol-input" type="email" inputmode="email"
+                           autocomplete="email" autocapitalize="none" spellcheck="false" maxlength="254" required>
+                    <p class="sol-error" data-error-for="email"></p>
+                </div>
+
+                <fieldset class="sol-field sol-roles">
+                    <legend class="sol-label">¿Cómo usarás Clin.IA?</legend>
+                    <label class="sol-role">
+                        <input type="radio" name="rol" value="medico" checked>
+                        <span class="sol-role-text">
+                            <span class="sol-role-name">Médico</span>
+                            <span class="sol-role-help">Me uno a una clínica que ya usa Clin.IA</span>
+                        </span>
+                    </label>
+                    <label class="sol-role">
+                        <input type="radio" name="rol" value="admin">
+                        <span class="sol-role-text">
+                            <span class="sol-role-name">Médico administrador</span>
+                            <span class="sol-role-help">Registro mi clínica o consultorio y la administro</span>
+                        </span>
+                    </label>
+                    <label class="sol-role">
+                        <input type="radio" name="rol" value="auxiliar">
+                        <span class="sol-role-text">
+                            <span class="sol-role-name">Auxiliar administrativo</span>
+                            <span class="sol-role-help">Administro la clínica, no soy médico</span>
+                        </span>
+                    </label>
+                    <p class="sol-error" data-error-for="rol"></p>
+                </fieldset>
+
+                <!-- Doctor-only fields: hidden for Auxiliar and never sent then
+                     (solicitud.js builds the body from the selected rol). -->
+                <div class="sol-field sol-medico-only">
+                    <label class="sol-label" for="solCedula">Cédula profesional</label>
+                    <input id="solCedula" name="cedula" class="sol-input" type="text" inputmode="numeric"
+                           pattern="[0-9 ]*" autocomplete="off" maxlength="16">
+                    <p class="sol-error" data-error-for="cedula"></p>
+                </div>
+
+                <div class="sol-field sol-medico-only">
+                    <label class="sol-label" for="solEspecialidad">Especialidad</label>
+                    <input id="solEspecialidad" name="especialidad" class="sol-input" type="text"
+                           autocomplete="off" maxlength="80">
+                    <p class="sol-error" data-error-for="especialidad"></p>
+                </div>
+
+                <div class="sol-field sol-medico-only">
+                    <label class="sol-label" for="solUniversidad">Universidad <span class="sol-optional">(opcional)</span></label>
+                    <input id="solUniversidad" name="universidad" class="sol-input" type="text"
+                           autocomplete="off" maxlength="160">
+                    <p class="sol-error" data-error-for="universidad"></p>
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-label" for="solRazonSocial">Razón social de la clínica o consultorio</label>
+                    <input id="solRazonSocial" name="razon_social" class="sol-input" type="text"
+                           autocomplete="organization" maxlength="160" required>
+                    <p class="sol-error" data-error-for="razon_social"></p>
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-label" for="solDomicilio">Domicilio de la clínica o consultorio</label>
+                    <textarea id="solDomicilio" name="domicilio" class="sol-input" rows="2"
+                              autocomplete="street-address" maxlength="300" required></textarea>
+                    <p class="sol-error" data-error-for="domicilio"></p>
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-label" for="solTelefono">Teléfono de la clínica o consultorio</label>
+                    <input id="solTelefono" name="telefono" class="sol-input" type="tel" inputmode="tel"
+                           autocomplete="tel" maxlength="30" required>
+                    <p class="sol-error" data-error-for="telefono"></p>
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-label" for="solRecomendado">Recomendado por <span class="sol-optional">(opcional)</span></label>
+                    <input id="solRecomendado" name="recomendado_por" class="sol-input" type="text"
+                           autocomplete="off" maxlength="120">
+                    <p class="sol-error" data-error-for="recomendado_por"></p>
+                </div>
+
+                <!-- Honeypot: no person sees, hears or tabs to this. A filled
+                     value gets the normal success reply and nothing is saved. -->
+                <div class="sol-hp" aria-hidden="true">
+                    <label for="solSitioWeb">Sitio web</label>
+                    <input id="solSitioWeb" name="sitio_web" type="text" tabindex="-1" autocomplete="off">
+                </div>
+
+                <div class="sol-field">
+                    <label class="sol-check">
+                        <input id="solTerminos" name="acepta_terminos" type="checkbox" required>
+                        <span>Acepto los <a href="https://clinianotes.com/#terminos" target="_blank" rel="noopener">Términos de Servicio</a>
+                            y el <a href="{{ url_for('aviso_privacidad_usuarios') }}" target="_blank" rel="noopener">Aviso de Privacidad</a></span>
+                    </label>
+                    <p class="sol-error" data-error-for="acepta_terminos"></p>
+                </div>
+
+                <p id="solFormError" class="sol-form-error" role="alert"></p>
+
+                <button id="solSubmit" class="sol-submit" type="submit">Enviar solicitud</button>
+            </form>
+        </div>
+
+        <div id="solDone" class="sol-done" hidden>
+            <p id="solDoneText" role="status"></p>
+        </div>
+    </main>
+
+    <script src="{{ url_for('static', filename='solicitud.js') }}"></script>
+</body>
+</html>

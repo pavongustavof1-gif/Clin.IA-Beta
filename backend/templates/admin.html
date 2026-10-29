@@ -273,8 +273,8 @@
 
         <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-sm);">
-                <h3 style="margin-bottom: 0;">Médicos</h3>
-                <button id="showAddDoctorBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Agregar doctor</button>
+                <h3 style="margin-bottom: 0;">Usuarios</h3>
+                <button id="showAddDoctorBtn" class="btn btn-primary btn-small" style="max-width: none; width: auto;">Agregar usuario</button>
             </div>
 
             <div id="addDoctorForm" style="display: none; margin-bottom: var(--spacing-md); padding-bottom: var(--spacing-md); border-bottom: 1px solid var(--border-color);">
@@ -291,10 +291,11 @@
                         <label class="review-label" for="newDoctorRol">Rol</label>
                         <select id="newDoctorRol" class="review-input">
                             <option value="medico" selected>Médico</option>
+                            <option value="admin">Médico administrador</option>
                             <option value="auxiliar">Auxiliar administrativo (no es médico)</option>
                         </select>
                     </div>
-                    <!-- Médico-only fields: hidden, and never sent, for an auxiliar
+                    <!-- Médico-only fields (médico and médico administrador): hidden, and never sent, for an auxiliar
                          (admin.js applyNewDoctorRol). The server enforces the same. -->
                     <div class="medico-only-field">
                         <label class="review-label" for="newDoctorEspecialidad">Especialidad</label>

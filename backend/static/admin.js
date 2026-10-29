@@ -415,12 +415,13 @@ function resetAddDoctorForm() {
     hideAddDoctorMessages();
 }
 
-// Médico: especialidad + cédula required, universidad optional.
+// Médico / médico administrador: especialidad + cédula required,
+// universidad optional (isMedicoRole, utils.js).
 // Auxiliar (non-doctor admin): those fields are hidden and never sent —
 // submitAddDoctor builds the body from the selected rol, not from
 // whatever happens to be typed in a hidden input.
 function applyNewDoctorRol() {
-    const isMedico = document.getElementById('newDoctorRol').value === 'medico';
+    const isMedico = isMedicoRole(document.getElementById('newDoctorRol').value);
     document.querySelectorAll('#addDoctorForm .medico-only-field').forEach(el => {
         el.style.display = isMedico ? '' : 'none';
     });
@@ -438,7 +439,7 @@ async function submitAddDoctor() {
     const especialidad = document.getElementById('newDoctorEspecialidad').value.trim();
     const cedula = document.getElementById('newDoctorCedula').value.trim();
     const universidad = document.getElementById('newDoctorUniversidad').value.trim();
-    const isMedico = rol === 'medico';
+    const isMedico = isMedicoRole(rol);
 
     const errorEl = document.getElementById('addDoctorError');
     const successEl = document.getElementById('addDoctorSuccess');
@@ -470,7 +471,7 @@ async function submitAddDoctor() {
         const data = await res.json();
 
         if (!res.ok) {
-            errorEl.textContent = data.error || 'Error al invitar al doctor.';
+            errorEl.textContent = data.error || 'Error al invitar al usuario.';
             errorEl.style.display = 'block';
             return;
         }
@@ -478,7 +479,7 @@ async function submitAddDoctor() {
         addDoctorRow(data);
 
         successEl.textContent = data.warning
-            ? `Doctor creado, pero: ${data.warning}`
+            ? `Usuario creado, pero: ${data.warning}`
             : `Invitación enviada a ${data.email}`;
         successEl.style.display = 'block';
 

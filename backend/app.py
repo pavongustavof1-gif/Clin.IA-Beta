@@ -9,12 +9,13 @@ from transcription import TranscriptionService
 from llm_processor import LLMProcessor
 from pdf_generator import PDFGenerator
 from logger import logger
-from email_service import send_pdf_email, send_invite_email
+from email_service import send_pdf_email, send_invite_email, send_solicitud_notice
 from auth import (
     require_auth, require_admin, require_medico, invalidate_usuario_cache,
-    is_admin_role, ROL_MEDICO, ROL_AUXILIAR, ADMIN_ROLES,
+    is_admin_role, is_medico_role, ROL_ADMIN, ROL_MEDICO, ROL_AUXILIAR, ADMIN_ROLES,
 )
 from pg_utils import pg_val, pg_path, pg_ilike_val
+from solicitud_validation import validate_solicitud
 from concurrent.futures import ThreadPoolExecutor
 import os
 import re
@@ -26,7 +27,7 @@ import threading
 import time
 import urllib.request
 import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from werkzeug.utils import secure_filename
 from io import BytesIO
 from PIL import Image as PILImage, UnidentifiedImageError
@@ -202,6 +203,8 @@ limiter = Limiter(
 
 @app.errorhandler(429)
 def rate_limit_exceeded(e):
+    if request.endpoint == 'create_solicitud':
+        _log_solicitud('rate-limited')
     return jsonify({
         'error': 'Demasiadas solicitudes. Intente de nuevo más tarde.',
         'error_code': 'RATE_LIMITED',
@@ -490,6 +493,65 @@ def _sb_insert_clinica(nombre: str, direccion: str, telefono: str) -> dict | Non
     except Exception as e:
         logger.error(f"DB: Could not insert clinicas row: {e}")
         return None
+
+
+# ── Public access requests (solicitudes_registro, #53/#54) ──────────────────
+# These two helpers serve the UNAUTHENTICATED POST /api/solicitudes, whose
+# query paths and error bodies carry the applicant's email. _sb_get logs
+# the full path on failure and PostgREST's 409 body echoes the duplicate
+# key — so neither is used there. These log the table and status only.
+# _sb_get itself is unchanged for every other route.
+
+def _sb_get_quiet(path: str) -> list | None:
+    """Same contract as _sb_get (list, or None on error) without the path
+    or response body in any log line."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    table = path.split('?', 1)[0].rsplit('/', 1)[-1]
+    req = urllib.request.Request(url, headers=_sb_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase GET {table} failed {e.code}")
+        return None
+    except Exception as e:
+        logger.warning(f"DB: Supabase GET {table} error ({type(e).__name__})")
+        return None
+
+
+def _sb_insert_solicitud(body: dict) -> str:
+    """
+    Insert a solicitudes_registro row. Returns 'created', 'duplicate'
+    (the partial unique index on lower(email) for open requests — two
+    submits racing past the pre-check land here: PostgREST maps
+    unique_violation 23505 to HTTP 409), or 'error'. return=minimal: the
+    route never needs the row back. Needs INSERT on solicitudes_registro
+    for service_role.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/solicitudes_registro'
+    payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers=_sb_headers(extra={'Prefer': 'return=minimal'}),
+        method='POST'
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return 'created'
+    except urllib.error.HTTPError as e:
+        code = None
+        try:
+            code = json.loads(e.read()).get('code')
+        except Exception:
+            pass
+        if e.code == 409 and code == '23505':
+            return 'duplicate'
+        logger.error(f"DB: solicitudes_registro insert failed {e.code} {code or ''}".rstrip())
+        return 'error'
+    except Exception as e:
+        logger.error(f"DB: solicitudes_registro insert error ({type(e).__name__})")
+        return 'error'
 
 
 class ProvisioningError(Exception):
@@ -1247,6 +1309,123 @@ def account():
         supabase_anon_key=Config.SUPABASE_ANON_KEY
     )
 
+# ── Public access request (#53/#54) ─────────────────────────────────────────
+# /solicitud is the one page an outsider can use to ask for an account; a
+# superadmin reviews each request (Review C) before anything is created.
+# Ships unlinked and noindex until the doctor privacy notice is final.
+
+@app.route('/solicitud')
+def solicitud():
+    # No supabase-js and no Supabase config on this page: the applicant
+    # has no account, and the only call it makes is POST /api/solicitudes.
+    return render_template('solicitud.html')
+
+
+@app.route('/aviso-privacidad-usuarios')
+def aviso_privacidad_usuarios():
+    # Placeholder until the real "Aviso de Privacidad para usuarios" text
+    # is written (later roadmap item); /solicitud links here.
+    return render_template('aviso-privacidad-usuarios.html')
+
+
+SOLICITUD_RECIBIDA = 'Recibimos tu solicitud. Te escribiremos al correo que indicaste.'
+SOLICITUD_ERROR = 'No pudimos registrar tu solicitud. Intenta de nuevo en unos minutos.'
+SOLICITUD_GLOBAL_LIMIT_KEY = 'solicitudes-global'
+
+
+def _log_solicitud(outcome: str) -> None:
+    """The ONLY log line this flow writes about a request: an opaque
+    per-request id and the outcome. Never the email, cédula, nombre,
+    teléfono or domicilio — an applicant isn't a user yet and hasn't
+    agreed to anything we'd keep in Render's logs."""
+    rid = getattr(g, 'solicitud_rid', None)
+    if rid is None:
+        rid = g.solicitud_rid = secrets.token_hex(6)
+    logger.info(f"Solicitud: req={rid} outcome={outcome}")
+
+
+def _solicitud_recibida():
+    return jsonify({'ok': True, 'mensaje': SOLICITUD_RECIBIDA}), 200
+
+
+@app.route('/api/solicitudes', methods=['POST'])
+# No @require_auth: the applicant has no account. Both limits are checked
+# before the body is read, so junk, honeypot and invalid submits count
+# too. Per IP 5/hour, 20/day; plus a constant-key 50/day across ALL IPs,
+# so a botnet rotating addresses still can't flood the superadmin's queue
+# and inbox (the cost: a flood can block real applicants until tomorrow).
+@limiter.limit("5 per hour;20 per day", key_func=get_remote_address)
+@limiter.limit("50 per day", key_func=lambda: SOLICITUD_GLOBAL_LIMIT_KEY)
+def create_solicitud():
+    """
+    Record a request for access. Every accepted-or-silently-dropped case
+    answers with the SAME generic success: a filled honeypot, an email
+    that already has an account, or one with an open request — so the
+    form can't be used to learn who is a Clin.IA user. Only field
+    validation (400), non-JSON (415) and a DB failure are visible.
+    """
+    if not request.is_json:
+        _log_solicitud('invalid')
+        return jsonify({'error': 'Formato no soportado.'}), 415
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        _log_solicitud('invalid')
+        return jsonify({'error': 'Solicitud inválida.'}), 400
+
+    # Honeypot: a visually hidden, aria-hidden, untabbable input no person
+    # fills. Checked before validation so a bot learns nothing either way.
+    if data.get('sitio_web'):
+        _log_solicitud('honeypot')
+        return _solicitud_recibida()
+
+    clean, errores = validate_solicitud(data)
+    if errores:
+        _log_solicitud('invalid')
+        first = next(iter(errores.values()))
+        return jsonify({'error': first, 'errores': errores}), 400
+
+    email = clean['email']
+    existing = _sb_get_quiet(f"/rest/v1/usuarios?email=ilike.{pg_ilike_val(email)}&select=id&limit=1")
+    open_req = None
+    if existing is not None and not existing:
+        open_req = _sb_get_quiet(
+            f"/rest/v1/solicitudes_registro?email=ilike.{pg_ilike_val(email)}"
+            f"&estado=in.(pendiente,en_proceso)&select=id&limit=1"
+        )
+    if existing is None or (not existing and open_req is None):
+        # Fail closed: without the usuarios check we can't promise the
+        # superadmin that an approval won't collide with a live account.
+        _log_solicitud('error')
+        return jsonify({'error': SOLICITUD_ERROR}), 503
+    if existing or open_req:
+        _log_solicitud('duplicate')
+        return _solicitud_recibida()
+
+    result = _sb_insert_solicitud({
+        **clean,
+        'terminos_version':      Config.TERMINOS_VERSION,
+        'terminos_aceptados_at': datetime.now(timezone.utc).isoformat(),
+    })
+    if result == 'duplicate':
+        _log_solicitud('duplicate')
+        return _solicitud_recibida()
+    if result != 'created':
+        _log_solicitud('error')
+        return jsonify({'error': SOLICITUD_ERROR}), 503
+
+    _log_solicitud('created')
+    if not Config.SUPERADMIN_EMAIL:
+        logger.warning("Solicitud: SUPERADMIN_EMAIL not set — skipping new-request notice.")
+    else:
+        try:
+            send_solicitud_notice(Config.SUPERADMIN_EMAIL, clean['nombre'])
+        except Exception as e:
+            # send_solicitud_notice already never raises; belt and braces,
+            # since the row is saved and the applicant must see success.
+            logger.error(f"Solicitud: notice failed ({type(e).__name__})")
+    return _solicitud_recibida()
+
+
 @app.route('/api/health', methods=['GET'])
 @limiter.exempt  # Render's own health/readiness polling hits this; must never 429
 def health_check():
@@ -1254,7 +1433,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.7.2-beta',
+        'version': '0.7.3-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2072,18 +2251,19 @@ def admin_usuarios():
 @limiter.limit("20 per hour")  # per inviting admin — email-bombing resistance
 def admin_create_usuario():
     """
-    Invite a new doctor or auxiliar into the admin's own clinic. Creates
+    Invite a new user (médico, médico administrador or auxiliar) into the
+    admin's own clinic. Creates
     the Supabase auth identity via generate_link (invite type), inserts
     the usuarios row (both via _provision_usuario), and emails the invite
     link via Resend.
 
     rol is 'medico' (the default, so older clients that send no rol keep
-    working) or 'auxiliar' — anything else, 'admin' included, is a 400:
-    this route can never create an admin. clinica_id is ALWAYS taken from
-    g.usuario, never the request body, so a tampered request cannot
-    create a cross-clinic user.
+    working), 'admin' (médico administrador — a doctor who also runs the
+    clinic) or 'auxiliar' — anything else is a 400. clinica_id is ALWAYS
+    taken from g.usuario, never the request body, so a tampered request
+    cannot create a cross-clinic user.
 
-    médico: cédula and especialidad required, universidad optional.
+    médico / admin: cédula and especialidad required, universidad optional.
     auxiliar: none of the three may be sent — an auxiliar is not a doctor
     and must never end up with a cédula a PDF could print.
     """
@@ -2098,11 +2278,11 @@ def admin_create_usuario():
     cedula       = (data.get('cedula') or '').strip()
     universidad  = (data.get('universidad') or '').strip()
 
-    if rol not in (ROL_MEDICO, ROL_AUXILIAR):
+    if rol not in (ROL_ADMIN, ROL_MEDICO, ROL_AUXILIAR):
         return jsonify({'error': 'Rol inválido'}), 400
     if not nombre or not email:
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
-    if rol == ROL_MEDICO and (not especialidad or not cedula):
+    if is_medico_role(rol) and (not especialidad or not cedula):
         return jsonify({'error': 'Todos los campos son obligatorios'}), 400
     if rol == ROL_AUXILIAR and (especialidad or cedula or universidad):
         return jsonify({'error': 'Un auxiliar no lleva cédula, especialidad ni universidad'}), 400
@@ -2136,7 +2316,7 @@ def admin_create_usuario():
     # Steps (a)+(c): auth identity + invite link, then the usuarios row.
     # Orphan logging for an insert failure lives in _provision_usuario.
     try:
-        if rol == ROL_MEDICO:
+        if is_medico_role(rol):
             nuevo_usuario, action_link = _provision_usuario(
                 nombre, email, rol, clinica_id,
                 cedula=cedula, especialidad=especialidad,
@@ -2150,7 +2330,7 @@ def admin_create_usuario():
         return jsonify({
             'error': (
                 'La invitación se creó en el sistema de autenticación pero no '
-                'se pudo guardar el registro del médico. Un usuario huérfano '
+                'se pudo guardar el registro del usuario. Un usuario huérfano '
                 'puede existir y requiere limpieza manual en el panel de '
                 'Supabase antes de reintentar con este correo.'
             )
@@ -2174,7 +2354,7 @@ def admin_create_usuario():
     }
     if not email_sent:
         logger.warning(f"Admin: doctor {email} created but invite email failed to send.")
-        response['warning'] = 'Doctor creado pero el correo de invitación no pudo enviarse.'
+        response['warning'] = 'Usuario creado pero el correo de invitación no pudo enviarse.'
 
     return jsonify(response), 200
 

@@ -1963,6 +1963,16 @@
             }
         });
 
+        // ── Deep link: clinianotes.com/#terminos opens the Términos modal on
+        //    load. The app's access-request form (/solicitud) links here —
+        //    the Términos only exist as this modal, not as their own page.
+        //    hashchange covers the same link followed while already here.
+        function openTerminosFromHash() {
+            if (location.hash === '#terminos') openModal('modal-tos');
+        }
+        openTerminosFromHash();
+        window.addEventListener('hashchange', openTerminosFromHash);
+
         // ── #45 Aviso Beta 2: dismiss ──
         document.getElementById('avisoBeta2Close').addEventListener('click', () => {
             document.getElementById('avisoBeta2').hidden = true;

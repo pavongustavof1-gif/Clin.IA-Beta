@@ -12,7 +12,8 @@
 #
 # Fields:
 #   methods         - HTTP methods this entry covers
-#   auth_required   - False only for the five page shells + /api/health
+#   auth_required   - False only for the page shells, /api/health and the
+#                     public access request (POST /api/solicitudes)
 #   admin_required  - True if @require_admin stacks after @require_auth
 #                     (rol admin or auxiliar — auth.is_admin_role)
 #   medico_required - True if @require_medico stacks after @require_auth
@@ -44,6 +45,16 @@ ROUTE_INVENTORY = [
      'resource': 'account page shell', 'rule': 'always 200, no data', 'scope': 'none', 'miss_status': None},
     {'path': '/api/health', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
      'resource': 'health check', 'rule': 'always 200, no data, rate-limit exempt', 'scope': 'none', 'miss_status': None},
+
+    # ── Public access request (#53/#54) — no account exists yet ─────────
+    {'path': '/solicitud', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
+     'resource': 'access-request form page shell', 'rule': 'always 200, no data, noindex', 'scope': 'none', 'miss_status': None},
+    {'path': '/aviso-privacidad-usuarios', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
+     'resource': 'privacy notice page (placeholder)', 'rule': 'always 200, no data', 'scope': 'none', 'miss_status': None},
+    {'path': '/api/solicitudes', 'methods': ['POST'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
+     'resource': 'new solicitudes_registro row (write-only, nothing is read back)',
+     'rule': 'public; JSON only; rate-limited per IP + globally; same generic 200 for created, honeypot and duplicates',
+     'scope': 'none', 'miss_status': None},
 
     # ── Authenticated, no cross-caller resource ─────────────────────────
     {'path': '/api/session-check', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': False,

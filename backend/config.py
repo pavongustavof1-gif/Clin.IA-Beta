@@ -24,6 +24,21 @@ class Config:
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
     RESEND_SENDER  = 'admin@clinianotes.com'
 
+    # Public access requests (#53/#54). TERMINOS_VERSION is stored with
+    # every solicitudes_registro row so we know which Términos de Servicio
+    # / Aviso de Privacidad text the applicant accepted — bump it whenever
+    # either text changes.
+    TERMINOS_VERSION = 'ToS-2026-10'
+    # Both optional; unset = feature off, never an error. SUPERADMIN_EMAIL
+    # gets a notice per new request; SUPERADMIN_USER_IDS (comma-separated
+    # usuarios/auth UUIDs) gates the superadmin review page (Review C).
+    SUPERADMIN_EMAIL    = (os.environ.get('SUPERADMIN_EMAIL') or '').strip()
+    SUPERADMIN_USER_IDS = frozenset(
+        uid.strip().lower()
+        for uid in (os.environ.get('SUPERADMIN_USER_IDS') or '').split(',')
+        if uid.strip()
+    )
+
     # Supabase
     # SUPABASE_JWT_SECRET is no longer needed — JWT verification uses the JWKS endpoint (ES256)
     # Guarded (Stage M5 fix #29): os.getenv() returns None if unset, and

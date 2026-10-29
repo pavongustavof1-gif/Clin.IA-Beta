@@ -173,7 +173,7 @@ def test_admin_session_detail_matches_patient_history_body(client, monkeypatch):
     assert logged == [(SESSION_CONFIRMED_A, ADMIN_A)] * 2
 
 
-# ── 1d. admin invite: médico or auxiliar, never admin ───────────────────
+# ── 1d. admin invite: médico, médico administrador or auxiliar ──────────
 
 def _invite(client, body, caller=ADMIN_A):
     return _call(client, 'POST', '/api/admin/usuarios', token=tokens.mint(caller), json_body=body)
@@ -233,12 +233,44 @@ def test_invite_without_rol_defaults_to_medico_with_unchanged_payload(client, in
     assert set(inserted[0]) == {'id', 'nombre', 'email', 'rol', 'clinica_id', 'activo', 'cedula', 'especialidad'}
 
 
-@pytest.mark.parametrize('rol', ['admin', 'ADMIN', ' admin ', 'superadmin', 'otro', 1, ['admin']])
-def test_admin_route_can_never_create_admin(client, inserted, rol):
+@pytest.mark.parametrize('rol', ['superadmin', 'otro', 'administrador', 1, ['admin'], {'rol': 'admin'}])
+def test_admin_route_rejects_unknown_roles(client, inserted, rol):
     resp = _invite(client, {'nombre': 'Dr. Inventado', 'email': 'dr.inventado@example.test',
                             'rol': rol, 'especialidad': 'Medicina General', 'cedula': '1122334'})
     assert resp.status_code == 400
     assert inserted == []
+
+
+@pytest.mark.parametrize('rol', ['admin', 'ADMIN', ' admin '])
+def test_invite_medico_administrador_with_medico_fields(client, inserted, rol):
+    resp = _invite(client, {'nombre': 'Dra. Admin Inventada', 'email': 'dra.admin@example.test',
+                            'rol': rol, 'especialidad': 'Medicina Familiar', 'cedula': '2233445',
+                            'universidad': 'Universidad Inventada'})
+    assert resp.status_code == 200
+    assert resp.get_json()['rol'] == 'admin'
+    row = inserted[0]
+    assert row['rol'] == 'admin'
+    assert row['cedula'] == '2233445' and row['especialidad'] == 'Medicina Familiar'
+    assert row['universidad'] == 'Universidad Inventada'
+    assert row['clinica_id'] == CLINIC_A
+
+
+@pytest.mark.parametrize('missing', ['cedula', 'especialidad'])
+def test_invite_medico_administrador_without_medico_fields_fails(client, inserted, missing):
+    body = {'nombre': 'Dra. Admin Inventada', 'email': 'dra.admin@example.test',
+            'rol': 'admin', 'especialidad': 'Medicina Familiar', 'cedula': '2233445'}
+    del body[missing]
+    resp = _invite(client, body)
+    assert resp.status_code == 400
+    assert inserted == []
+
+
+def test_invite_medico_administrador_ignores_body_clinica_id(client, inserted):
+    resp = _invite(client, {'nombre': 'Dra. Admin Inventada', 'email': 'dra.admin@example.test',
+                            'rol': 'admin', 'especialidad': 'Medicina Familiar', 'cedula': '2233445',
+                            'clinica_id': 'clinic-b-22222222'})
+    assert resp.status_code == 200
+    assert inserted[0]['clinica_id'] == CLINIC_A
 
 
 def test_auxiliar_can_invite_into_own_clinic(client, inserted):

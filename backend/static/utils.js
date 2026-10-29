@@ -24,7 +24,7 @@ function escapeHtml(value) {
 //   medico   — doctor
 //   auxiliar — clinic admin who is not a doctor (no recording, no notes)
 const ROL_LABELS = {
-    admin:    'Administrador y médico',
+    admin:    'Médico administrador',
     medico:   'Médico',
     auxiliar: 'Auxiliar administrativo',
 };

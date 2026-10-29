@@ -90,14 +90,21 @@ def test_every_app_route_is_inventoried():
 )
 def test_public_routes_reachable_without_token(client, entry):
     method = entry['methods'][0]
-    resp = _call(client, method, _fill(entry['path']), token=None)
+    resp = _call(client, method, _fill(entry['path']), token=None,
+                 json_body=_PUBLIC_JSON_BODIES.get(entry['path']))
     assert resp.status_code == 200, (
         f"{method} {entry['path']} is inventoried as public but returned "
         f"{resp.status_code} with no token"
     )
 
 
-def test_public_route_allowlist_is_exactly_these_six():
+# The one public POST needs a JSON body to answer 200 (no body is a 415).
+# A filled honeypot is the cheapest 200: it returns before any DB call.
+# The real behavior is covered in test_solicitudes.py.
+_PUBLIC_JSON_BODIES = {'/api/solicitudes': {'sitio_web': 'https://bot.invalid'}}
+
+
+def test_public_route_allowlist_is_exactly_these():
     """
     An over-broad 'public' allowlist is itself a finding (per the task
     brief) — pin the exact set so a route silently losing its
@@ -112,6 +119,9 @@ def test_public_route_allowlist_is_exactly_these_six():
         ('/admin', 'GET'),
         ('/account', 'GET'),
         ('/api/health', 'GET'),
+        ('/solicitud', 'GET'),
+        ('/aviso-privacidad-usuarios', 'GET'),
+        ('/api/solicitudes', 'POST'),
     }
 
 

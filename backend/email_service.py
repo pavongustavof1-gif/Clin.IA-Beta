@@ -164,3 +164,66 @@ def send_invite_email(
     except Exception as e:
         logger.error(f"Email: Failed to send invite to {doctor_email}: {str(e)}")
         return False
+
+
+SUPERADMIN_PANEL_URL = 'https://app.clinianotes.com/superadmin'
+
+
+def send_solicitud_notice(superadmin_email: str, applicant_nombre: str) -> bool:
+    """
+    Tell the superadmin a new access request (solicitudes_registro) came
+    in. Carries the applicant's nombre ONLY — email, cédula, phone and
+    address stay in the database, behind the superadmin page, not in an
+    inbox. Nothing about the applicant is logged here either, not even
+    the nombre. Never raises; the request must not fail on this.
+    """
+    if not Config.RESEND_API_KEY:
+        logger.warning("Email: RESEND_API_KEY not configured — skipping solicitud notice.")
+        return False
+
+    try:
+        resend.api_key = Config.RESEND_API_KEY
+
+        params = {
+            "from": f"Clin.IA <{Config.RESEND_SENDER}>",
+            "to": [superadmin_email],
+            "subject": "Nueva solicitud de acceso — Clin.IA",
+            "html": f"""
+                <div style="font-family: Arial, sans-serif; max-width: 480px; color: #334155;">
+                    <div style="background: #0F6E56; padding: 16px 24px;
+                                border-radius: 6px 6px 0 0;">
+                        <h2 style="color: white; margin: 0; font-size: 18px;">Clin.IA</h2>
+                        <p style="color: #C8EEE4; margin: 4px 0 0 0; font-size: 13px;">
+                            Nueva solicitud de acceso
+                        </p>
+                    </div>
+                    <div style="background: #f8fafc; padding: 24px;
+                                border: 1px solid #e2e8f0;
+                                border-top: none; border-radius: 0 0 6px 6px;">
+                        <p style="margin: 0 0 16px 0;">
+                            <strong>{html.escape(applicant_nombre)}</strong> solicitó acceso a Clin.IA.
+                        </p>
+                        <p style="margin: 0 0 24px 0;">
+                            <a href="{SUPERADMIN_PANEL_URL}"
+                               style="display: inline-block; background: #0F6E56; color: white;
+                                      padding: 10px 20px; border-radius: 6px; text-decoration: none;
+                                      font-weight: 600;">
+                                Revisar solicitudes
+                            </a>
+                        </p>
+                        <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                            Los datos completos de la solicitud están en el panel, no en este correo.
+                        </p>
+                    </div>
+                </div>
+            """,
+        }
+
+        response = resend.Emails.send(params)
+        logger.info(f"Email: solicitud notice sent — id: {response.get('id', 'unknown')}")
+        return True
+
+    except Exception as e:
+        # type only — a provider error message could echo the recipient
+        logger.error(f"Email: Failed to send solicitud notice ({type(e).__name__})")
+        return False

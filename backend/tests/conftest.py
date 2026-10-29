@@ -155,6 +155,7 @@ def _patch_data_layer(db, monkeypatch):
     monkeypatch.setattr(auth_module, '_fetch_usuario_context', _fake_fetch_usuario_context)
 
     monkeypatch.setattr(app_module, '_sb_get', db.get)
+    monkeypatch.setattr(app_module, '_sb_get_quiet', db.get)
     monkeypatch.setattr(app_module, '_sb_patch', db.patch)
     monkeypatch.setattr(app_module, '_sb_delete', db.delete)
     monkeypatch.setattr(app_module, '_sb_post_job', lambda body: db.post('/rest/v1/trabajos', body).get('job_id', 'fake-job-id') or 'fake-job-id')
@@ -169,6 +170,18 @@ def _patch_data_layer(db, monkeypatch):
     monkeypatch.setattr(app_module.pdf_generator, 'generate_pdf', lambda *a, **k: b'%PDF-FAKE-BYTES')
     monkeypatch.setattr(app_module, 'send_pdf_email', lambda **k: True)
     monkeypatch.setattr(app_module, 'send_invite_email', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, 'send_solicitud_notice', lambda *a, **k: True)
+
+    def _fake_insert_solicitud(body):
+        # Mirrors the partial unique index on lower(email) WHERE estado in
+        # (pendiente, en_proceso): a second open request is 'duplicate'.
+        rows = db.tables.setdefault('solicitudes_registro', [])
+        if any(r['email'].lower() == body['email'].lower()
+               and r.get('estado', 'pendiente') in ('pendiente', 'en_proceso') for r in rows):
+            return 'duplicate'
+        rows.append({'estado': 'pendiente', **body})
+        return 'created'
+    monkeypatch.setattr(app_module, '_sb_insert_solicitud', _fake_insert_solicitud)
     # Run the "background" job synchronously-as-a-noop instead of via a
     # real thread pool — process_audio's own response (202 + job_id) is
     # what auth tests care about; nothing here should touch a real
@@ -194,6 +207,16 @@ def _reset_process_caches():
     _clear()
     yield
     _clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limits():
+    """The limiter is memory:// and module-global, so counters would
+    otherwise carry over between tests (the public /api/solicitudes
+    allows only 5 per hour per IP — the suite alone would trip it)."""
+    app_module.limiter.reset()
+    yield
+    app_module.limiter.reset()
 
 
 @pytest.fixture(autouse=True)
