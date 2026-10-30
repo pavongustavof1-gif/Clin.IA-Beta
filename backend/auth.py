@@ -257,28 +257,69 @@ def invalidate_usuario_cache(user_id: str) -> None:
         _usuario_cache.pop(user_id, None)
 
 
+def _authenticate_request():
+    """
+    The checks behind require_auth: returns (usuario, None) for a valid
+    token of an active usuario, else (None, (body, status)). Shared with
+    require_superadmin, which answers every one of these failures with
+    its own uniform 404 instead.
+    """
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        return None, ({"error": "No autorizado"}, 401)
+
+    token = auth_header.removeprefix("Bearer ").strip()
+    payload = verify_jwt(token)
+    if payload is None:
+        return None, ({"error": "No autorizado"}, 401)
+
+    user_id = payload.get("sub")
+    try:
+        usuario = get_usuario_context(user_id)
+    except UsuarioInactivoError:
+        return None, ({"error": "No autorizado"}, 401)
+
+    if usuario is None:
+        return None, ({"error": "Usuario no registrado en ninguna clínica"}, 403)
+    return usuario, None
+
+
 def require_auth(f):
     """Decorator that validates the Bearer JWT and attaches flask.g.usuario."""
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get("Authorization", "")
-        if not auth_header.startswith("Bearer "):
-            return jsonify({"error": "No autorizado"}), 401
+        usuario, failure = _authenticate_request()
+        if failure:
+            body, status = failure
+            return jsonify(body), status
 
-        token = auth_header.removeprefix("Bearer ").strip()
-        payload = verify_jwt(token)
-        if payload is None:
-            return jsonify({"error": "No autorizado"}), 401
+        g.usuario = usuario
+        return f(*args, **kwargs)
 
-        user_id = payload.get("sub")
-        try:
-            usuario = get_usuario_context(user_id)
-        except UsuarioInactivoError:
-            return jsonify({"error": "No autorizado"}), 401
+    return decorated
 
-        if usuario is None:
-            return jsonify({"error": "Usuario no registrado en ninguna clínica"}), 403
 
+def is_superadmin(usuario) -> bool:
+    """True only for a usuario_id listed in Config.SUPERADMIN_USER_IDS
+    (already lowercased there). An empty set means nobody."""
+    uid = (usuario or {}).get('usuario_id')
+    return isinstance(uid, str) and uid.lower() in Config.SUPERADMIN_USER_IDS
+
+
+def require_superadmin(f):
+    """
+    Gate for /api/superadmin/*. Use it IN PLACE of @require_auth, not
+    stacked after it: it authenticates itself (same checks, via
+    _authenticate_request) so that no token, a bad token, an inactive
+    or unregistered user and a valid non-superadmin all get the same
+    404 — the response never confirms these routes exist. require_auth
+    alone would answer the first cases with 401/403.
+    """
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        usuario, failure = _authenticate_request()
+        if failure or not is_superadmin(usuario):
+            return jsonify({"error": "No encontrado"}), 404
         g.usuario = usuario
         return f(*args, **kwargs)
 
@@ -296,6 +337,14 @@ def require_auth(f):
 ROL_ADMIN    = 'admin'
 ROL_MEDICO   = 'medico'
 ROL_AUXILIAR = 'auxiliar'
+
+# Labels shown to people (emails, the superadmin page); utils.js ROL_LABELS
+# holds the same three for the browser.
+ROL_LABELS = {
+    ROL_ADMIN:    'Médico administrador',
+    ROL_MEDICO:   'Médico',
+    ROL_AUXILIAR: 'Auxiliar administrativo',
+}
 
 ADMIN_ROLES  = frozenset({ROL_ADMIN, ROL_AUXILIAR})
 MEDICO_ROLES = frozenset({ROL_ADMIN, ROL_MEDICO})

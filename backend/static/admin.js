@@ -619,6 +619,7 @@ window.addEventListener('pageshow', async function(event) {
             return;
         }
 
+        showSuperadminLink(data);
         document.body.classList.remove('auth-pending');
         loadUsuarios();
 

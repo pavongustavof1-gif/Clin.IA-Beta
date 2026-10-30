@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Superadmin - Clin.IA™</title>
+
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon/favicon.ico') }}">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ url_for('static', filename='favicon/favicon-16.png') }}">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ url_for('static', filename='favicon/favicon-32.png') }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ url_for('static', filename='favicon/apple-touch-icon.png') }}">
+
+    <meta http-equiv="Cache-Control" content="no-store, no-cache, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='superadmin.css') }}">
+    <style>
+        /* Hidden until session-check confirms the token AND superadmin: true */
+        body.auth-pending { visibility: hidden; }
+    </style>
+</head>
+<body class="auth-pending">
+
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions">
+                <a href="/" class="nav-link">← Volver a la app</a>
+                <span class="nav-sep">|</span>
+                <a href="/admin" class="nav-link">Admin</a>
+                <span class="nav-sep">|</span>
+                <a href="#" id="logoutBtn" class="nav-link">Cerrar sesión</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="sa-page">
+        <h1 class="sa-title">Solicitudes de acceso</h1>
+
+        <div class="sa-tabs" role="tablist" aria-label="Listas de solicitudes">
+            <button type="button" class="sa-tab" role="tab" data-estado="pendiente" aria-selected="true">Pendientes</button>
+            <button type="button" class="sa-tab" role="tab" data-estado="aprobada" aria-selected="false">Aprobadas</button>
+            <button type="button" class="sa-tab" role="tab" data-estado="rechazada" aria-selected="false">Rechazadas</button>
+        </div>
+
+        <p id="saStatus" class="sa-status" role="status" aria-live="polite"></p>
+        <div id="saList" class="sa-list"></div>
+    </main>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.112.3/dist/umd/supabase.js" integrity="sha384-qafw21c/iciq0VXsi9FzkfoQv5I/V0iqE4lSNcKXPnW9/UTJLnv5CcN4FHxVLnKg" crossorigin="anonymous"></script>
+    <script nonce="{{ csp_nonce }}">
+        window.CLINIA_CONFIG = { supabaseUrl: "{{ supabase_url }}", supabaseAnonKey: "{{ supabase_anon_key }}" };
+    </script>
+    <script src="{{ url_for('static', filename='auth-common.js') }}"></script>
+    <script src="{{ url_for('static', filename='utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='superadmin.js') }}"></script>
+</body>
+</html>

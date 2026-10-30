@@ -19,6 +19,10 @@
 #   medico_required - True if @require_medico stacks after @require_auth
 #                     (rol admin or medico — auth.is_medico_role); an
 #                     auxiliar gets 404 on these, never 403
+#   superadmin_required - True for /api/superadmin/*: @require_superadmin
+#                     (used INSTEAD of @require_auth) answers 404 to every
+#                     caller who isn't in Config.SUPERADMIN_USER_IDS —
+#                     including no token — never 401/403. Absent = False.
 #   resource        - what data/action the route touches, in one phrase
 #   rule            - the intended access policy in prose
 #   scope           - 'none' | 'owner' | 'owner_or_clinic' | 'clinic' | 'self_scoped_query'
@@ -43,6 +47,8 @@ ROUTE_INVENTORY = [
      'resource': 'admin page shell', 'rule': 'always 200, no data (role gate is client-side + the /api/admin/* routes)', 'scope': 'none', 'miss_status': None},
     {'path': '/account', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
      'resource': 'account page shell', 'rule': 'always 200, no data', 'scope': 'none', 'miss_status': None},
+    {'path': '/superadmin', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
+     'resource': 'superadmin review page shell', 'rule': 'always 200, no data, noindex (gate is client-side + /api/superadmin/*)', 'scope': 'none', 'miss_status': None},
     {'path': '/api/health', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
      'resource': 'health check', 'rule': 'always 200, no data, rate-limit exempt', 'scope': 'none', 'miss_status': None},
 
@@ -117,6 +123,25 @@ ROUTE_INVENTORY = [
      'resource': 'sesiones.addenda (append)', 'rule': 'admin only, any session in own clinic', 'scope': 'clinic', 'miss_status': 404},
     {'path': '/api/admin/session/<session_id>/cancel', 'methods': ['POST'], 'auth_required': True, 'admin_required': True, 'medico_required': False,
      'resource': 'sesiones row (soft-cancel)', 'rule': 'admin only, any session in own clinic', 'scope': 'clinic', 'miss_status': 404},
+    # ── Superadmin (#53, Review C) — one configured person, 404 for all others ──
+    {'path': '/api/superadmin/solicitudes', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'solicitudes_registro lists (all clinics)',
+     'rule': 'superadmin only; purges rechazadas older than 30 days', 'scope': 'none', 'miss_status': 404},
+    {'path': '/api/superadmin/clinicas', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'every clinicas row (id, nombre, direccion)',
+     'rule': 'superadmin only', 'scope': 'none', 'miss_status': 404},
+    {'path': '/api/superadmin/solicitudes/<solicitud_id>/aprobar', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'solicitud → clinic + auth user + usuarios row + invite',
+     'rule': 'superadmin only; resumable state machine', 'scope': 'none', 'miss_status': 404},
+    {'path': '/api/superadmin/solicitudes/<solicitud_id>/rechazar', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'solicitud estado → rechazada (+ optional email)',
+     'rule': 'superadmin only; only from pendiente', 'scope': 'none', 'miss_status': 404},
+    {'path': '/api/superadmin/solicitudes/<solicitud_id>/reenviar', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'new recovery link + invite email',
+     'rule': 'superadmin only; aprobada and invite not accepted', 'scope': 'none', 'miss_status': 404},
+    {'path': '/api/superadmin/solicitudes/<solicitud_id>/eliminar', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'superadmin_required': True, 'resource': 'auth user (+usuarios by cascade), created clinic if empty, solicitud row',
+     'rule': 'superadmin only; aprobada, invite not accepted, no sesiones/trabajos/lecturas', 'scope': 'none', 'miss_status': 404},
 ]
 
 # Sanity: no duplicate (path, method) pairs — each real route handled once.

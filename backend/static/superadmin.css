@@ -1,0 +1,269 @@
+/* backend/static/superadmin.css
+   Superadmin review page (/superadmin, #53). Every rule is scoped under
+   .sa-* so nothing leaks into style.css's shared rules. iPad-first: one
+   column of cards, 16px controls (iOS doesn't zoom on focus at 16px),
+   44px+ tap targets, buttons that wrap instead of overflowing. */
+
+.sa-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: var(--spacing-lg) 1rem var(--spacing-xl);
+}
+
+.sa-title {
+    font-family: 'DM Serif Display', Georgia, serif;
+    font-style: italic;
+    font-weight: 400;
+    font-size: 1.8rem;
+    color: var(--text-primary);
+    margin-bottom: var(--spacing-md);
+}
+
+.sa-tabs {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: var(--spacing-sm);
+}
+
+.sa-tab {
+    min-height: 44px;
+    padding: 0 1.1rem;
+    font: 500 1rem 'Outfit', sans-serif;
+    color: var(--text-secondary);
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 999px;
+    cursor: pointer;
+}
+
+.sa-tab[aria-selected="true"] {
+    color: #fff;
+    background: #0F6E56;
+    border-color: #0F6E56;
+}
+
+.sa-status {
+    color: var(--text-secondary);
+    font-size: 0.95rem;
+    min-height: 1.4em;
+    margin-bottom: var(--spacing-sm);
+}
+
+.sa-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-md);
+}
+
+.sa-card {
+    background: var(--bg-card, #fff);
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-card);
+    padding: var(--spacing-md);
+}
+
+.sa-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
+.sa-name {
+    font: 600 1.15rem 'Outfit', sans-serif;
+    color: var(--text-primary);
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.sa-rol {
+    display: block;
+    color: var(--text-secondary);
+    font-size: 0.92rem;
+    margin-top: 0.15rem;
+}
+
+.sa-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.sa-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.sa-badge-muted { background: #f1f5f9; color: #475569; }
+.sa-badge-ok    { background: rgba(15, 110, 86, 0.1); color: #0F6E56; }
+.sa-badge-warn  { background: #fef3c7; color: #92400e; }
+
+.sa-fields {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.5rem 1.25rem;
+    margin: 0 0 0.75rem 0;
+}
+
+@media (min-width: 700px) {
+    .sa-fields { grid-template-columns: 1fr 1fr; }
+}
+
+.sa-field dt {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.sa-field dd {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text-primary);
+    overflow-wrap: anywhere;
+}
+
+.sa-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.sa-actions[hidden] { display: none; }
+
+.sa-btn {
+    width: auto;
+    max-width: none;
+    min-height: 44px;
+    padding-left: 1.1rem;
+    padding-right: 1.1rem;
+    font-size: 1rem;
+}
+
+/* style.css paints .btn-primary/.btn-secondary with a background-image
+   gradient and forces .btn text to dark gray with !important, so the
+   danger colors must clear the gradient and match that !important. */
+.sa-btn-danger.btn-primary { background: #b91c1c; background-image: none; border-color: #b91c1c; color: #fff !important; }
+.sa-btn-danger.btn-secondary { color: #b91c1c !important; }
+
+.sa-panel:not(:empty) { margin-top: 0.75rem; }
+
+.sa-form {
+    border-top: 1px solid #e2e8f0;
+    padding-top: 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+}
+
+.sa-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin: 0.25rem 0 0 0;
+}
+
+.sa-choice-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.sa-choice, .sa-check {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-height: 44px;
+    font-size: 1rem;
+    cursor: pointer;
+}
+
+.sa-check[hidden] { display: none; }
+
+.sa-choice input, .sa-check input {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+    accent-color: #0F6E56;
+}
+
+.sa-select, .sa-textarea {
+    width: 100%;
+    min-height: 44px;
+    font: 400 16px 'Outfit', sans-serif;
+    color: var(--text-primary);
+    background: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 0.75rem;
+}
+
+.sa-select[hidden] { display: none; }
+
+.sa-textarea { resize: vertical; line-height: 1.5; }
+
+.sa-select:focus, .sa-textarea:focus {
+    outline: none;
+    border-color: #7b9cef;
+    box-shadow: 0 0 0 3px rgba(123, 156, 239, 0.15);
+}
+
+.sa-hint {
+    font-size: 0.86rem;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.sa-error {
+    color: #c0392b;
+    font-size: 0.92rem;
+    margin: 0;
+}
+
+.sa-error:empty { display: none; }
+
+.sa-preview {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: var(--radius-sm);
+    padding: 0.75rem 0.9rem;
+}
+
+.sa-preview-subject {
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+}
+
+.sa-preview-body, .sa-motivo {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.sa-motivo {
+    background: #f8fafc;
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.sa-confirm-text { font-weight: 500; margin: 0; }
+
+.sa-result {
+    border-radius: var(--radius-sm);
+    padding: 0.65rem 0.9rem;
+    font-size: 0.95rem;
+}
+
+.sa-result p { margin: 0.15rem 0; }
+.sa-result-ok   { background: rgba(15, 110, 86, 0.08); color: #0F6E56; border: 1px solid rgba(15, 110, 86, 0.25); }
+.sa-result-warn { background: #fffbeb; color: #92400e; border: 1px solid #fcd34d; }

@@ -158,11 +158,13 @@ def send_invite_email(
         }
 
         response = resend.Emails.send(params)
-        logger.info(f"Email: Invite sent to {doctor_email} — id: {response.get('id', 'unknown')}")
+        # No address in the log: the superadmin approval flow sends this
+        # to applicants, whose email must never reach Render's logs.
+        logger.info(f"Email: Invite sent — id: {response.get('id', 'unknown')}")
         return True
 
     except Exception as e:
-        logger.error(f"Email: Failed to send invite to {doctor_email}: {str(e)}")
+        logger.error(f"Email: Failed to send invite ({type(e).__name__})")
         return False
 
 
@@ -226,4 +228,135 @@ def send_solicitud_notice(superadmin_email: str, applicant_nombre: str) -> bool:
     except Exception as e:
         # type only — a provider error message could echo the recipient
         logger.error(f"Email: Failed to send solicitud notice ({type(e).__name__})")
+        return False
+
+
+def _card_html(subtitle: str, body_html: str) -> str:
+    """The house email frame (green header, grey card) around body_html."""
+    return f"""
+        <div style="font-family: Arial, sans-serif; max-width: 480px; color: #334155;">
+            <div style="background: #0F6E56; padding: 16px 24px;
+                        border-radius: 6px 6px 0 0;">
+                <h2 style="color: white; margin: 0; font-size: 18px;">Clin.IA</h2>
+                <p style="color: #C8EEE4; margin: 4px 0 0 0; font-size: 13px;">
+                    {html.escape(subtitle)}
+                </p>
+            </div>
+            <div style="background: #f8fafc; padding: 24px;
+                        border: 1px solid #e2e8f0;
+                        border-top: none; border-radius: 0 0 6px 6px;">
+                {body_html}
+            </div>
+        </div>
+    """
+
+
+def send_usuario_agregado_email(admin_email: str, nuevo_nombre: str,
+                                clinica_nombre: str, rol_label: str) -> bool:
+    """
+    Tell an existing clinic admin/auxiliar that the superadmin approved a
+    new user into their clinic (#53). Names only — never the new user's
+    email, cédula or phone. Never raises; logs nothing about either person.
+    """
+    if not Config.RESEND_API_KEY:
+        logger.warning("Email: RESEND_API_KEY not configured — skipping usuario-agregado notice.")
+        return False
+
+    try:
+        resend.api_key = Config.RESEND_API_KEY
+        body = f"""
+            <p style="margin: 0 0 16px 0;">
+                <strong>{html.escape(nuevo_nombre)}</strong> se unió a
+                <strong>{html.escape(clinica_nombre)}</strong> en Clin.IA como
+                {html.escape(rol_label)}.
+            </p>
+            <p style="font-size: 12px; color: #94a3b8; margin: 0;">
+                Puedes ver y administrar a los usuarios de tu clínica en el panel de administración.
+                Si no reconoces a esta persona, escribe a
+                <a href="mailto:info@clinianotes.com" style="color: #0F6E56;">info@clinianotes.com</a>.
+            </p>
+        """
+        response = resend.Emails.send({
+            "from": f"Clin.IA <{Config.RESEND_SENDER}>",
+            "to": [admin_email],
+            "subject": f"Nuevo usuario en {clinica_nombre} — Clin.IA",
+            "html": _card_html('Nuevo usuario en tu clínica', body),
+        })
+        logger.info(f"Email: usuario-agregado notice sent — id: {response.get('id', 'unknown')}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Email: Failed to send usuario-agregado notice ({type(e).__name__})")
+        return False
+
+
+# DRAFT pending legal review — the whole rejection email lives here so
+# the wording is edited in one place. The superadmin page shows a preview
+# rendered from this same dict (GET /api/superadmin/solicitudes returns
+# it), so what Gustavo previews is exactly what is sent. Placeholders:
+# {nombre} in 'cuerpo'; {bloque_motivo} is replaced by 'bloque_motivo'
+# (with {motivo} filled in) when a motivo was written, or by '' if not.
+REJECTION_EMAIL_DRAFT = {
+    'asunto': 'Tu solicitud de acceso a Clin.IA',
+    'cuerpo': (
+        'Hola {nombre}:\n'
+        '\n'
+        'Gracias por tu interés en Clin.IA. Revisamos tu solicitud de acceso '
+        'y por el momento no podemos aprobarla.\n'
+        '\n'
+        '{bloque_motivo}'
+        'Si crees que hay un error o quieres darnos más información, responde '
+        'a este correo y con gusto lo revisamos.\n'
+        '\n'
+        'Saludos,\n'
+        'Equipo Clin.IA'
+    ),
+    'bloque_motivo': 'Motivo: {motivo}\n\n',
+}
+
+
+def render_rejection_text(nombre: str, motivo: str | None) -> str:
+    """Plain-text rejection body. str.replace, not str.format, so braces
+    typed into motivo or nombre are kept literally (the page's preview
+    does the same split/join substitution)."""
+    bloque = ''
+    if motivo:
+        bloque = REJECTION_EMAIL_DRAFT['bloque_motivo'].replace('{motivo}', motivo)
+    return (REJECTION_EMAIL_DRAFT['cuerpo']
+            .replace('{nombre}', nombre)
+            .replace('{bloque_motivo}', bloque))
+
+
+def render_rejection_html(nombre: str, motivo: str | None) -> str:
+    """The same text, every line escaped and line breaks kept as <br>."""
+    text = render_rejection_text(nombre, motivo)
+    lines = '<br>'.join(html.escape(line) for line in text.split('\n'))
+    return _card_html('Solicitud de acceso', f'<p style="margin: 0; line-height: 1.5;">{lines}</p>')
+
+
+def send_rejection_email(applicant_email: str, nombre: str, motivo: str | None,
+                         reply_to: str | None) -> bool:
+    """Send REJECTION_EMAIL_DRAFT to an applicant, Reply-To the superadmin
+    so a reply reaches a person. Never raises; never logs the applicant."""
+    if not Config.RESEND_API_KEY:
+        logger.warning("Email: RESEND_API_KEY not configured — skipping rejection email.")
+        return False
+
+    try:
+        resend.api_key = Config.RESEND_API_KEY
+        params = {
+            "from": f"Clin.IA <{Config.RESEND_SENDER}>",
+            "to": [applicant_email],
+            "subject": REJECTION_EMAIL_DRAFT['asunto'],
+            "html": render_rejection_html(nombre, motivo),
+            "text": render_rejection_text(nombre, motivo),
+        }
+        if reply_to:
+            params["reply_to"] = reply_to
+        response = resend.Emails.send(params)
+        logger.info(f"Email: rejection sent — id: {response.get('id', 'unknown')}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Email: Failed to send rejection ({type(e).__name__})")
         return False

@@ -171,6 +171,26 @@ def _patch_data_layer(db, monkeypatch):
     monkeypatch.setattr(app_module, 'send_pdf_email', lambda **k: True)
     monkeypatch.setattr(app_module, 'send_invite_email', lambda *a, **k: True)
     monkeypatch.setattr(app_module, 'send_solicitud_notice', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, 'send_usuario_agregado_email', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, 'send_rejection_email', lambda *a, **k: True)
+    monkeypatch.setattr(app_module, '_sb_delete_quiet', db.delete)
+
+    def _fake_patch_returning(path, body):
+        # Same filter semantics as db.patch, but returns the rows it changed
+        # (what Prefer: return=representation gives the real helper).
+        table, params = db._parse_path(path)
+        changed = []
+        for row in db.tables.get(table, []):
+            if db._match_row(row, params):
+                row.update(body)
+                changed.append(dict(row))
+        return changed
+    monkeypatch.setattr(app_module, '_sb_patch_returning_quiet', _fake_patch_returning)
+    # Supabase Auth admin: an empty fake by default (every user "missing");
+    # test_superadmin.py installs a stateful one.
+    monkeypatch.setattr(app_module, '_sb_get_auth_user', lambda user_id: ('missing', None))
+    monkeypatch.setattr(app_module, '_sb_delete_auth_user', lambda user_id: 'missing')
+    monkeypatch.setattr(app_module, '_sb_generate_recovery_link', lambda email: 'https://fake.recovery/link')
 
     def _fake_insert_solicitud(body):
         # Mirrors the partial unique index on lower(email) WHERE estado in

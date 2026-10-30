@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/superadmin_page.html
+
+  Onboarding Review C: the superadmin review page, driven by the REAL
+  static/utils.js + static/superadmin.js (unmodified) and the real
+  superadmin.css, against an in-memory fake of /api/session-check and
+  /api/superadmin/*. Only the boundary superadmin.js talks to is stubbed
+  (supabaseClient.auth.getSession, getAuthHeaders, logout,
+  handleSessionExpired, fetch). The fake API keeps state, so approve,
+  reject, resend and delete can be clicked through. The stuck request
+  (Lic. Beto Auxiliar) answers 503 on its first retry — see FAIL_ONCE.
+
+  One applicant's fields hold HTML/script text on purpose: the page must
+  show it literally (textContent), never run or render it. The on-page
+  check at the bottom prints PASS/FAIL for that.
+
+  How to run:
+    1. Serve backend/ over HTTP, e.g. `cd backend && python3 -m http.server 8765`.
+    2. Open http://localhost:8765/tests/frontend/superadmin_page.html
+
+  No PHI: every name, email and address below is invented.
+-->
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>superadmin harness</title>
+    <link rel="stylesheet" href="../../static/style.css">
+    <link rel="stylesheet" href="../../static/superadmin.css">
+    <style>body.auth-pending { visibility: hidden; } #harnessCheck { font: 13px monospace; padding: 1rem; }</style>
+</head>
+<body class="auth-pending">
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions">
+                <a href="#" class="nav-link">← Volver a la app</a>
+                <span class="nav-sep">|</span>
+                <a href="#" id="logoutBtn" class="nav-link">Cerrar sesión</a>
+            </div>
+        </div>
+    </nav>
+    <main class="sa-page">
+        <h1 class="sa-title">Solicitudes de acceso</h1>
+        <div class="sa-tabs" role="tablist" aria-label="Listas de solicitudes">
+            <button type="button" class="sa-tab" role="tab" data-estado="pendiente" aria-selected="true">Pendientes</button>
+            <button type="button" class="sa-tab" role="tab" data-estado="aprobada" aria-selected="false">Aprobadas</button>
+            <button type="button" class="sa-tab" role="tab" data-estado="rechazada" aria-selected="false">Rechazadas</button>
+        </div>
+        <p id="saStatus" class="sa-status" role="status" aria-live="polite"></p>
+        <div id="saList" class="sa-list"></div>
+    </main>
+    <pre id="harnessCheck"></pre>
+
+<script>
+window.HARNESS_CALLS = [];
+window.supabaseClient = { auth: { getSession: async () => ({ data: { session: { access_token: 'fake' } } }) } };
+window.getAuthHeaders = async () => ({ Authorization: 'Bearer fake' });
+window.logout = () => {};
+window.handleSessionExpired = () => { window.HARNESS_EXPIRED = true; };
+window.XSS_RAN = false;
+
+const daysAgo = d => new Date(Date.now() - d * 86400000).toISOString();
+const PLANTILLA = {
+    asunto: 'Tu solicitud de acceso a Clin.IA',
+    cuerpo: 'Hola {nombre}:\n\nGracias por tu interés en Clin.IA. Revisamos tu solicitud de acceso y por el momento no podemos aprobarla.\n\n{bloque_motivo}Si crees que hay un error o quieres darnos más información, responde a este correo y con gusto lo revisamos.\n\nSaludos,\nEquipo Clin.IA',
+    bloque_motivo: 'Motivo: {motivo}\n\n',
+};
+const LABELS = { admin: 'Médico administrador', medico: 'Médico', auxiliar: 'Auxiliar administrativo' };
+const base = (o) => ({
+    nombre: 'Dra. Ana Inventada', email: 'ana@consultorio-ficticio.mx', rol_solicitado: 'admin',
+    cedula: '87654321', especialidad: 'Pediatría', universidad: 'Universidad Ficticia',
+    razon_social: 'Consultorio Ficticio Lomas', domicilio: 'Av. Imaginaria 742, Col. Inventada, CDMX',
+    telefono: '55 5000 1234', recomendado_por: null, terminos_version: 'ToS-2026-10',
+    terminos_aceptados_at: daysAgo(3), estado: 'pendiente', created_at: daysAgo(3), revisado_at: null,
+    clinica_id: null, clinica_creada: null, usuario_id: null, rol_otorgado: null, motivo_rechazo: null, ...o,
+});
+const DB = [
+    base({ id: 's1', created_at: daysAgo(6) }),
+    base({ id: 's2', nombre: '<img src=x onerror="window.XSS_RAN=true">Dr. Prueba <b>Negrita</b>',
+           email: 'prueba@clinica-san-angel-ficticia.mx', rol_solicitado: 'medico',
+           razon_social: 'Clinica San Angel', domicilio: '<script>window.XSS_RAN=true<\/script> Calle Falsa 123',
+           recomendado_por: 'Dr. Referente Inventado', created_at: daysAgo(2) }),
+    base({ id: 's3', nombre: 'Lic. Beto Auxiliar', email: 'beto@consultorio-ficticio.mx', rol_solicitado: 'auxiliar',
+           cedula: null, especialidad: null, universidad: null, razon_social: 'Centro Médico Inventado del Norte, S.C.',
+           estado: 'en_proceso', rol_otorgado: 'auxiliar', clinica_id: 'c-new', clinica_creada: true, created_at: daysAgo(4) }),
+    base({ id: 'a1', nombre: 'Dr. Carlos Aprobado', email: 'carlos@consultorio-ficticio.mx', estado: 'aprobada',
+           rol_otorgado: 'admin', clinica_id: 'c-carlos', clinica_creada: true, usuario_id: 'u-carlos', revisado_at: daysAgo(8),
+           razon_social: 'Consultorio Carlos Ficticio' }),
+    base({ id: 'a2', nombre: 'Dra. Diana Activa', email: 'diana@consultorio-ficticio.mx', estado: 'aprobada', rol_solicitado: 'medico',
+           rol_otorgado: 'medico', clinica_id: 'c-sanangel', clinica_creada: false, usuario_id: 'u-diana', revisado_at: daysAgo(15) }),
+    base({ id: 'r1', nombre: 'Sr. Ernesto Rechazado', email: 'ernesto@consultorio-ficticio.mx', estado: 'rechazada',
+           revisado_at: daysAgo(5), motivo_rechazo: 'No encontramos la cédula en el registro.\nSi es un error, escríbenos.' }),
+];
+const CLINICAS = [
+    { id: 'c-sanangel', nombre: 'Clínica San Ángel', direccion: 'Av. Revolución 1000 (ficticia)' },
+    { id: 'c-carlos', nombre: 'Consultorio Carlos Ficticio', direccion: '' },
+    { id: 'c-test', nombre: 'CLIN.IA Pruebas', direccion: '' },
+];
+const ACEPTADA = { 'u-carlos': false, 'u-diana': true };
+let FAIL_ONCE = true;   // first approval of s3 (stuck) answers 503
+
+function fold(s) { return (s || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '').replace(/[.\-',]/g, '').replace(/[^a-z0-9]+/g, ' ').trim(); }
+
+const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+window.fetch = async (url, opts = {}) => {
+    const u = new URL(url, location.origin);
+    const method = (opts.method || 'GET').toUpperCase();
+    const body = opts.body ? JSON.parse(opts.body) : null;
+    HARNESS_CALLS.push({ method, path: u.pathname + u.search, body });
+    await new Promise(r => setTimeout(r, 150));
+    if (u.pathname === '/api/session-check') {
+        return json(200, { valid: true, rol: 'admin', clinica_id: 'c-test', superadmin: true });
+    }
+    if (u.pathname === '/api/superadmin/solicitudes') {
+        const estado = u.searchParams.get('estado') || 'pendiente';
+        let rows = DB.filter(r => estado === 'pendiente' ? ['pendiente', 'en_proceso'].includes(r.estado) : r.estado === estado);
+        rows = rows.map(r => {
+            const item = { ...r, rol_solicitado_label: LABELS[r.rol_solicitado], rol_otorgado_label: r.rol_otorgado ? LABELS[r.rol_otorgado] : null };
+            const dias = d => d ? Math.floor((Date.now() - new Date(d)) / 86400000) : null;
+            if (estado === 'pendiente') { item.dias = dias(r.created_at); item.atascada = r.estado === 'en_proceso'; }
+            if (estado === 'aprobada') {
+                item.dias_desde_aprobacion = dias(r.revisado_at);
+                item.invitacion_aceptada = ACEPTADA[r.usuario_id] ?? false;
+                item.clinica_nombre = (CLINICAS.find(c => c.id === r.clinica_id) || {}).nombre || r.razon_social;
+                item.clinica_se_elimina = !!r.clinica_creada;
+            }
+            if (estado === 'rechazada') item.dias = dias(r.revisado_at);
+            return item;
+        });
+        rows.sort((a, b) => estado === 'pendiente' ? a.created_at.localeCompare(b.created_at) : (b.revisado_at || '').localeCompare(a.revisado_at || ''));
+        return json(200, { estado, solicitudes: rows, plantilla_rechazo: PLANTILLA, max_motivo: 1000 });
+    }
+    if (u.pathname === '/api/superadmin/clinicas') {
+        const q = fold(u.searchParams.get('q'));
+        const hit = CLINICAS.find(c => q && (fold(c.nombre).includes(q) || q.includes(fold(c.nombre))));
+        return json(200, { clinicas: CLINICAS, sugerida: hit ? hit.id : null });
+    }
+    const m = u.pathname.match(/^\/api\/superadmin\/solicitudes\/([^/]+)\/(\w+)$/);
+    if (m) {
+        const row = DB.find(r => r.id === m[1]);
+        if (!row) return json(404, { error: 'No encontrado' });
+        if (m[2] === 'aprobar') {
+            if (row.id === 's3' && FAIL_ONCE) { FAIL_ONCE = false; return json(503, { error: 'No se pudo completar la aprobación (paso: guardar el usuario). Usa "Reintentar aprobación"; lo ya hecho no se repite.', paso: 'guardar el usuario' }); }
+            if (body.clinica_id === null && !['admin', 'auxiliar'].includes(body.rol_otorgado)) return json(400, { error: 'Una clínica nueva necesita un administrador: otorga Médico administrador o Auxiliar administrativo.' });
+            if (body.clinica_id && ['admin', 'auxiliar'].includes(body.rol_otorgado) && body.confirma_admin !== true) return json(400, { error: 'Confirma que ya lo hablaste con el administrador actual de la clínica antes de agregar otro administrador.' });
+            Object.assign(row, { estado: 'aprobada', rol_otorgado: body.rol_otorgado, clinica_id: body.clinica_id || 'c-nueva-' + row.id, clinica_creada: !body.clinica_id, usuario_id: 'u-' + row.id, revisado_at: new Date().toISOString() });
+            return json(200, { ok: true, estado: 'aprobada', clinica_creada: !body.clinica_id, correo_invitacion_enviado: row.id !== 's2',
+                               warning: row.id === 's2' ? 'Aprobada, pero el correo de invitación no se envió — usa Reenviar.' : undefined,
+                               avisos_admins: body.clinica_id ? { enviados: 2, fallidos: 0 } : null });
+        }
+        if (m[2] === 'rechazar') {
+            if (row.estado !== 'pendiente') return json(409, { error: 'Solo se puede rechazar una solicitud pendiente.' });
+            Object.assign(row, { estado: 'rechazada', motivo_rechazo: body.motivo, revisado_at: new Date().toISOString() });
+            return json(200, { ok: true, estado: 'rechazada', correo_enviado: body.enviar_correo === true ? true : null });
+        }
+        if (m[2] === 'reenviar') return json(200, { ok: true, correo_enviado: true });
+        if (m[2] === 'eliminar') { DB.splice(DB.indexOf(row), 1); return json(200, { ok: true, clinica_eliminada: !!row.clinica_creada }); }
+    }
+    return json(404, { error: 'No encontrado' });
+};
+</script>
+<script src="../../static/utils.js"></script>
+<script src="../../static/superadmin.js"></script>
+<script>
+// Self-check once the first list has rendered.
+setTimeout(() => {
+    const out = [];
+    const list = document.getElementById('saList');
+    const text = list.textContent;
+    out.push((text.includes('<img src=x onerror=') && text.includes('<script>window.XSS_RAN=true<\/script>')) ? 'PASS markup in applicant data shown as text' : 'FAIL markup not shown literally');
+    out.push(!list.querySelector('img, script, b') ? 'PASS no element created from applicant data' : 'FAIL an element was created from applicant data');
+    out.push(!window.XSS_RAN ? 'PASS no injected script ran' : 'FAIL injected script ran');
+    const ids = [...list.querySelectorAll('.sa-name')].map(n => n.textContent);
+    out.push(ids[0] === 'Dra. Ana Inventada' ? 'PASS oldest pendiente first' : 'FAIL order ' + ids.join(' | '));
+    out.push(document.documentElement.scrollWidth <= window.innerWidth ? 'PASS no horizontal scroll' : `FAIL horizontal scroll ${document.documentElement.scrollWidth} > ${window.innerWidth}`);
+    document.getElementById('harnessCheck').textContent = out.join('\n');
+    console.log(out.join('\n'));
+}, 900);
+</script>
+</body>
+</html>

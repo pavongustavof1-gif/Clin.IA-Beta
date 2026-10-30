@@ -9,13 +9,18 @@ from transcription import TranscriptionService
 from llm_processor import LLMProcessor
 from pdf_generator import PDFGenerator
 from logger import logger
-from email_service import send_pdf_email, send_invite_email, send_solicitud_notice
+from email_service import (
+    send_pdf_email, send_invite_email, send_solicitud_notice,
+    send_usuario_agregado_email, send_rejection_email, REJECTION_EMAIL_DRAFT,
+)
 from auth import (
-    require_auth, require_admin, require_medico, invalidate_usuario_cache,
-    is_admin_role, is_medico_role, ROL_ADMIN, ROL_MEDICO, ROL_AUXILIAR, ADMIN_ROLES,
+    require_auth, require_admin, require_medico, require_superadmin, invalidate_usuario_cache,
+    is_admin_role, is_medico_role, is_superadmin,
+    ROL_ADMIN, ROL_MEDICO, ROL_AUXILIAR, ADMIN_ROLES, ROL_LABELS,
 )
 from pg_utils import pg_val, pg_path, pg_ilike_val
 from solicitud_validation import validate_solicitud
+from superadmin_utils import suggest_clinica
 from concurrent.futures import ThreadPoolExecutor
 import os
 import re
@@ -472,8 +477,8 @@ def _sb_insert_clinica(nombre: str, direccion: str, telefono: str) -> dict | Non
     Insert a clinicas row and return it (Prefer: return=representation),
     or None on error. color_primario/logo_url are left to their column
     defaults — get_clinica_context already renders absent values as the
-    house color and no logo. Groundwork for superadmin approval (#53);
-    no route calls it yet. Needs INSERT on clinicas for service_role.
+    house color and no logo. Only caller: superadmin_aprobar (#53).
+    Needs INSERT on clinicas for service_role.
     """
     url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/clinicas'
     payload = json.dumps({
@@ -554,40 +559,149 @@ def _sb_insert_solicitud(body: dict) -> str:
         return 'error'
 
 
+# ── Superadmin review (#53, Review C) — quiet helpers ───────────────────────
+# Every path and Auth response below can carry an applicant's email or
+# phone, so like _sb_get_quiet these log the table (or Auth endpoint) and
+# status only — never the path, the body or the exception message.
+
+def _sb_patch_returning_quiet(path: str, body: dict) -> list | None:
+    """PATCH with return=representation: the updated rows (an empty list
+    when the filter matched nothing — that is how a conditional claim
+    like estado=eq.pendiente learns it lost), or None on error."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    table = path.split('?', 1)[0].rsplit('/', 1)[-1]
+    data = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(
+        url, data=data, method='PATCH',
+        headers=_sb_headers(extra={'Prefer': 'return=representation'}),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase PATCH {table} failed {e.code}")
+        return None
+    except Exception as e:
+        logger.warning(f"DB: Supabase PATCH {table} error ({type(e).__name__})")
+        return None
+
+
+def _sb_delete_quiet(path: str) -> bool:
+    """DELETE; True on success (including zero rows matched)."""
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    table = path.split('?', 1)[0].rsplit('/', 1)[-1]
+    req = urllib.request.Request(url, headers=_sb_headers(), method='DELETE')
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+        return True
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase DELETE {table} failed {e.code}")
+        return False
+    except Exception as e:
+        logger.warning(f"DB: Supabase DELETE {table} error ({type(e).__name__})")
+        return False
+
+
+def _sb_get_auth_user(user_id: str) -> tuple[str, dict | None]:
+    """
+    GET {SUPABASE_URL}/auth/v1/admin/users/{id} (the endpoint behind
+    auth-js admin.getUserById). Returns ('ok', user), ('missing', None)
+    on 404, or ('error', None). The user object carries the email, so
+    nothing from it is logged.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + f'/auth/v1/admin/users/{pg_val(user_id)}'
+    req = urllib.request.Request(url, headers=_sb_headers())
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return 'ok', json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return 'missing', None
+        logger.warning(f"Auth admin: get user failed {e.code}")
+        return 'error', None
+    except Exception as e:
+        logger.warning(f"Auth admin: get user error ({type(e).__name__})")
+        return 'error', None
+
+
+def _sb_delete_auth_user(user_id: str) -> str:
+    """
+    DELETE {SUPABASE_URL}/auth/v1/admin/users/{id} (auth-js
+    admin.deleteUser; hard delete). The usuarios row goes with it
+    (ON DELETE CASCADE). 'deleted', 'missing' (404 — already gone, so a
+    resumed delete just moves on) or 'error'. The DB refuses the delete
+    while sesiones/trabajos/lecturas_sesion rows reference the user.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + f'/auth/v1/admin/users/{pg_val(user_id)}'
+    req = urllib.request.Request(url, headers=_sb_headers(), method='DELETE')
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            resp.read()
+        return 'deleted'
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return 'missing'
+        logger.warning(f"Auth admin: delete user failed {e.code}")
+        return 'error'
+    except Exception as e:
+        logger.warning(f"Auth admin: delete user error ({type(e).__name__})")
+        return 'error'
+
+
+def _sb_generate_recovery_link(email: str) -> str:
+    """
+    A fresh set-password link for an auth user that ALREADY exists
+    (superadmin "Reenviar", and an approval resumed after the user was
+    created). Type 'recovery', not 'invite' or 'magiclink' — verified in
+    the GoTrue source (supabase/auth internal/api/mail.go,
+    adminGenerateLink): recovery for a missing email is a 404 and never
+    creates a user, while magiclink silently signs a missing email up.
+    Verifying a recovery token also confirms a still-unconfirmed user
+    (verify.go, recoverVerify), and supabase-js reports the redirect as
+    PASSWORD_RECOVERY, which /set-password already handles. Raises on
+    failure; callers log the exception type only.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + '/auth/v1/admin/generate_link'
+    payload = json.dumps({
+        'type': 'recovery',
+        'email': email,
+        'redirect_to': 'https://app.clinianotes.com/set-password',
+    }, ensure_ascii=False).encode()
+    req = urllib.request.Request(url, data=payload, headers=_sb_headers(), method='POST')
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        data = json.loads(resp.read())
+    return data['action_link']
+
+
 class ProvisioningError(Exception):
     """
     Raised by _provision_usuario. `stage` says which side failed, because
     the two need different handling by the caller:
       'invite' — generate_link failed; nothing was created anywhere.
+      'record' — the auth user exists but the caller's on_auth_user hook
+                 failed (superadmin approval could not save usuario_id);
+                 no usuarios row was attempted.
       'insert' — the auth user EXISTS but has no usuarios row (orphan,
                  already logged here for manual cleanup in Supabase).
+    `user_id` is the auth user's id whenever one was created.
     """
-    def __init__(self, stage: str):
+    def __init__(self, stage: str, user_id: str = None):
         super().__init__(stage)
         self.stage = stage
+        self.user_id = user_id
 
 
-def _provision_usuario(nombre: str, email: str, rol: str, clinica_id: str,
-                       cedula: str = None, especialidad: str = None,
-                       universidad: str = None) -> tuple[dict, str]:
+def _insert_usuario_row(user_id: str, nombre: str, email: str, rol: str, clinica_id: str,
+                        cedula: str = None, especialidad: str = None,
+                        universidad: str = None) -> dict | None:
     """
-    Create one account: the Supabase auth identity + invite link, then
-    its usuarios row (activo=True). Returns (usuarios_row, action_link);
-    raises ProvisioningError otherwise. Does NOT validate input, check
-    for a duplicate email, or send the invite — callers own those, since
-    each caller has its own rules for who may create which rol where
-    (admin_create_usuario: never 'admin', always the caller's clinic).
-
-    Optional fields left as None are omitted from the insert rather than
-    sent as null, so a médico's payload is exactly what it was before
-    this helper existed and an auxiliar's simply has no cédula/especialidad.
+    Insert the usuarios row for an existing auth user (activo=True).
+    Optional fields left as None are omitted rather than sent as null, so
+    an auxiliar's row simply has no cédula/especialidad. Returns the row
+    or None. Split out of _provision_usuario so a resumed superadmin
+    approval can insert the row for an auth user it already created.
     """
-    try:
-        user_id, action_link = _sb_generate_invite_link(email)
-    except Exception as e:
-        logger.error(f"Admin: generate_link failed for {email}: {e}")
-        raise ProvisioningError('invite')
-
     body = {
         'id':         user_id,
         'nombre':     nombre,
@@ -600,17 +714,53 @@ def _provision_usuario(nombre: str, email: str, rol: str, clinica_id: str,
                        ('universidad', universidad)):
         if value is not None:
             body[key] = value
+    return _sb_insert_usuario(body)
 
-    nuevo_usuario = _sb_insert_usuario(body)
+
+def _provision_usuario(nombre: str, email: str, rol: str, clinica_id: str,
+                       cedula: str = None, especialidad: str = None,
+                       universidad: str = None, on_auth_user=None) -> tuple[dict, str]:
+    """
+    Create one account: the Supabase auth identity + invite link, then
+    its usuarios row (activo=True). Returns (usuarios_row, action_link);
+    raises ProvisioningError otherwise. Does NOT validate input, check
+    for a duplicate email, or send the invite — callers own those, since
+    each caller has its own rules for who may create which rol where
+    (admin_create_usuario: always the caller's clinic; superadmin
+    approval: the clinic it chose or created).
+
+    on_auth_user(user_id) -> bool, if given, runs right after the auth
+    user exists and before the usuarios insert; False aborts with stage
+    'record'. Superadmin approval uses it to save usuario_id first, so a
+    retry never creates a second auth user.
+
+    Logs carry the auth user_id only, never the email: this also runs
+    for public applicants (superadmin approval).
+    """
+    try:
+        user_id, action_link = _sb_generate_invite_link(email)
+    except Exception as e:
+        status = getattr(e, 'code', None)
+        logger.error(f"Provisioning: generate_link failed ({type(e).__name__}{f' {status}' if status else ''})")
+        raise ProvisioningError('invite')
+
+    if on_auth_user is not None and not on_auth_user(user_id):
+        logger.error(f"Provisioning: auth user_id={user_id} created but the caller could not record it")
+        raise ProvisioningError('record', user_id)
+
+    nuevo_usuario = _insert_usuario_row(user_id, nombre, email, rol, clinica_id,
+                                        cedula=cedula, especialidad=especialidad,
+                                        universidad=universidad)
     if nuevo_usuario is None:
         logger.error(
-            f"Admin: ORPHANED AUTH USER — generate_link succeeded for {email} "
+            f"Provisioning: ORPHANED AUTH USER — generate_link succeeded "
             f"(auth user_id={user_id}) but the usuarios insert failed. This "
-            f"auth user now exists in Supabase with no matching usuarios row "
-            f"and needs manual cleanup in the Supabase dashboard (Authentication "
-            f"> Users) before this email can be invited again."
+            f"auth user now exists in Supabase with no matching usuarios row. "
+            f"An admin invite needs manual cleanup in the Supabase dashboard "
+            f"(Authentication > Users) before this email can be invited again; "
+            f"a superadmin approval stored the id and resumes on retry."
         )
-        raise ProvisioningError('insert')
+        raise ProvisioningError('insert', user_id)
 
     return nuevo_usuario, action_link
 
@@ -1433,7 +1583,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.7.3-beta',
+        'version': '0.8.0-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2216,11 +2366,16 @@ def session_check():
     stale token that's present but expired. Also returns rol/clinica_id so
     the frontend can conditionally reveal admin-only UI without a second
     round-trip — no session data beyond that, no side effects."""
-    return jsonify({
+    body = {
         'valid':      True,
         'rol':        g.usuario['rol'],
         'clinica_id': g.usuario['clinica_id'],
-    }), 200
+    }
+    # Key present only for the superadmin, absent for everyone else, so
+    # the response doesn't even hint that the role exists.
+    if is_superadmin(g.usuario):
+        body['superadmin'] = True
+    return jsonify(body), 200
 
 
 @app.route('/api/admin/usuarios', methods=['GET'])
@@ -2966,6 +3121,574 @@ def admin_cancel_session(session_id):
     }), 200
 
 
+# ── Superadmin review of access requests (#53, Review C) ────────────────────
+# One person (Config.SUPERADMIN_USER_IDS) reviews solicitudes_registro:
+# approve (creates the clinic if needed, the account, the invite), reject,
+# resend an unaccepted invite, or delete an approval nobody accepted.
+# Every route is @require_superadmin, which answers everyone else —
+# including no token — with the same 404. Applicant data never reaches a
+# log line: only the solicitud id, the step and a status.
+
+SOLICITUD_SELECT = (
+    'id,nombre,email,rol_solicitado,cedula,especialidad,universidad,razon_social,'
+    'domicilio,telefono,recomendado_por,terminos_version,terminos_aceptados_at,'
+    'estado,created_at,revisado_at,revisado_por,clinica_id,clinica_creada,'
+    'usuario_id,rol_otorgado,motivo_rechazo'
+)
+SUPERADMIN_LISTAS = ('pendiente', 'aprobada', 'rechazada')
+RECHAZADA_RETENTION_DAYS = 30
+MAX_MOTIVO_RECHAZO = 1000
+SUPERADMIN_DB_ERROR = 'No se pudo consultar la base de datos. Intenta de nuevo.'
+APROBACION_PASO_ERROR = ('No se pudo completar la aprobación (paso: {paso}). '
+                         'Usa "Reintentar aprobación"; lo ya hecho no se repite.')
+APROBACION_OTROS_DATOS = ('Esta aprobación quedó a medias con otra clínica u otro rol. '
+                          'Reintenta con los mismos datos.')
+INVITE_FALLO_AVISO = 'Aprobada, pero el correo de invitación no se envió — usa Reenviar.'
+_INVISIBLE_CHARS_RE = re.compile('[​⁠﻿]')
+
+
+def _sa_log(solicitud_id, accion: str, outcome: str) -> None:
+    """The superadmin flows' only log line: id, action, outcome."""
+    logger.info(f"Superadmin: solicitud={solicitud_id} accion={accion} outcome={outcome}")
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _dias_desde(iso_value) -> int | None:
+    """Whole days from an ISO timestamp to now (UTC), or None."""
+    if not iso_value:
+        return None
+    try:
+        then = datetime.fromisoformat(str(iso_value).replace('Z', '+00:00'))
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return max(0, (_utc_now() - then).days)
+
+
+def _purge_old_rechazadas() -> bool:
+    """
+    Delete rechazadas reviewed more than RECHAZADA_RETENTION_DAYS ago (the
+    applicant's data is kept no longer than that). Filtered on estado, so
+    pendiente/en_proceso/aprobada rows can never match. Runs on every list
+    load and once at startup; best-effort.
+    """
+    cutoff = (_utc_now() - timedelta(days=RECHAZADA_RETENTION_DAYS)).isoformat()
+    ok = _sb_delete_quiet(
+        f'/rest/v1/solicitudes_registro?estado=eq.rechazada&revisado_at=lt.{pg_val(cutoff)}'
+    )
+    if not ok:
+        logger.warning("Superadmin: purge of old rechazadas failed")
+    return ok
+
+
+def _load_solicitud(solicitud_id: str) -> dict | None | bool:
+    """The row, False if it doesn't exist, None if the lookup failed."""
+    rows = _sb_get_quiet(
+        f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&select={SOLICITUD_SELECT}&limit=1'
+    )
+    if rows is None:
+        return None
+    return rows[0] if rows else False
+
+
+def _patch_solicitud(solicitud_id: str, body: dict, estado: str = 'en_proceso') -> bool:
+    """Update one solicitud only while it is still in `estado`. True iff a
+    row was updated — a False after a successful call means the row moved
+    on (another tab finished or undid it)."""
+    rows = _sb_patch_returning_quiet(
+        f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&estado=eq.{pg_val(estado)}',
+        body,
+    )
+    return bool(rows)
+
+
+def _invitacion_aceptada(usuario_id: str) -> tuple[str, bool | None]:
+    """
+    ('ok', accepted) / ('missing', None) / ('error', None). Accepted =
+    the auth user's email_confirmed_at is set. That is the field Supabase
+    sets when an invite (or recovery) link is used — signupVerify /
+    recoverVerify confirm the user — so "not confirmed" reliably means
+    the link was never opened. It does NOT prove a password was saved:
+    someone who opened the link and closed the page counts as accepted.
+    last_sign_in_at isn't used: I could not confirm from the source that
+    verifying a link always sets it.
+    """
+    status, user = _sb_get_auth_user(usuario_id)
+    if status != 'ok':
+        return status, None
+    return 'ok', bool(user.get('email_confirmed_at') or user.get('confirmed_at'))
+
+
+def _superadmin_row(row: dict) -> dict:
+    out = {k: row.get(k) for k in SOLICITUD_SELECT.split(',')}
+    out['rol_solicitado_label'] = ROL_LABELS.get(row.get('rol_solicitado'), row.get('rol_solicitado'))
+    out['rol_otorgado_label'] = ROL_LABELS.get(row.get('rol_otorgado')) if row.get('rol_otorgado') else None
+    return out
+
+
+@app.route('/superadmin')
+def superadmin():
+    # Unconditional shell, same pattern as admin(): superadmin.js asks
+    # /api/session-check and sends anyone without "superadmin": true back
+    # to /. The real boundary is @require_superadmin on the API below.
+    return render_template(
+        'superadmin.html',
+        supabase_url=Config.SUPABASE_URL,
+        supabase_anon_key=Config.SUPABASE_ANON_KEY
+    )
+
+
+@app.route('/api/superadmin/solicitudes', methods=['GET'])
+@require_superadmin
+def superadmin_solicitudes():
+    """
+    ?estado=pendiente (default; oldest first, en_proceso rows included and
+    flagged atascada so the page offers "Reintentar aprobación"),
+    aprobada (newest first, with invite status from Supabase Auth) or
+    rechazada (newest first, with motivo). Purges old rechazadas first.
+    Also returns REJECTION_EMAIL_DRAFT so the page previews exactly the
+    email the server would send.
+    """
+    estado = (request.args.get('estado') or 'pendiente').strip().lower()
+    if estado not in SUPERADMIN_LISTAS:
+        return jsonify({'error': 'Lista inválida.'}), 400
+
+    _purge_old_rechazadas()
+
+    filtro = 'estado=in.(pendiente,en_proceso)' if estado == 'pendiente' else f'estado=eq.{estado}'
+    rows = _sb_get_quiet(f'/rest/v1/solicitudes_registro?{filtro}&select={SOLICITUD_SELECT}')
+    if rows is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+
+    if estado == 'pendiente':
+        # Sorted here rather than trusted to order=: ISO strings sort by time.
+        rows.sort(key=lambda r: r.get('created_at') or '')
+    else:
+        rows.sort(key=lambda r: r.get('revisado_at') or '', reverse=True)
+
+    clinicas = {}
+    usuarios_por_clinica = {}
+    if estado == 'aprobada':
+        ids = sorted({r['clinica_id'] for r in rows if r.get('clinica_id')})
+        if ids:
+            id_list = ','.join(pg_val(i) for i in ids)
+            crows = _sb_get_quiet(f'/rest/v1/clinicas?id=in.({id_list})&select=id,nombre')
+            urows = _sb_get_quiet(f'/rest/v1/usuarios?clinica_id=in.({id_list})&select=id,clinica_id')
+            if crows is None or urows is None:
+                return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+            clinicas = {c['id']: c.get('nombre') for c in crows}
+            for u in urows:
+                usuarios_por_clinica.setdefault(u['clinica_id'], set()).add(u['id'])
+
+    out = []
+    for row in rows:
+        item = _superadmin_row(row)
+        if estado == 'pendiente':
+            item['dias'] = _dias_desde(row.get('created_at'))
+            item['atascada'] = row.get('estado') == 'en_proceso'
+        elif estado == 'aprobada':
+            item['dias_desde_aprobacion'] = _dias_desde(row.get('revisado_at'))
+            item['clinica_nombre'] = clinicas.get(row.get('clinica_id'))
+            aceptada = None
+            if row.get('usuario_id'):
+                status, aceptada = _invitacion_aceptada(row['usuario_id'])
+                if status == 'missing':
+                    aceptada = False  # account already gone (a half-finished delete)
+            item['invitacion_aceptada'] = aceptada  # None = Auth lookup failed
+            otros = usuarios_por_clinica.get(row.get('clinica_id'), set()) - {row.get('usuario_id')}
+            # Shown in the delete confirmation: the clinic goes too only if
+            # this approval created it and nobody else is in it yet.
+            item['clinica_se_elimina'] = bool(row.get('clinica_creada')) and not otros
+        else:
+            item['dias'] = _dias_desde(row.get('revisado_at'))
+        out.append(item)
+
+    return jsonify({
+        'estado':             estado,
+        'solicitudes':        out,
+        'plantilla_rechazo':  REJECTION_EMAIL_DRAFT,
+        'max_motivo':         MAX_MOTIVO_RECHAZO,
+    }), 200
+
+
+@app.route('/api/superadmin/clinicas', methods=['GET'])
+@require_superadmin
+def superadmin_clinicas():
+    """Every clinic (id, nombre, direccion) for the approval picker, plus
+    "sugerida": the best normalized match for ?q (the request's razón
+    social), or null. A suggestion only — nothing is preselected server-side."""
+    rows = _sb_get_quiet('/rest/v1/clinicas?select=id,nombre,direccion&order=nombre')
+    if rows is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    rows.sort(key=lambda c: (c.get('nombre') or '').lower())
+    return jsonify({
+        'clinicas': [{'id': c['id'], 'nombre': c.get('nombre'), 'direccion': c.get('direccion')} for c in rows],
+        'sugerida': suggest_clinica(request.args.get('q') or '', rows),
+    }), 200
+
+
+def _aprobacion_fallo(solicitud_id, paso: str):
+    _sa_log(solicitud_id, 'aprobar', f'failed-at-{paso.replace(" ", "-")}')
+    return jsonify({'error': APROBACION_PASO_ERROR.format(paso=paso), 'paso': paso}), 503
+
+
+@app.route('/api/superadmin/solicitudes/<solicitud_id>/aprobar', methods=['POST'])
+@require_superadmin
+def superadmin_aprobar(solicitud_id):
+    """
+    Approve a request. Resumable and idempotent: each step records its
+    result on the solicitud before the next starts, and a retry skips
+    whatever is already recorded.
+      (1) claim pendiente → en_proceso (conditional PATCH), store rol_otorgado
+      (2) clinic: create one from razón social/domicilio/teléfono (new) and
+          store clinica_id + clinica_creada, or store the chosen clinica_id
+      (3) auth user + usuarios row; usuario_id stored the moment the auth
+          user exists, so a retry inserts only the missing usuarios row
+      (4) estado aprobada, revisado_at, revisado_por
+      (5) invite email (a fresh recovery link if this request didn't
+          create the user — the original action_link is gone)
+      (6) existing clinic: tell its other active admins/auxiliares
+    Steps 5–6 never undo the approval; their failures are reported.
+    """
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Solicitud inválida.'}), 400
+    clinica_id = data.get('clinica_id')
+    if clinica_id is not None and (not isinstance(clinica_id, str) or not clinica_id.strip()):
+        return jsonify({'error': 'Clínica inválida.'}), 400
+    clinica_id = clinica_id.strip() if clinica_id else None
+    rol = data.get('rol_otorgado')
+    if rol not in (ROL_ADMIN, ROL_MEDICO, ROL_AUXILIAR):
+        return jsonify({'error': 'Elige el rol que se otorga.'}), 400
+    confirma_admin = data.get('confirma_admin') is True
+
+    row = _load_solicitud(solicitud_id)
+    if row is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    if row is False:
+        return jsonify({'error': 'No encontrado'}), 404
+    estado = row.get('estado')
+    if estado not in ('pendiente', 'en_proceso'):
+        return jsonify({'error': 'Esta solicitud ya fue revisada.'}), 409
+
+    # A resumed approval must finish the way it started.
+    if estado == 'en_proceso':
+        if row.get('rol_otorgado') and row['rol_otorgado'] != rol:
+            return jsonify({'error': APROBACION_OTROS_DATOS}), 409
+        if row.get('clinica_id'):
+            if row.get('clinica_creada') and clinica_id is not None:
+                return jsonify({'error': APROBACION_OTROS_DATOS}), 409
+            if not row.get('clinica_creada') and clinica_id != row['clinica_id']:
+                return jsonify({'error': APROBACION_OTROS_DATOS}), 409
+    nueva = clinica_id is None
+
+    if nueva and not is_admin_role(rol):
+        return jsonify({'error': 'Una clínica nueva necesita un administrador: otorga '
+                                 'Médico administrador o Auxiliar administrativo.'}), 400
+    if not nueva and is_admin_role(rol) and not confirma_admin:
+        return jsonify({'error': 'Confirma que ya lo hablaste con el administrador actual '
+                                 'de la clínica antes de agregar otro administrador.'}), 400
+    if is_medico_role(rol) and not (row.get('cedula') and row.get('especialidad')):
+        return jsonify({'error': 'La solicitud no trae cédula y especialidad; '
+                                 'no se puede otorgar un rol de médico.'}), 400
+    if rol == ROL_AUXILIAR and row.get('rol_solicitado') != ROL_AUXILIAR:
+        return jsonify({'error': 'Solo se otorga Auxiliar administrativo a quien lo solicitó.'}), 400
+
+    clinica_nombre = row.get('razon_social')
+    if not nueva:
+        crows = _sb_get_quiet(f'/rest/v1/clinicas?id=eq.{pg_val(clinica_id)}&select=id,nombre&limit=1')
+        if crows is None:
+            return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+        if not crows:
+            return jsonify({'error': 'La clínica elegida no existe.'}), 400
+        clinica_nombre = crows[0].get('nombre')
+
+    # Re-checked now, not trusted from submit time: an account may have
+    # been created for this email since. A usuarios row that is THIS
+    # approval's own (resumed after step 3) is not a duplicate.
+    email = row['email']
+    existing = _sb_get_quiet(f"/rest/v1/usuarios?email=ilike.{pg_ilike_val(email)}&select=id")
+    if existing is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    if any(u.get('id') != row.get('usuario_id') for u in existing):
+        _sa_log(solicitud_id, 'aprobar', 'duplicate-email')
+        return jsonify({'error': 'Ya existe un usuario con este correo. La solicitud no se aprobó '
+                                 'y sigue pendiente.'}), 409
+
+    # (1) claim
+    if estado == 'pendiente':
+        claimed = _sb_patch_returning_quiet(
+            f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&estado=eq.pendiente',
+            {'estado': 'en_proceso', 'rol_otorgado': rol},
+        )
+        if claimed is None:
+            return _aprobacion_fallo(solicitud_id, 'reservar la solicitud')
+        if not claimed:
+            return jsonify({'error': 'Otra aprobación de esta solicitud está en curso o ya terminó.'}), 409
+    elif not row.get('rol_otorgado'):
+        if not _patch_solicitud(solicitud_id, {'rol_otorgado': rol}):
+            return _aprobacion_fallo(solicitud_id, 'reservar la solicitud')
+
+    # (2) clinic
+    if nueva:
+        if row.get('clinica_id'):
+            clinica_id = row['clinica_id']
+        else:
+            clinica = _sb_insert_clinica(row['razon_social'], row['domicilio'], row['telefono'])
+            if clinica is None:
+                return _aprobacion_fallo(solicitud_id, 'crear la clínica')
+            if not _patch_solicitud(solicitud_id, {'clinica_id': clinica['id'], 'clinica_creada': True}):
+                # Unrecorded, a retry would create a second clinic: undo it.
+                if not _sb_delete_quiet(f"/rest/v1/clinicas?id=eq.{pg_val(clinica['id'])}"):
+                    logger.error(f"Superadmin: clinica={clinica['id']} created for solicitud={solicitud_id} "
+                                 f"but not recorded, and could not be removed — delete it by hand")
+                return _aprobacion_fallo(solicitud_id, 'registrar la clínica')
+            clinica_id = clinica['id']
+    elif row.get('clinica_id') != clinica_id:
+        if not _patch_solicitud(solicitud_id, {'clinica_id': clinica_id, 'clinica_creada': False}):
+            return _aprobacion_fallo(solicitud_id, 'registrar la clínica')
+
+    # (3) account
+    medico_fields = {}
+    if is_medico_role(rol):
+        medico_fields = {'cedula': row.get('cedula'), 'especialidad': row.get('especialidad'),
+                         'universidad': row.get('universidad') or None}
+    action_link = None
+    usuario_id = row.get('usuario_id')
+    if usuario_id:
+        have = _sb_get_quiet(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}&select=id&limit=1')
+        if have is None:
+            return _aprobacion_fallo(solicitud_id, 'guardar el usuario')
+        if not have and _insert_usuario_row(usuario_id, row['nombre'], email, rol, clinica_id,
+                                            **medico_fields) is None:
+            return _aprobacion_fallo(solicitud_id, 'guardar el usuario')
+    else:
+        recorded = {}
+
+        def _record(uid):
+            recorded['id'] = uid
+            return _patch_solicitud(solicitud_id, {'usuario_id': uid})
+        try:
+            _, action_link = _provision_usuario(row['nombre'], email, rol, clinica_id,
+                                                on_auth_user=_record, **medico_fields)
+        except ProvisioningError as e:
+            paso = {'invite': 'crear la cuenta', 'record': 'registrar la cuenta'}.get(e.stage, 'guardar el usuario')
+            return _aprobacion_fallo(solicitud_id, paso)
+        usuario_id = recorded['id']
+    invalidate_usuario_cache(usuario_id)
+
+    # (4) approved
+    if not _patch_solicitud(solicitud_id, {
+        'estado':       'aprobada',
+        'revisado_at':  _utc_now().isoformat(),
+        'revisado_por': g.usuario['usuario_id'],
+    }):
+        return _aprobacion_fallo(solicitud_id, 'marcar como aprobada')
+
+    # (5) invite
+    if action_link is None:
+        try:
+            action_link = _sb_generate_recovery_link(email)
+        except Exception as e:
+            logger.warning(f"Superadmin: solicitud={solicitud_id} fresh link failed ({type(e).__name__})")
+    invite_ok = bool(action_link) and send_invite_email(email, row['nombre'], clinica_nombre, action_link)
+
+    # (6) the clinic's other admins
+    avisos = {'enviados': 0, 'fallidos': 0}
+    if not nueva:
+        admins = _sb_get_quiet(
+            f'/rest/v1/usuarios?clinica_id=eq.{pg_val(clinica_id)}&rol=in.(admin,auxiliar)'
+            f'&activo=eq.true&select=id,email'
+        )
+        if admins is None:
+            avisos['fallidos'] = None  # couldn't even list them
+        else:
+            for admin_row in admins:
+                if admin_row.get('id') == usuario_id or not admin_row.get('email'):
+                    continue
+                if send_usuario_agregado_email(admin_row['email'], row['nombre'], clinica_nombre, ROL_LABELS[rol]):
+                    avisos['enviados'] += 1
+                else:
+                    avisos['fallidos'] += 1
+
+    _sa_log(solicitud_id, 'aprobar', 'approved' if invite_ok else 'approved-invite-failed')
+    response = {
+        'ok':                         True,
+        'estado':                     'aprobada',
+        'usuario_id':                 usuario_id,
+        'clinica_id':                 clinica_id,
+        'clinica_creada':             nueva,
+        'correo_invitacion_enviado':  invite_ok,
+        'avisos_admins':              None if nueva else avisos,
+    }
+    if not invite_ok:
+        response['warning'] = INVITE_FALLO_AVISO
+    return jsonify(response), 200
+
+
+def _clean_motivo(value):
+    """Plain text: invisible chars dropped, CRLF → LF, outer whitespace
+    stripped, line breaks kept. Returns (motivo or None, error or None)."""
+    if value is None:
+        return None, None
+    if not isinstance(value, str):
+        return None, 'Motivo inválido.'
+    value = _INVISIBLE_CHARS_RE.sub('', value).replace('\r\n', '\n').replace('\r', '\n').strip()
+    if len(value) > MAX_MOTIVO_RECHAZO:
+        return None, f'El motivo no puede exceder {MAX_MOTIVO_RECHAZO} caracteres.'
+    return value or None, None
+
+
+@app.route('/api/superadmin/solicitudes/<solicitud_id>/rechazar', methods=['POST'])
+@require_superadmin
+def superadmin_rechazar(solicitud_id):
+    """Reject a pendiente request; optionally email the applicant
+    (REJECTION_EMAIL_DRAFT, Reply-To SUPERADMIN_EMAIL)."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Solicitud inválida.'}), 400
+    motivo, error = _clean_motivo(data.get('motivo'))
+    if error:
+        return jsonify({'error': error}), 400
+    enviar = data.get('enviar_correo') is True
+
+    row = _load_solicitud(solicitud_id)
+    if row is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    if row is False:
+        return jsonify({'error': 'No encontrado'}), 404
+    if row.get('estado') != 'pendiente':
+        return jsonify({'error': 'Solo se puede rechazar una solicitud pendiente.'}), 409
+
+    updated = _sb_patch_returning_quiet(
+        f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&estado=eq.pendiente',
+        {
+            'estado':         'rechazada',
+            'motivo_rechazo': motivo,
+            'revisado_at':    _utc_now().isoformat(),
+            'revisado_por':   g.usuario['usuario_id'],
+        },
+    )
+    if updated is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    if not updated:
+        return jsonify({'error': 'Solo se puede rechazar una solicitud pendiente.'}), 409
+
+    correo = None
+    if enviar:
+        correo = send_rejection_email(row['email'], row['nombre'], motivo, Config.SUPERADMIN_EMAIL or None)
+    _sa_log(solicitud_id, 'rechazar', 'rejected' + ('' if not enviar else '-emailed' if correo else '-email-failed'))
+    return jsonify({'ok': True, 'estado': 'rechazada', 'correo_enviado': correo}), 200
+
+
+def _aprobada_sin_aceptar(solicitud_id):
+    """Shared gate for reenviar/eliminar. Returns (row, accepted_status,
+    None) or (None, None, error_response)."""
+    row = _load_solicitud(solicitud_id)
+    if row is None:
+        return None, None, (jsonify({'error': SUPERADMIN_DB_ERROR}), 503)
+    if row is False:
+        return None, None, (jsonify({'error': 'No encontrado'}), 404)
+    if row.get('estado') != 'aprobada' or not row.get('usuario_id'):
+        return None, None, (jsonify({'error': 'Solo aplica a solicitudes aprobadas cuya invitación '
+                                              'no se ha aceptado.'}), 409)
+    status, aceptada = _invitacion_aceptada(row['usuario_id'])
+    if status == 'error':
+        return None, None, (jsonify({'error': 'No se pudo consultar la cuenta. Intenta de nuevo.'}), 503)
+    if aceptada:
+        return None, None, (jsonify({'error': 'El usuario ya aceptó la invitación.'}), 409)
+    return row, status, None
+
+
+@app.route('/api/superadmin/solicitudes/<solicitud_id>/reenviar', methods=['POST'])
+@require_superadmin
+def superadmin_reenviar(solicitud_id):
+    """New set-password link (type recovery — see _sb_generate_recovery_link)
+    for an approved user who never opened the first one."""
+    row, status, error = _aprobada_sin_aceptar(solicitud_id)
+    if error:
+        return error
+    if status == 'missing':
+        return jsonify({'error': 'La cuenta de esta solicitud ya no existe.'}), 409
+
+    try:
+        link = _sb_generate_recovery_link(row['email'])
+    except Exception as e:
+        logger.warning(f"Superadmin: solicitud={solicitud_id} resend link failed ({type(e).__name__})")
+        return jsonify({'error': 'No se pudo generar el enlace. Intenta de nuevo.'}), 503
+
+    clinica_nombre = row.get('razon_social')
+    if row.get('clinica_id'):
+        crows = _sb_get_quiet(f"/rest/v1/clinicas?id=eq.{pg_val(row['clinica_id'])}&select=nombre&limit=1")
+        if crows:
+            clinica_nombre = crows[0].get('nombre') or clinica_nombre
+    if not send_invite_email(row['email'], row['nombre'], clinica_nombre, link):
+        _sa_log(solicitud_id, 'reenviar', 'email-failed')
+        return jsonify({'error': 'No se pudo enviar el correo. Intenta de nuevo.'}), 503
+    _sa_log(solicitud_id, 'reenviar', 'sent')
+    return jsonify({'ok': True, 'correo_enviado': True}), 200
+
+
+@app.route('/api/superadmin/solicitudes/<solicitud_id>/eliminar', methods=['POST'])
+@require_superadmin
+def superadmin_eliminar(solicitud_id):
+    """
+    Undo an approval nobody accepted: auth user (its usuarios row goes by
+    cascade) → the clinic, only if this approval created it and it is
+    still empty → the solicitud row. Each step is skipped on a retry once
+    done (a missing auth user is "already deleted"), so an interrupted
+    delete just runs again. Refused while the user has sesiones, trabajos
+    or lecturas_sesion rows — the DB would refuse anyway (no cascade).
+    """
+    row, status, error = _aprobada_sin_aceptar(solicitud_id)
+    if error:
+        return error
+    usuario_id = row['usuario_id']
+
+    for table in ('sesiones', 'trabajos', 'lecturas_sesion'):
+        hits = _sb_get_quiet(f'/rest/v1/{table}?usuario_id=eq.{pg_val(usuario_id)}&select=usuario_id&limit=1')
+        if hits is None:
+            return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+        if hits:
+            _sa_log(solicitud_id, 'eliminar', f'refused-{table}')
+            return jsonify({'error': 'Este usuario ya tiene actividad registrada (notas, trabajos o '
+                                     'lecturas); no se puede eliminar.'}), 409
+
+    if status == 'ok':
+        if _sb_delete_auth_user(usuario_id) == 'error':
+            return jsonify({'error': 'No se pudo eliminar la cuenta. Intenta de nuevo.'}), 503
+    invalidate_usuario_cache(usuario_id)
+    left = _sb_get_quiet(f'/rest/v1/usuarios?id=eq.{pg_val(usuario_id)}&select=id&limit=1')
+    if left is None:
+        return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+    if left:
+        # The cascade should have taken it; never delete a clinic under it.
+        logger.error(f"Superadmin: solicitud={solicitud_id} auth user gone but usuarios row remains")
+        return jsonify({'error': 'La cuenta se eliminó, pero su registro de usuario sigue. '
+                                 'Revisa en Supabase antes de reintentar.'}), 503
+
+    clinica_eliminada = False
+    if row.get('clinica_creada') and row.get('clinica_id'):
+        cid = pg_val(row['clinica_id'])
+        users = _sb_get_quiet(f'/rest/v1/usuarios?clinica_id=eq.{cid}&select=id&limit=1')
+        sesiones = _sb_get_quiet(f'/rest/v1/sesiones?clinica_id=eq.{cid}&select=session_id&limit=1')
+        if users is None or sesiones is None:
+            return jsonify({'error': SUPERADMIN_DB_ERROR}), 503
+        if not users and not sesiones:
+            if not _sb_delete_quiet(f'/rest/v1/clinicas?id=eq.{cid}'):
+                return jsonify({'error': 'No se pudo eliminar la clínica. Intenta de nuevo.'}), 503
+            clinica_eliminada = True
+
+    if not _sb_delete_quiet(f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&estado=eq.aprobada'):
+        return jsonify({'error': 'No se pudo eliminar la solicitud. Intenta de nuevo.'}), 503
+    _sa_log(solicitud_id, 'eliminar', 'deleted' + ('-with-clinic' if clinica_eliminada else ''))
+    return jsonify({'ok': True, 'clinica_eliminada': clinica_eliminada}), 200
+
+
 @app.errorhandler(500)
 def internal_server_error(error):
     rid = _new_request_id()
@@ -2980,6 +3703,12 @@ def internal_server_error(error):
 # `python app.py` locally. Stage M4 fix #26; see the reaper section above
 # for the single-instance assumption this relies on.
 _reap_stuck_jobs_on_startup()
+# Old rechazadas are also purged on every superadmin list load; this
+# covers a stretch with no reviews. Best-effort, never blocks startup.
+try:
+    _purge_old_rechazadas()
+except Exception as e:
+    logger.error(f"Startup: rechazadas purge failed ({type(e).__name__})")
 
 
 if __name__ == '__main__':

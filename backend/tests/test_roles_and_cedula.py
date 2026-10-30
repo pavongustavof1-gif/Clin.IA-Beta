@@ -671,7 +671,10 @@ def test_sb_insert_clinica_failure_returns_none(monkeypatch):
     assert app_module._sb_insert_clinica('X', '', '') is None
 
 
-def test_sb_insert_clinica_has_no_route_caller():
+def test_sb_insert_clinica_only_caller_is_superadmin_approval():
+    """Creating a clinic is the superadmin's alone (Review C): one call
+    site besides the definition, inside superadmin_aprobar."""
     import inspect
     src = inspect.getsource(app_module)
-    assert src.count('_sb_insert_clinica(') == 1   # the definition only
+    assert src.count('_sb_insert_clinica(') == 2   # definition + one caller
+    assert '_sb_insert_clinica(' in inspect.getsource(app_module.superadmin_aprobar)

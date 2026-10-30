@@ -56,11 +56,15 @@ class FakeDB:
         value = urllib.parse.unquote(raw_value)
         actual = row.get(field)
         if op == 'eq':
+            if isinstance(actual, bool):  # PostgREST spells booleans eq.true / eq.false
+                return str(actual).lower() == value
             return str(actual) == value
         if op == 'gte':
             return actual is not None and str(actual) >= value
         if op == 'lte':
             return actual is not None and str(actual) <= value
+        if op == 'lt':
+            return actual is not None and str(actual) < value
         if op == 'in':
             inner = value.strip('()')
             allowed = [x for x in inner.split(',') if x]

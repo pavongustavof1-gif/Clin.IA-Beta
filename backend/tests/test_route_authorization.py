@@ -29,6 +29,7 @@ _PLACEHOLDER = {
     'job_id': 'dummy-job-id',
     'session_id': 'dummy-session-id',
     'usuario_id': 'dummy-usuario-id',
+    'solicitud_id': 'dummy-solicitud-id',
 }
 
 
@@ -118,6 +119,7 @@ def test_public_route_allowlist_is_exactly_these():
         ('/set-password', 'GET'),
         ('/admin', 'GET'),
         ('/account', 'GET'),
+        ('/superadmin', 'GET'),
         ('/api/health', 'GET'),
         ('/solicitud', 'GET'),
         ('/aviso-privacidad-usuarios', 'GET'),
@@ -135,7 +137,8 @@ _BAD_TOKENS = [
 ]
 
 
-@pytest.mark.parametrize('entry', [e for e in ROUTE_INVENTORY if e['auth_required']],
+@pytest.mark.parametrize('entry', [e for e in ROUTE_INVENTORY
+                                   if e['auth_required'] and not e.get('superadmin_required')],
                           ids=lambda e: f"{e['methods'][0]} {e['path']}")
 @pytest.mark.parametrize('bad_token', _BAD_TOKENS)
 def test_protected_routes_reject_invalid_tokens(client, entry, bad_token):

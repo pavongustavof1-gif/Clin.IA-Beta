@@ -37,6 +37,17 @@ function isMedicoRole(rol) {
     return rol === 'admin' || rol === 'medico';
 }
 
+// Reveals the header's Superadmin link when /api/session-check said
+// "superadmin": true (the key is absent for everyone else). A UI hint
+// only — /api/superadmin/* answers 404 to anyone else regardless.
+function showSuperadminLink(sessionData) {
+    if (!sessionData || sessionData.superadmin !== true) return;
+    ['superadminBtn', 'superadminSep'].forEach(id => {
+        const node = document.getElementById(id);
+        if (node) node.style.display = '';
+    });
+}
+
 // Guards a URL before it's assigned to href/src — blocks javascript: and
 // other script-executing schemes. Allows relative URLs (no scheme) and
 // http(s). Returns '#' for anything else so a bad value can never execute,

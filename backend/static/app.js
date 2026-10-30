@@ -51,6 +51,7 @@ window.addEventListener('pageshow', async function(event) {
                 window.location.replace('/admin');
                 return;
             }
+            showSuperadminLink(data);
             if (isAdminRole(data.rol)) {
                 const adminBtn = document.getElementById('adminBtn');
                 const adminSep = document.getElementById('adminSep');
