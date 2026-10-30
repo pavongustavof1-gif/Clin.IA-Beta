@@ -620,6 +620,7 @@ window.addEventListener('pageshow', async function(event) {
         }
 
         showSuperadminLink(data);
+        showPendientesBanner(data);
         document.body.classList.remove('auth-pending');
         loadUsuarios();
 

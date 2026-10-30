@@ -603,6 +603,32 @@ def _sb_delete_quiet(path: str) -> bool:
         return False
 
 
+def _sb_count_quiet(path: str) -> int | None:
+    """
+    Row count for a filtered table without fetching rows: a HEAD request
+    with Prefer: count=exact (what supabase-js sends for
+    {count: 'exact', head: true}); PostgREST answers with no body and the
+    total after the slash in Content-Range ("0-4/5", or "*/0" when
+    nothing matches). None on any error or an unparseable header.
+    """
+    url = Config.SUPABASE_URL.rstrip('/') + path
+    table = path.split('?', 1)[0].rsplit('/', 1)[-1]
+    req = urllib.request.Request(
+        url, method='HEAD',
+        headers=_sb_headers(extra={'Prefer': 'count=exact'}),
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            total = (resp.headers.get('Content-Range') or '').rsplit('/', 1)[-1]
+        return int(total)
+    except urllib.error.HTTPError as e:
+        logger.warning(f"DB: Supabase COUNT {table} failed {e.code}")
+        return None
+    except Exception as e:
+        logger.warning(f"DB: Supabase COUNT {table} error ({type(e).__name__})")
+        return None
+
+
 def _sb_get_auth_user(user_id: str) -> tuple[str, dict | None]:
     """
     GET {SUPABASE_URL}/auth/v1/admin/users/{id} (the endpoint behind
@@ -1583,7 +1609,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.0-beta',
+        'version': '0.8.1-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2375,6 +2401,15 @@ def session_check():
     # the response doesn't even hint that the role exists.
     if is_superadmin(g.usuario):
         body['superadmin'] = True
+        # Drives the "solicitudes pendientes" banner on / and /admin.
+        # en_proceso counts too: an approval that stopped half-way still
+        # needs the superadmin. A failed count omits the key (no banner)
+        # rather than failing the session check every page load depends on.
+        pendientes = _sb_count_quiet(
+            '/rest/v1/solicitudes_registro?estado=in.(pendiente,en_proceso)&select=id'
+        )
+        if pendientes is not None:
+            body['solicitudes_pendientes'] = pendientes
     return jsonify(body), 200
 
 

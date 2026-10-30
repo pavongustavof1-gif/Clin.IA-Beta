@@ -21,6 +21,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pendientes-banner.css') }}">
 
     <style>
         /* Hidden until session-check confirms the token is valid AND rol === 'admin' */
@@ -269,6 +270,13 @@
             </div>
         </div>
     </nav>
+
+    <!-- Superadmin only: pending access requests. Hidden until
+         session-check reports solicitudes_pendientes > 0 (utils.js). -->
+    <div class="sa-pend-banner" id="saPendBanner" role="status" hidden>
+        <p class="sa-pend-text" id="saPendText"></p>
+        <a href="/superadmin" class="sa-pend-link">Revisar</a>
+    </div>
 
     <div class="admin-container">
         <h1 class="admin-title">Administración de la Clínica<span id="adminClinicaNombre"></span></h1>

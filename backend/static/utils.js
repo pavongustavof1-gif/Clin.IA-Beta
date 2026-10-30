@@ -48,6 +48,30 @@ function showSuperadminLink(sessionData) {
     });
 }
 
+// Pending access-request banner (superadmin only) on / and /admin.
+// session-check sends "solicitudes_pendientes" only to the superadmin, and
+// omits it when the count fails, so a missing or non-positive value just
+// keeps the banner hidden. Not dismissible: it goes away when nothing is
+// pending. textContent only.
+function pendientesBannerText(n) {
+    return n === 1
+        ? 'Tienes 1 solicitud de acceso pendiente.'
+        : `Tienes ${n} solicitudes de acceso pendientes.`;
+}
+
+function showPendientesBanner(sessionData) {
+    const banner = document.getElementById('saPendBanner');
+    const text = document.getElementById('saPendText');
+    if (!banner || !text) return;
+    const n = sessionData && sessionData.solicitudes_pendientes;
+    if (!Number.isInteger(n) || n <= 0) {
+        banner.hidden = true;
+        return;
+    }
+    text.textContent = pendientesBannerText(n);
+    banner.hidden = false;
+}
+
 // Guards a URL before it's assigned to href/src — blocks javascript: and
 // other script-executing schemes. Allows relative URLs (no scheme) and
 // http(s). Returns '#' for anything else so a bad value can never execute,

@@ -1,0 +1,43 @@
+/* backend/static/pendientes-banner.css
+   Superadmin "solicitudes pendientes" banner on / and /admin. Scoped
+   under .sa-pend-* (nothing shared with style.css). Amber so it reads as
+   "action needed", distinct from the green Beta 2 notice below it. Not
+   dismissible: utils.js shows it only while the count is > 0. */
+
+.sa-pend-banner {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem 1rem;
+    padding: 0.6rem 1rem;
+    background: #fef3c7;
+    color: #78350f;
+    border-bottom: 1px solid #fcd34d;
+    font: 500 0.95rem/1.4 'Outfit', sans-serif;
+    text-align: center;
+}
+
+.sa-pend-banner[hidden] { display: none; }
+
+.sa-pend-text { margin: 0; }
+
+.sa-pend-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding: 0 1.1rem;
+    border-radius: 999px;
+    background: #92400e;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.sa-pend-link:hover { background: #78350f; }
+
+.sa-pend-link:focus-visible {
+    outline: 3px solid #f59e0b;
+    outline-offset: 2px;
+}

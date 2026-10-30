@@ -66,6 +66,7 @@
     </style>
 
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='pendientes-banner.css') }}">
 
     <!-- SVG Icon Sprite — defined once, used via <use href="#id"> -->
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none;position:absolute" aria-hidden="true" focusable="false">
@@ -209,6 +210,13 @@
         </div>
     </nav>
 
+    <!-- Superadmin only: pending access requests. Hidden until
+         session-check reports solicitudes_pendientes > 0 (utils.js). -->
+    <div class="sa-pend-banner" id="saPendBanner" role="status" hidden>
+        <p class="sa-pend-text" id="saPendText"></p>
+        <a href="/superadmin" class="sa-pend-link">Revisar</a>
+    </div>
+
     <!-- #45 Aviso Beta 2 — full width, outside .container. Hidden until
          login by body.auth-pending like the rest of the page; dismiss
          logic lives in static/aviso-beta2.js (CSP: no inline script). -->
@@ -225,7 +233,7 @@
             </div>
             <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
-            <div class="version-badge">Beta v0.8.0</div>
+            <div class="version-badge">Beta v0.8.1</div>
         </header>
 
         <!-- Main Content -->
@@ -789,7 +797,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA™ Beta v0.8.0 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.8.1 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>

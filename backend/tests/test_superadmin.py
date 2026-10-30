@@ -281,6 +281,85 @@ def test_session_check_superadmin_key_only_for_superadmin(client):
         assert 'superadmin' not in _sa(client, 'GET', '/api/session-check', user=other).get_json()
 
 
+
+# ── 1b. pending-requests banner (0.8.1) ──────────────────────────────────
+
+def _seed_estados(db):
+    for i, estado in enumerate(('pendiente', 'pendiente', 'en_proceso', 'aprobada', 'rechazada')):
+        db.add('solicitudes_registro', _solicitud(
+            id=f'sol-b{i}', estado=estado, email=f'persona{i}@consultorio-ficticio.mx'))
+
+
+def test_session_check_counts_pendiente_and_en_proceso_only(client, db):
+    _seed_estados(db)
+    body = _sa(client, 'GET', '/api/session-check').get_json()
+    assert body['superadmin'] is True
+    assert body['solicitudes_pendientes'] == 3
+
+
+def test_session_check_count_zero_when_nothing_open(client, db):
+    db.add('solicitudes_registro', _solicitud(estado='aprobada'))
+    assert _sa(client, 'GET', '/api/session-check').get_json()['solicitudes_pendientes'] == 0
+
+
+@pytest.mark.parametrize('other', [DOCTOR_A1, ADMIN_A, AUXILIAR_A, ADMIN_B])
+def test_session_check_count_absent_for_everyone_else(client, db, monkeypatch, other):
+    _seed_estados(db)
+    calls = []
+    monkeypatch.setattr(app_module, '_sb_count_quiet', lambda path: calls.append(path) or 3)
+    resp = _sa(client, 'GET', '/api/session-check', user=other)
+    assert resp.status_code == 200
+    assert 'solicitudes_pendientes' not in resp.get_json()
+    assert calls == []  # not even counted for a non-superadmin
+
+
+def test_session_check_survives_a_failed_count(client, db, monkeypatch):
+    _seed_estados(db)
+    monkeypatch.setattr(app_module, '_sb_count_quiet', lambda path: None)
+    resp = _sa(client, 'GET', '/api/session-check')
+    assert resp.status_code == 200
+    body = resp.get_json()
+    assert body['valid'] is True and body['superadmin'] is True
+    assert 'solicitudes_pendientes' not in body
+
+
+def test_session_check_count_query_shape(client, monkeypatch):
+    seen = []
+    monkeypatch.setattr(app_module, '_sb_count_quiet', lambda path: seen.append(path) or 0)
+    _sa(client, 'GET', '/api/session-check')
+    assert seen == ['/rest/v1/solicitudes_registro?estado=in.(pendiente,en_proceso)&select=id']
+
+
+@pytest.mark.parametrize('page', ['/', '/admin'])
+def test_pendientes_banner_markup(client, page):
+    html = client.get(page).get_data(as_text=True)
+    assert 'pendientes-banner.css' in html
+    tag = '<div class="sa-pend-banner" id="saPendBanner" role="status" hidden>'
+    assert tag in html
+    assert '<a href="/superadmin" class="sa-pend-link">Revisar</a>' in html
+    # Right under the nav, and above the Beta 2 notice where there is one.
+    assert html.index('</nav>') < html.index(tag)
+    if 'id="avisoBeta2"' in html:
+        assert html.index(tag) < html.index('id="avisoBeta2"')
+
+
+def test_pendientes_banner_not_on_superadmin_page(client):
+    html = client.get('/superadmin').get_data(as_text=True)
+    assert 'saPendBanner' not in html
+    src = open(app_module.os.path.join(app_module.app.static_folder, 'superadmin.js')).read()
+    assert 'showPendientesBanner' not in src
+
+
+def test_pendientes_banner_js_uses_textcontent_and_is_wired():
+    static = app_module.app.static_folder
+    src = open(app_module.os.path.join(static, 'utils.js')).read()
+    fn = src[src.index('function pendientesBannerText'):src.index('// Guards a URL')]
+    assert 'text.textContent = pendientesBannerText(n)' in fn
+    for sink in ('.innerHTML', '.outerHTML', 'insertAdjacentHTML', 'document.write'):
+        assert sink not in fn
+    for name in ('app.js', 'admin.js'):
+        assert 'showPendientesBanner(data)' in open(app_module.os.path.join(static, name)).read()
+
 def test_superadmin_page_shell(client):
     resp = client.get('/superadmin')
     assert resp.status_code == 200
@@ -1060,6 +1139,38 @@ def test_patch_returning_quiet_sends_representation(monkeypatch):
     assert seen == {'method': 'PATCH', 'prefer': 'return=representation'}
 
 
+
+class _FakeHeadResponse:
+    def __init__(self, content_range):
+        self.headers = {'Content-Range': content_range} if content_range is not None else {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+
+def test_count_quiet_sends_head_with_count_exact(monkeypatch):
+    seen = {}
+
+    def fake_urlopen(req, timeout):
+        seen.update(method=req.get_method(), prefer=req.get_header('Prefer'), url=req.full_url, data=req.data)
+        return _FakeHeadResponse('0-2/3')
+    monkeypatch.setattr(app_module.urllib.request, 'urlopen', fake_urlopen)
+    path = '/rest/v1/solicitudes_registro?estado=in.(pendiente,en_proceso)&select=id'
+    assert _REAL['count'](path) == 3
+    assert seen == {'method': 'HEAD', 'prefer': 'count=exact', 'data': None,
+                    'url': f'{app_module.Config.SUPABASE_URL}{path}'}
+
+
+@pytest.mark.parametrize('content_range, expected', [
+    ('*/0', 0), ('0-0/1', 1), ('0-11/12', 12), (None, None), ('0-4/*', None), ('garbage', None),
+])
+def test_count_quiet_parses_content_range(monkeypatch, content_range, expected):
+    monkeypatch.setattr(app_module.urllib.request, 'urlopen', lambda req, timeout: _FakeHeadResponse(content_range))
+    assert _REAL['count']('/rest/v1/solicitudes_registro?select=id') == expected
+
 def _assert_no_personal_data(lines):
     text = '\n'.join(lines)
     for secret in (EMAIL, CEDULA, TELEFONO, DOMICILIO, 'dra.inventada', '@example.test',
@@ -1075,6 +1186,7 @@ def test_real_quiet_helpers_never_log_personal_data(monkeypatch, log_lines):
     monkeypatch.setattr(app_module.urllib.request, 'urlopen', http_fail)
     assert _REAL['patch'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}', {'telefono': TELEFONO}) is None
     assert _REAL['delete'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}') is False
+    assert _REAL['count'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}') is None
     assert _REAL['get_user']('u-1') == ('error', None)
     assert _REAL['delete_user']('u-1') == 'error'
     with pytest.raises(urllib.error.HTTPError):
@@ -1085,6 +1197,7 @@ def test_real_quiet_helpers_never_log_personal_data(monkeypatch, log_lines):
     monkeypatch.setattr(app_module.urllib.request, 'urlopen', net_fail)
     assert _REAL['patch'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}', {}) is None
     assert _REAL['delete'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}') is False
+    assert _REAL['count'](f'/rest/v1/solicitudes_registro?email=eq.{EMAIL}') is None
     assert _REAL['get_user']('u-1') == ('error', None)
 
     assert log_lines
@@ -1165,4 +1278,5 @@ _REAL.update(
     delete_user=app_module._sb_delete_auth_user,
     patch=app_module._sb_patch_returning_quiet,
     delete=app_module._sb_delete_quiet,
+    count=app_module._sb_count_quiet,
 )

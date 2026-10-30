@@ -52,6 +52,7 @@ window.addEventListener('pageshow', async function(event) {
                 return;
             }
             showSuperadminLink(data);
+            showPendientesBanner(data);
             if (isAdminRole(data.rol)) {
                 const adminBtn = document.getElementById('adminBtn');
                 const adminSep = document.getElementById('adminSep');

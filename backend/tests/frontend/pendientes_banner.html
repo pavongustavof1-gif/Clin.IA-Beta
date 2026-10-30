@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/pendientes_banner.html
+
+  0.8.1: the superadmin's "solicitudes pendientes" banner on / and /admin.
+  Loads the REAL static/utils.js and static/pendientes-banner.css next to a
+  copy of the banner markup from templates/index.html (a static server
+  can't render Jinja; test_superadmin.py pins the template markup), then
+  feeds showPendientesBanner() the session-check shapes it can receive:
+  the key absent (everyone else, or a failed count), 0, 1, many, and junk.
+
+  How to run (same as the other harnesses):
+    1. Serve backend/ over HTTP, e.g. `cd backend && python3 -m http.server 8765`.
+    2. Open http://localhost:8765/tests/frontend/pendientes_banner.html
+    3. Read the on-page summary (or console / window.__RESULT__). After the
+       checks the banner is left showing "2" so its look can be checked at
+       iPad and phone widths, above the stand-in Beta 2 notice.
+
+  No PHI: no applicant data at all.
+-->
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>pendientes banner</title>
+    <link rel="stylesheet" href="../../static/style.css">
+    <link rel="stylesheet" href="../../static/pendientes-banner.css">
+</head>
+<body>
+    <nav class="app-nav">
+        <div class="app-nav-inner">
+            <span class="app-nav-logo">Clin.IA™</span>
+            <div class="app-nav-actions"><a href="#" class="nav-link">Cerrar sesión</a></div>
+        </div>
+    </nav>
+
+    <!-- Copied from templates/index.html -->
+    <div class="sa-pend-banner" id="saPendBanner" role="status" hidden>
+        <p class="sa-pend-text" id="saPendText"></p>
+        <a href="/superadmin" class="sa-pend-link">Revisar</a>
+    </div>
+
+    <div class="aviso-beta2" id="avisoBeta2" role="note" aria-label="Aviso" style="display: flex;">
+        <p class="aviso-beta2__text">Stand-in del aviso Beta 2 (verde), para comparar.</p>
+    </div>
+
+    <pre id="out" style="padding: 1rem; white-space: pre-wrap;">running…</pre>
+
+<script src="../../static/utils.js"></script>
+<script>
+(function () {
+    const banner = document.getElementById('saPendBanner');
+    const text = document.getElementById('saPendText');
+    const visible = () => !banner.hidden && getComputedStyle(banner).display !== 'none';
+
+    const cases = [
+        { name: 'key absent (non-superadmin / failed count)', data: { valid: true, rol: 'admin' }, show: false },
+        { name: 'superadmin, 0 pending', data: { superadmin: true, solicitudes_pendientes: 0 }, show: false },
+        { name: 'superadmin, 1 pending', data: { superadmin: true, solicitudes_pendientes: 1 }, show: true,
+          text: 'Tienes 1 solicitud de acceso pendiente.' },
+        { name: 'superadmin, 2 pending', data: { superadmin: true, solicitudes_pendientes: 2 }, show: true,
+          text: 'Tienes 2 solicitudes de acceso pendientes.' },
+        { name: 'superadmin, 17 pending', data: { superadmin: true, solicitudes_pendientes: 17 }, show: true,
+          text: 'Tienes 17 solicitudes de acceso pendientes.' },
+        { name: 'back to 0 hides it again', data: { superadmin: true, solicitudes_pendientes: 0 }, show: false },
+        { name: 'string "3" is ignored', data: { solicitudes_pendientes: '3' }, show: false },
+        { name: 'negative is ignored', data: { solicitudes_pendientes: -1 }, show: false },
+        { name: 'null session data', data: null, show: false },
+        { name: 'text node only (textContent)', data: { solicitudes_pendientes: 5 }, show: true,
+          text: 'Tienes 5 solicitudes de acceso pendientes.', noChildren: true },
+    ];
+
+    const results = cases.map(c => {
+        showPendientesBanner(c.data);
+        let ok = visible() === c.show;
+        let detail = `visible=${visible()}`;
+        if (ok && c.text !== undefined) {
+            ok = text.textContent === c.text;
+            detail += ` text="${text.textContent}"`;
+        }
+        if (ok && c.noChildren) ok = text.children.length === 0;
+        return { name: c.name, ok, detail };
+    });
+
+    // Banner semantics and layout order: role=status, directly after the
+    // nav, above the Beta 2 notice; the link goes to /superadmin.
+    const link = banner.querySelector('a.sa-pend-link');
+    const order = document.querySelector('nav').nextElementSibling === banner
+        && banner.nextElementSibling.id === 'avisoBeta2';
+    results.push({ name: 'role=status, under nav, above Beta 2', ok: banner.getAttribute('role') === 'status' && order,
+                   detail: `order=${order}` });
+    results.push({ name: 'Revisar → /superadmin', ok: !!link && link.getAttribute('href') === '/superadmin'
+                   && link.textContent === 'Revisar', detail: link ? link.getAttribute('href') : 'no link' });
+    const h = link.getBoundingClientRect().height;
+    results.push({ name: 'Revisar tap target ≥ 44px', ok: h >= 44, detail: `${h}px` });
+    const bg = getComputedStyle(banner).backgroundColor;
+    const avisoBg = getComputedStyle(document.getElementById('avisoBeta2')).backgroundColor;
+    results.push({ name: 'amber, distinct from Beta 2 notice', ok: bg === 'rgb(254, 243, 199)' && bg !== avisoBg,
+                   detail: `${bg} vs ${avisoBg}` });
+
+    showPendientesBanner({ superadmin: true, solicitudes_pendientes: 2 });
+
+    const allOk = results.every(r => r.ok);
+    document.getElementById('out').textContent =
+        results.map(r => `${r.ok ? 'PASS' : 'FAIL'}  ${r.name}: ${r.detail}`).join('\n')
+        + `\n\n${allOk ? 'ALL PASS' : 'SOME FAILED'}`;
+    console.log(allOk ? 'ALL PASS' : 'SOME FAILED', results);
+    window.__RESULT__ = { allOk, results };
+})();
+</script>
+</body>
+</html>

@@ -174,6 +174,9 @@ def _patch_data_layer(db, monkeypatch):
     monkeypatch.setattr(app_module, 'send_usuario_agregado_email', lambda *a, **k: True)
     monkeypatch.setattr(app_module, 'send_rejection_email', lambda *a, **k: True)
     monkeypatch.setattr(app_module, '_sb_delete_quiet', db.delete)
+    # The real helper sends HEAD + Prefer: count=exact; the fake counts the
+    # rows db.get would return for the same filter.
+    monkeypatch.setattr(app_module, '_sb_count_quiet', lambda path: len(db.get(path)))
 
     def _fake_patch_returning(path, body):
         # Same filter semantics as db.patch, but returns the rows it changed
