@@ -1038,8 +1038,9 @@ def test_auth_user_helpers_request_shapes(monkeypatch):
     monkeypatch.setattr(app_module.urllib.request, 'urlopen', ok)
     assert _REAL['get_user']('u-1') == ('ok', {'id': 'u-1', 'email_confirmed_at': None})
     assert _REAL['delete_user']('u-1') == 'deleted'
-    assert seen == [('GET', 'https://fake-test-project.supabase.co/auth/v1/admin/users/u-1'),
-                    ('DELETE', 'https://fake-test-project.supabase.co/auth/v1/admin/users/u-1')]
+    # Built from Config, not a literal: CI sets its own fake SUPABASE_URL.
+    users_url = f'{app_module.Config.SUPABASE_URL}/auth/v1/admin/users/u-1'
+    assert seen == [('GET', users_url), ('DELETE', users_url)]
 
     def missing(req, timeout):
         raise _FakeHTTPError(404, json.dumps({'msg': 'User not found'}))
