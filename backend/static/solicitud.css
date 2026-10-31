@@ -187,9 +187,3 @@ textarea.sol-input { resize: vertical; }
     color: #0f172a;
     padding: var(--spacing-md) 0;
 }
-
-.sol-placeholder {
-    text-align: center;
-    color: var(--text-secondary);
-    padding: var(--spacing-md) 0;
-}

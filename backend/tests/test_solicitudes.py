@@ -92,8 +92,9 @@ def test_solicitud_page_is_noindex_and_has_no_supabase(client):
     assert '<meta name="robots" content="noindex">' in page
     assert 'supabase' not in page.lower()
     assert 'solicitud.js' in page
-    assert 'https://clinianotes.com/#terminos' in page
-    assert '/aviso-privacidad-usuarios' in page
+    assert 'href="https://clinianotes.com/legal/terminos/"' in page
+    assert 'href="https://clinianotes.com/legal/aviso-usuarios/"' in page
+    assert '#terminos' not in page and '/aviso-privacidad-usuarios' not in page
     # input types / modes for phone keyboards
     assert 'type="email"' in page and 'type="tel"' in page and 'inputmode="numeric"' in page
 
@@ -114,10 +115,15 @@ def test_honeypot_is_hidden_from_people_and_keyboards(client):
     assert 'tabindex="-1"' in hp
 
 
-def test_aviso_privacidad_usuarios_placeholder(client):
+def test_aviso_privacidad_usuarios_redirects_to_legal_page(client):
     resp = client.get('/aviso-privacidad-usuarios')
-    assert resp.status_code == 200
-    assert 'Aviso de Privacidad para usuarios — en preparación' in resp.get_data(as_text=True)
+    assert resp.status_code == 301
+    assert resp.headers['Location'] == 'https://clinianotes.com/legal/aviso-usuarios/'
+
+
+def test_terminos_version_names_both_documents():
+    # Términos + Aviso para Usuarios, both v1.2 Beta (legal/source/).
+    assert Config.TERMINOS_VERSION == 'ToS-1.2-Beta+AU-1.2-Beta'
 
 
 # ── happy paths ──────────────────────────────────────────────────────────
@@ -131,7 +137,7 @@ def test_medico_request_is_stored(client, rows, notices):
     assert row['rol_solicitado'] == 'medico'
     assert row['cedula'] == CEDULA and row['especialidad'] == 'Pediatría'
     assert row['universidad'] == 'Universidad Inventada'
-    assert row['terminos_version'] == Config.TERMINOS_VERSION == 'ToS-2026-10'
+    assert row['terminos_version'] == Config.TERMINOS_VERSION == 'ToS-1.2-Beta+AU-1.2-Beta'
     assert row['terminos_aceptados_at'].endswith('+00:00')
     assert row['estado'] == 'pendiente'  # DB default (FakeDB insert mirrors it)
     # nothing the client sent beyond the known columns reaches the row

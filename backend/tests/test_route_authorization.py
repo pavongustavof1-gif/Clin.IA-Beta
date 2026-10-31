@@ -93,9 +93,10 @@ def test_public_routes_reachable_without_token(client, entry):
     method = entry['methods'][0]
     resp = _call(client, method, _fill(entry['path']), token=None,
                  json_body=_PUBLIC_JSON_BODIES.get(entry['path']))
-    assert resp.status_code == 200, (
-        f"{method} {entry['path']} is inventoried as public but returned "
-        f"{resp.status_code} with no token"
+    expected = entry.get('public_status', 200)
+    assert resp.status_code == expected, (
+        f"{method} {entry['path']} is inventoried as public ({expected}) but "
+        f"returned {resp.status_code} with no token"
     )
 
 

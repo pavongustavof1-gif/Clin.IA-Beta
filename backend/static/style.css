@@ -1235,20 +1235,6 @@ body {
     margin: 0;
 }
 
-.aviso-draft-badge {
-    flex-shrink: 0;
-    font-size: 0.7rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    background: rgba(212, 168, 67, 0.12);
-    color: #7a4f04;
-    border: 1px solid rgba(212, 168, 67, 0.35);
-    border-radius: 99px;
-    padding: 0.2rem 0.65rem;
-    white-space: nowrap;
-    margin-top: 0.15rem;
-}
-
 .aviso-body {
     overflow-y: auto;
     flex: 1;
@@ -1260,6 +1246,23 @@ body {
 
 .aviso-body p {
     margin-bottom: 0.85rem;
+}
+
+/* Lists and the rule before the "Aviso Simplificado" in the generated
+   v1.2 text (templates/legal/aviso_pacientes.html). */
+.aviso-body ul,
+.aviso-body ol {
+    margin: 0 0 0.85rem 1.25rem;
+}
+
+.aviso-body li {
+    margin-bottom: 0.4rem;
+}
+
+.aviso-body hr {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 1.25rem 0;
 }
 
 .aviso-section-title {

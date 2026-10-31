@@ -233,7 +233,7 @@
             </div>
             <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
-            <div class="version-badge">Beta v0.8.1</div>
+            <div class="version-badge">Beta v0.8.2</div>
         </header>
 
         <!-- Main Content -->
@@ -797,7 +797,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA™ Beta v0.8.1 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.8.2 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
@@ -812,76 +812,16 @@
 
             <div class="aviso-header">
                 <div>
-                    <h2 id="avisoModalTitle" class="aviso-title">Aviso de Privacidad</h2>
-                    <p class="aviso-subtitle">Clin.IA™ — Asistente Inteligente de Notas Médicas</p>
+                    <h2 id="avisoModalTitle" class="aviso-title">Aviso de Privacidad para Pacientes</h2>
+                    <p class="aviso-subtitle">Versión 1.2 Beta · Octubre 2026</p>
                 </div>
-                <span class="aviso-draft-badge">BORRADOR — Pendiente de revisión legal</span>
             </div>
 
             <div class="aviso-body">
-
-                <h3 class="aviso-section-title">1. Identidad y domicilio del Responsable</h3>
-                <p>El presente Aviso de Privacidad es emitido por el médico o institución de salud que utiliza la plataforma Clin.IA™ para la generación de notas clínicas ("el Responsable"). El Responsable es la persona física o moral que contrata el servicio de Clin.IA™ y en cuyo consultorio o clínica se lleva a cabo la consulta médica. Los datos de identificación del Responsable (nombre completo, cédula profesional, domicilio y correo electrónico de contacto) se encuentran disponibles en el perfil del médico registrado en la plataforma.</p>
-
-                <h3 class="aviso-section-title">2. Datos personales que se recaban</h3>
-                <p><strong>Datos de identificación:</strong> nombre completo, CURP, fecha de nacimiento, edad, sexo, domicilio, teléfono, número de expediente clínico.</p>
-                <p><strong>Datos de salud (datos personales sensibles):</strong> motivo de consulta, síntomas, signos vitales, hallazgos de exploración física, diagnóstico con código CIE-11, pronóstico, tratamiento, medicamentos prescritos, estudios solicitados, antecedentes heredofamiliares y personales patológicos, y cualquier otra información clínica mencionada durante la consulta.</p>
-                <p><strong>Datos de la consulta:</strong> grabación de audio (eliminada automáticamente tras la transcripción), transcripción de texto (eliminada automáticamente tras la confirmación de la nota clínica), fecha y hora exacta de la consulta con zona horaria del dispositivo.</p>
-                <p><strong>Datos de consentimiento:</strong> registro del consentimiento otorgado por el paciente antes del inicio de la grabación, incluyendo fecha y hora exacta.</p>
-
-                <h3 class="aviso-section-title">3. Finalidades del tratamiento</h3>
-                <p><strong>Finalidades primarias</strong> (necesarias para la prestación del servicio): (1) Transcribir el audio de la consulta médica. (2) Extraer y estructurar la información clínica en formato SOAP conforme a NOM-004-SSA3-2012. (3) Generar la nota clínica de evolución en formato PDF y almacenarla de forma segura. (4) Enviar la nota clínica generada al correo electrónico del médico Responsable. (5) Exportar los datos estructurados en formato JSON para integración con otros sistemas del Responsable.</p>
-                <p><strong>Finalidades secundarias</strong> (opcionales, sujetas a consentimiento separado): mejora del servicio mediante análisis estadístico anonimizado.</p>
-                <p>El paciente puede oponerse al tratamiento para finalidades secundarias sin que ello afecte la prestación del servicio médico.</p>
-
-                <h3 class="aviso-section-title">4. Encargados del tratamiento y transferencias</h3>
-                <p>Para la prestación del servicio, el Responsable se apoya en los siguientes encargados del tratamiento, quienes procesan los datos personales por cuenta del Responsable y conforme a sus instrucciones:</p>
-                <p><strong>AssemblyAI Inc. (Estados Unidos):</strong> transcripción de audio a texto. El audio es eliminado de sus servidores inmediatamente tras el procesamiento exitoso. La transcripción de texto es eliminada de los servidores de Clin.IA™ tras la confirmación de la nota clínica. AssemblyAI no utiliza los datos para entrenamiento de modelos (opt-out activo).</p>
-                <p><strong>Google LLC (Estados Unidos):</strong> procesamiento de lenguaje natural mediante Gemini API para la extracción y estructuración de la información clínica a partir de la transcripción.</p>
-                <p><strong>Resend Inc. (Estados Unidos):</strong> servicio de envío de correo electrónico para la entrega de la nota clínica en PDF al médico Responsable.</p>
-                <p><strong>Supabase (Estados Unidos):</strong> infraestructura de base de datos, autenticación y almacenamiento de archivos.</p>
-                <p><strong>Render (Estados Unidos):</strong> alojamiento de la aplicación y procesamiento de las solicitudes.</p>
-                <p>Además, el presente Aviso informa la siguiente transferencia a un tercero, distinta de los encargados anteriores:</p>
-                <p><strong>Organización Mundial de la Salud (OMS):</strong> con el fin de asignar el código de la Clasificación Internacional de Enfermedades (CIE-11) que exige la NOM-004-SSA3-2012, el texto del diagnóstico se transfiere a la API para CIE-11 de la OMS. Esta comunicación constituye una transferencia a un tercero, forma parte del tratamiento informado al que el titular otorga su consentimiento, y se limita al texto del diagnóstico, sin intercambiar información adicional que identifique al paciente.</p>
-                <p>La transferencia de datos a proveedores en Estados Unidos se realiza al amparo de los artículos 35 y 36 de la LFPDPPP vigente, bajo acuerdos contractuales que obligan a dichos proveedores a mantener niveles de protección equivalentes a los establecidos por la ley mexicana.</p>
-
-                <h3 class="aviso-section-title">5. Datos personales sensibles</h3>
-                <p>Los datos de salud recabados constituyen datos personales sensibles en términos del artículo 2, fracción VI de la LFPDPPP vigente. Su tratamiento se realiza con base en el consentimiento expreso del titular y es estrictamente necesario para la prestación del servicio médico.</p>
-
-                <h3 class="aviso-section-title">6. Consentimiento</h3>
-                <p>El consentimiento expreso del paciente es recabado en dos momentos: (1) <strong>Antes de iniciar la grabación:</strong> mediante confirmación electrónica del médico Responsable de que el paciente ha sido informado verbalmente y ha otorgado su autorización para la grabación y procesamiento de la consulta. La fecha y hora del consentimiento quedan registradas automáticamente. (2) <strong>Al confirmar la nota clínica:</strong> el médico Responsable confirma que el paciente ha firmado la Carta de Consentimiento Informado, misma que es generada como parte del PDF de la nota clínica y que debe ser firmada físicamente y conservada en el expediente del paciente.</p>
-
-                <h3 class="aviso-section-title">7. Derechos ARCO</h3>
-                <p>El titular tiene derecho a <strong>Acceder, Rectificar, Cancelar u Oponerse</strong> al tratamiento de sus datos personales conforme a los artículos 27–34 de la LFPDPPP vigente. Para ejercer estos derechos, el titular deberá enviar una solicitud por escrito a <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a> indicando:</p>
-                <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
-                    <li>Nombre completo del paciente</li>
-                    <li>Fecha de la consulta</li>
-                    <li><strong>ID de nota</strong> (formato SESSION-YYYYMMDD-HHMMSS, visible en el pie de página del PDF de la nota clínica y disponible a través del médico tratante)</li>
-                    <li>Descripción del derecho que desea ejercer y, en caso de Rectificación, la corrección solicitada</li>
-                </ul>
-                <p>El plazo de respuesta es de <strong>20 días hábiles</strong> a partir de la recepción de la solicitud, prorrogables por 20 días hábiles adicionales cuando así lo justifiquen las circunstancias.</p>
-                <p><strong>Cancelación:</strong> en caso de solicitud de cancelación, los datos clínicos serán bloqueados de forma inmediata. No es posible su eliminación definitiva durante el período de retención obligatorio de <strong>5 años</strong> (10 años para pacientes menores de edad hasta los 18+5 años) conforme a NOM-004-SSA3-2012. Transcurrido dicho período, los datos serán eliminados definitivamente.</p>
-                <p><strong>Rectificación:</strong> las correcciones solicitadas se registran mediante adéndum oficial adjunto a la nota clínica original, la cual no puede ser modificada conforme a NOM-004-SSA3-2012.</p>
-
-                <h3 class="aviso-section-title">8. Medidas de seguridad</h3>
-                <p>Clin.IA™ implementa las siguientes medidas técnicas y organizativas para proteger sus datos personales:</p>
-                <ul style="margin: 8px 0 8px 20px; line-height: 1.8;">
-                    <li><strong>Cifrado en tránsito:</strong> todas las comunicaciones entre el usuario y la plataforma se realizan mediante protocolo HTTPS con cifrado TLS.</li>
-                    <li><strong>Minimización de datos:</strong> el audio de la consulta es eliminado automáticamente de AssemblyAI tras la transcripción. La transcripción de texto es eliminada de los servidores de Clin.IA™ tras la confirmación de la nota clínica.</li>
-                    <li><strong>Inmutabilidad de notas clínicas:</strong> las notas confirmadas no pueden ser modificadas. Las correcciones se realizan exclusivamente mediante adéndum conforme a NOM-004-SSA3-2012.</li>
-                    <li><strong>Control de acceso:</strong> acceso a documentos clínicos restringido al médico Responsable.</li>
-                    <li><strong>Registro de consentimiento:</strong> marca de tiempo del consentimiento del paciente registrada en cada consulta para fines de auditoría.</li>
-                    <li><strong>Cifrado en reposo:</strong> la información almacenada se cifra en reposo a nivel de la infraestructura de datos (AES-256).</li>
-                </ul>
-
-                <h3 class="aviso-section-title">9. Cambios al Aviso de Privacidad</h3>
-                <p>El presente Aviso puede ser modificado en cualquier momento. Las modificaciones estarán disponibles a través de la plataforma Clin.IA™. <strong>Fecha de última actualización: Junio 2026.</strong> Cualquier modificación de las finalidades declaradas en el presente Aviso requerirá recabar nuevamente el consentimiento del titular, conforme a la ley vigente.</p>
-
-                <h3 class="aviso-section-title">10. Contacto</h3>
-                <p>Para ejercer derechos ARCO o dudas sobre el tratamiento de datos personales: <a href="mailto:admin@clinianotes.com" class="aviso-email-link">admin@clinianotes.com</a></p>
-                <p>Para información general sobre la plataforma Clin.IA™: <a href="mailto:info@clinianotes.com" class="aviso-email-link">info@clinianotes.com</a></p>
-                <p class="aviso-legal-note">Este Aviso de Privacidad ha sido elaborado conforme a la Ley Federal de Protección de Datos Personales en Posesión de los Particulares vigente (publicada en el DOF el 20 de marzo de 2025) y su normatividad aplicable. <strong>BORRADOR — Pendiente de revisión legal.</strong></p>
-
+                {# v1.2, generated from legal/source/ by legal/build_legal.py
+                   (the same source as clinianotes.com/legal/aviso-pacientes/). #}
+                {% include 'legal/aviso_pacientes.html' %}
+                <p class="aviso-legal-note">También publicado en <a href="https://clinianotes.com/legal/aviso-pacientes/" class="aviso-email-link" target="_blank" rel="noopener">clinianotes.com/legal/aviso-pacientes</a> (versión para imprimir).</p>
             </div><!-- /aviso-body -->
 
             <div class="aviso-footer">

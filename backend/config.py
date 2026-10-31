@@ -27,8 +27,10 @@ class Config:
     # Public access requests (#53/#54). TERMINOS_VERSION is stored with
     # every solicitudes_registro row so we know which Términos de Servicio
     # / Aviso de Privacidad text the applicant accepted — bump it whenever
-    # either text changes.
-    TERMINOS_VERSION = 'ToS-2026-10'
+    # either text changes. Format: Términos version + Aviso para Usuarios
+    # version, matching the documents published at clinianotes.com/legal
+    # (sources: legal/source/*.md).
+    TERMINOS_VERSION = 'ToS-1.2-Beta+AU-1.2-Beta'
     # Both optional; unset = feature off, never an error. SUPERADMIN_EMAIL
     # gets a notice per new request; SUPERADMIN_USER_IDS (comma-separated
     # usuarios/auth UUIDs) gates the superadmin review page (Review C).

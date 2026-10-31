@@ -23,6 +23,8 @@
 #                     (used INSTEAD of @require_auth) answers 404 to every
 #                     caller who isn't in Config.SUPERADMIN_USER_IDS —
 #                     including no token — never 401/403. Absent = False.
+#   public_status   - for a public route, the status it answers without a
+#                     token when that isn't 200 (a redirect). Absent = 200.
 #   resource        - what data/action the route touches, in one phrase
 #   rule            - the intended access policy in prose
 #   scope           - 'none' | 'owner' | 'owner_or_clinic' | 'clinic' | 'self_scoped_query'
@@ -56,7 +58,8 @@ ROUTE_INVENTORY = [
     {'path': '/solicitud', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
      'resource': 'access-request form page shell', 'rule': 'always 200, no data, noindex', 'scope': 'none', 'miss_status': None},
     {'path': '/aviso-privacidad-usuarios', 'methods': ['GET'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
-     'resource': 'privacy notice page (placeholder)', 'rule': 'always 200, no data', 'scope': 'none', 'miss_status': None},
+     'public_status': 301, 'resource': 'old address of the Aviso para Usuarios',
+     'rule': 'always 301 to clinianotes.com/legal/aviso-usuarios/, no data', 'scope': 'none', 'miss_status': None},
     {'path': '/api/solicitudes', 'methods': ['POST'], 'auth_required': False, 'admin_required': False, 'medico_required': False,
      'resource': 'new solicitudes_registro row (write-only, nothing is read back)',
      'rule': 'public; JSON only; rate-limited per IP + globally; same generic 200 for created, honeypot and duplicates',

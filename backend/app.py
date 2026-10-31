@@ -1,5 +1,5 @@
 # backend/app.py
-from flask import Flask, request, jsonify, send_from_directory, render_template, g
+from flask import Flask, request, jsonify, send_from_directory, render_template, redirect, g
 from flask_cors import CORS
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
@@ -1497,11 +1497,15 @@ def solicitud():
     return render_template('solicitud.html')
 
 
+AVISO_USUARIOS_URL = 'https://clinianotes.com/legal/aviso-usuarios/'
+
+
 @app.route('/aviso-privacidad-usuarios')
 def aviso_privacidad_usuarios():
-    # Placeholder until the real "Aviso de Privacidad para usuarios" text
-    # is written (later roadmap item); /solicitud links here.
-    return render_template('aviso-privacidad-usuarios.html')
+    # The Aviso para Usuarios is published on the landing's /legal pages
+    # (generated from legal/source/). This old address was linked from
+    # /solicitud before 0.8.2; it stays as a permanent redirect.
+    return redirect(AVISO_USUARIOS_URL, code=301)
 
 
 SOLICITUD_RECIBIDA = 'Recibimos tu solicitud. Te escribiremos al correo que indicaste.'
@@ -1609,7 +1613,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.1-beta',
+        'version': '0.8.2-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -3516,11 +3520,13 @@ def superadmin_aprobar(solicitud_id):
         usuario_id = recorded['id']
     invalidate_usuario_cache(usuario_id)
 
-    # (4) approved
+    # (4) approved. recomendado_por only serves to evaluate the request;
+    # the Aviso para Usuarios promises it is deleted once resolved.
     if not _patch_solicitud(solicitud_id, {
-        'estado':       'aprobada',
-        'revisado_at':  _utc_now().isoformat(),
-        'revisado_por': g.usuario['usuario_id'],
+        'estado':          'aprobada',
+        'revisado_at':     _utc_now().isoformat(),
+        'revisado_por':    g.usuario['usuario_id'],
+        'recomendado_por': None,
     }):
         return _aprobacion_fallo(solicitud_id, 'marcar como aprobada')
 
@@ -3602,10 +3608,11 @@ def superadmin_rechazar(solicitud_id):
     updated = _sb_patch_returning_quiet(
         f'/rest/v1/solicitudes_registro?id=eq.{pg_val(solicitud_id)}&estado=eq.pendiente',
         {
-            'estado':         'rechazada',
-            'motivo_rechazo': motivo,
-            'revisado_at':    _utc_now().isoformat(),
-            'revisado_por':   g.usuario['usuario_id'],
+            'estado':          'rechazada',
+            'motivo_rechazo':  motivo,
+            'revisado_at':     _utc_now().isoformat(),
+            'revisado_por':    g.usuario['usuario_id'],
+            'recomendado_por': None,  # see the aprobada PATCH
         },
     )
     if updated is None:

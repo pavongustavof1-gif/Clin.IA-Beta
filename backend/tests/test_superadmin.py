@@ -846,6 +846,62 @@ def test_reject_with_email(client, db, emails):
                                   'reply_to': 'superadmin@clinia-ficticia.mx'}]
 
 
+
+# ── recomendado_por retention (0.8.2): kept only while the request is open ──
+
+RECOMENDADOR = 'Dr. Recomendador Inventado'
+
+
+def test_pendiente_list_still_shows_recomendado_por(client, db):
+    db.add('solicitudes_registro', _solicitud(recomendado_por=RECOMENDADOR))
+    rows = _sa(client, 'GET', '/api/superadmin/solicitudes?estado=pendiente').get_json()['solicitudes']
+    assert rows[0]['recomendado_por'] == RECOMENDADOR
+
+
+def _spy_patches(monkeypatch):
+    seen = []
+    real = app_module._sb_patch_returning_quiet
+
+    def spy(path, body):
+        seen.append(dict(body))
+        return real(path, body)
+    monkeypatch.setattr(app_module, '_sb_patch_returning_quiet', spy)
+    return seen
+
+
+def test_approve_clears_recomendado_por_in_the_aprobada_patch(client, db, fake_auth, emails, monkeypatch):
+    db.add('solicitudes_registro', _solicitud(recomendado_por=RECOMENDADOR))
+    patches = _spy_patches(monkeypatch)
+    resp = _aprobar(client, {'clinica_id': None, 'rol_otorgado': 'admin', 'confirma_admin': False})
+    assert resp.status_code == 200, resp.get_json()
+    s = _sol(db)
+    assert s['estado'] == 'aprobada' and s['recomendado_por'] is None
+    # Same PATCH that marks it aprobada — not a separate, skippable step.
+    aprobada = [b for b in patches if b.get('estado') == 'aprobada']
+    assert len(aprobada) == 1 and 'recomendado_por' in aprobada[0] and aprobada[0]['recomendado_por'] is None
+    assert all('recomendado_por' not in b for b in patches if b.get('estado') != 'aprobada')
+
+
+def test_failed_approval_keeps_recomendado_por_for_the_retry(client, db, fake_auth, emails, monkeypatch):
+    db.add('solicitudes_registro', _solicitud(recomendado_por=RECOMENDADOR))
+    monkeypatch.setattr(app_module, 'send_invite_email', lambda *a, **k: True)
+    real = app_module._sb_patch_returning_quiet
+    monkeypatch.setattr(app_module, '_sb_patch_returning_quiet',
+                        lambda path, body: None if body.get('estado') == 'aprobada' else real(path, body))
+    resp = _aprobar(client, {'clinica_id': None, 'rol_otorgado': 'admin', 'confirma_admin': False})
+    assert resp.status_code == 503
+    assert _sol(db)['recomendado_por'] == RECOMENDADOR  # still open (en_proceso)
+
+
+def test_reject_clears_recomendado_por_in_the_rechazada_patch(client, db, emails, monkeypatch):
+    db.add('solicitudes_registro', _solicitud(recomendado_por=RECOMENDADOR))
+    patches = _spy_patches(monkeypatch)
+    resp = _rechazar(client, {'motivo': 'Datos incompletos.', 'enviar_correo': False})
+    assert resp.status_code == 200
+    s = _sol(db)
+    assert s['estado'] == 'rechazada' and s['recomendado_por'] is None
+    assert patches == [{**patches[0], 'estado': 'rechazada', 'recomendado_por': None}]
+
 @pytest.mark.parametrize('enviar', [False, None, 'true', 1])
 def test_reject_without_email_unless_literal_true(client, db, emails, enviar):
     db.add('solicitudes_registro', _solicitud())
