@@ -1341,6 +1341,37 @@ function sleep(ms) {
 function showAvisoModal() {
     document.getElementById('avisoModal').style.display = 'flex';
     document.body.style.overflow = 'hidden';
+    fillAvisoResponsable();
+}
+
+// 0.8.3: replace the aviso's bracketed Responsable placeholders
+// ([data-responsable] in templates/legal/aviso_pacientes.html) with the
+// signed-in doctor's nombre, cédula and clinic domicilio. A value the
+// server leaves out (empty, failed lookup, or an auxiliar's 404) keeps
+// its bracket. Filled once per page; a failed fetch is retried on the
+// next open. textContent, never innerHTML: these are user-entered values.
+let avisoResponsableFilled = false;
+
+async function fillAvisoResponsable() {
+    if (avisoResponsableFilled) return;
+    try {
+        const res = await fetch(`${API_BASE_URL}/api/aviso-responsable`, {
+            headers: await getAuthHeaders()
+        });
+        if (!res.ok) {
+            // 404 (auxiliar) is final; anything else may work next time.
+            if (res.status === 404) avisoResponsableFilled = true;
+            return;
+        }
+        const data = await res.json();
+        document.querySelectorAll('#avisoModal [data-responsable]').forEach(el => {
+            const value = data[el.dataset.responsable];
+            if (typeof value === 'string' && value.trim()) el.textContent = value;
+        });
+        avisoResponsableFilled = true;
+    } catch (e) {
+        console.warn('Aviso: could not load Responsable data', e);
+    }
 }
 
 function closeAvisoModal() {

@@ -233,10 +233,33 @@ def _modal_body(doc: dict) -> str:
     )
 
 
+# App copy only: the patient aviso's bracketed Responsable placeholders
+# get a data-responsable key, and static/app.js replaces the bracket with
+# the signed-in doctor's value from /api/aviso-responsable. Placeholder →
+# (key, how many times the source has it). "[correo]" is deliberately
+# not here: it stays bracketed. The landing /legal page keeps every
+# bracket (it's the generic template).
+APP_RESPONSABLE_FIELDS = {
+    '[Nombre completo del médico]':          ('nombre', 2),
+    '[número]':                              ('cedula', 1),
+    '[domicilio del consultorio o clínica]': ('domicilio', 2),
+}
+
+
+def _mark_responsable(body: str) -> str:
+    for placeholder, (key, expected) in APP_RESPONSABLE_FIELDS.items():
+        old = f'<strong>{html.escape(placeholder)}</strong>'
+        found = body.count(old)
+        if found != expected:
+            raise ValueError(f'aviso-pacientes: expected {placeholder!r} {expected}x, found {found}x')
+        body = body.replace(old, f'<strong data-responsable="{key}">{html.escape(placeholder)}</strong>')
+    return body
+
+
 def _app_partial() -> str:
     doc = next(d for d in DOCS if d['slug'] == 'aviso-pacientes')
     _, body = render(_load(doc), h_tag='h3', h_class='aviso-section-title', a_class='aviso-email-link')
-    return f'{{# {_generated_note(doc["src"])} #}}\n{body}\n'
+    return f'{{# {_generated_note(doc["src"])} #}}\n{_mark_responsable(body)}\n'
 
 
 def _landing_with_modals(current: str) -> str:

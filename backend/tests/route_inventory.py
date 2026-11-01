@@ -68,6 +68,9 @@ ROUTE_INVENTORY = [
     # ── Authenticated, no cross-caller resource ─────────────────────────
     {'path': '/api/session-check', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
      'resource': "caller's own rol/clinica_id", 'rule': 'auth only', 'scope': 'none', 'miss_status': None},
+    {'path': '/api/aviso-responsable', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': True,
+     'resource': "caller's own nombre/cédula + own clinic's direccion (patient aviso modal)",
+     'rule': 'medico/admin only — always the caller, nothing client-chosen; never the email', 'scope': 'self_scoped_query', 'miss_status': None},
     {'path': '/api/process-audio', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': True,
      'resource': 'new trabajos row, scoped to caller', 'rule': 'auth only — creates under own identity', 'scope': 'none', 'miss_status': None},
 

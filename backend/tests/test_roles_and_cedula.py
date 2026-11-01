@@ -87,6 +87,7 @@ def test_medico_gated_route_set_is_exactly_these():
         ('/api/download-pdf/<session_id>', 'GET'),
         ('/api/patient-history/<session_id>', 'GET'),
         ('/api/patient-history', 'GET'),
+        ('/api/aviso-responsable', 'GET'),
     }
 
 

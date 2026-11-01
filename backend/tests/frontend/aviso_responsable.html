@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/aviso_responsable.html
+
+  0.8.3: opening the patient aviso modal on / replaces its bracketed
+  Responsable placeholders ([data-responsable]) with the signed-in doctor's
+  nombre, cédula and clinic domicilio from /api/aviso-responsable. Loads
+  the REAL static/utils.js + static/app.js (unmodified), one iframe per
+  case, next to a copy of the five markers plus the Correo line from
+  templates/legal/aviso_pacientes.html (a static server can't render
+  Jinja; test_aviso_responsable.py pins the template markup). Only the
+  boundary app.js talks to is stubbed: supabaseClient, getAuthHeaders,
+  handleSessionExpired and fetch.
+
+  How to run (same as the other harnesses):
+    1. Serve backend/ over HTTP, e.g. `cd backend && python3 -m http.server 8765`.
+    2. Open http://localhost:8765/tests/frontend/aviso_responsable.html
+    3. Read the on-page summary (or console / window.__RESULT__).
+
+  No PHI: every value below is invented.
+-->
+<html lang="es">
+<head><meta charset="utf-8"><title>aviso responsable</title></head>
+<body>
+<script>
+const CASE = new URLSearchParams(location.search).get('case');
+
+const B = {
+    nombre: '[Nombre completo del médico]',
+    cedula: '[número]',
+    domicilio: '[domicilio del consultorio o clínica]',
+};
+const FULL = { nombre: 'Dra. Ficticia Prueba', cedula: '00000000', domicilio: 'Av. Inventada 1, Col. Ejemplo' };
+
+// What /api/aviso-responsable answers, per open of the modal.
+const RESPONSES = {
+    full:      [[200, FULL]],
+    partial:   [[200, { nombre: FULL.nombre, cedula: FULL.cedula }]],
+    auxiliar:  [[404, { error: 'No encontrado' }], [200, FULL]],
+    retry:     [[500, { error: 'x' }], [200, FULL]],
+    neterror:  ['throw'],
+    markup:    [[200, { nombre: '<img src=x onerror="window.__XSS__=1">Dr. X', cedula: '<b>1</b>' }]],
+    junk:      [[200, { nombre: 42, cedula: '   ', domicilio: null }]],
+};
+
+if (CASE) {
+    // ── Child: the page app.js thinks it's running on ────────────────
+    document.write(`
+        <div id="avisoModal" style="display:none">
+            <p>Responsable: <strong data-responsable="nombre">${B.nombre}</strong></p>
+            <p>Cédula profesional: <strong data-responsable="cedula">${B.cedula}</strong></p>
+            <p>Domicilio: <strong data-responsable="domicilio">${B.domicilio}</strong></p>
+            <p>Correo electrónico de contacto: <strong>[correo]</strong></p>
+            <p><strong data-responsable="nombre">${B.nombre}</strong>, con domicilio en
+               <strong data-responsable="domicilio">${B.domicilio}</strong>, es responsable…</p>
+        </div>`);
+    window.supabaseClient = {
+        auth: { getSession: async () => ({ data: { session: { access_token: 'fake' } } }) },
+    };
+    window.getAuthHeaders = async () => ({ Authorization: 'Bearer fake' });
+    window.handleSessionExpired = () => {};
+    window.__CALLS__ = 0;
+    const queue = RESPONSES[CASE].slice();
+    window.fetch = async (url) => {
+        const json = (status, body) => new Response(JSON.stringify(body), {
+            status, headers: { 'Content-Type': 'application/json' },
+        });
+        if (String(url).endsWith('/api/aviso-responsable')) {
+            window.__CALLS__++;
+            const next = queue.length > 1 ? queue.shift() : queue[0];
+            if (next === 'throw') throw new TypeError('Failed to fetch');
+            return json(next[0], next[1]);
+        }
+        // Everything init() loads gets a 404, so it has nothing to do.
+        return json(404, { error: 'No encontrado' });
+    };
+    const v = Date.now();
+    document.write(`<script src="/static/utils.js?v=${v}"><\/script><script src="/static/app.js?v=${v}"><\/script>`);
+} else {
+    // ── Runner ───────────────────────────────────────────────────────
+    const settle = () => new Promise(r => setTimeout(r, 150));
+    const read = (w) => [...w.document.querySelectorAll('#avisoModal strong')].map(el => el.textContent);
+    const bracketsAll = [B.nombre, B.cedula, B.domicilio, '[correo]', B.nombre, B.domicilio];
+    const filledAll = [FULL.nombre, FULL.cedula, FULL.domicilio, '[correo]', FULL.nombre, FULL.domicilio];
+    const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+    const CASES = {
+        full: async (w) => {
+            w.showAvisoModal(); await settle();
+            const first = read(w);
+            w.closeAvisoModal(); w.showAvisoModal(); await settle();
+            return { ok: same(first, filledAll) && w.__CALLS__ === 1,
+                     detail: `${first.join(' | ')} · fetches=${w.__CALLS__}` };
+        },
+        partial: async (w) => {
+            w.showAvisoModal(); await settle();
+            const got = read(w);
+            const want = [FULL.nombre, FULL.cedula, B.domicilio, '[correo]', FULL.nombre, B.domicilio];
+            return { ok: same(got, want), detail: got.join(' | ') };
+        },
+        auxiliar: async (w) => {
+            w.showAvisoModal(); await settle();
+            const got = read(w);
+            w.closeAvisoModal(); w.showAvisoModal(); await settle();
+            return { ok: same(got, bracketsAll) && same(read(w), bracketsAll) && w.__CALLS__ === 1,
+                     detail: `brackets kept, fetches=${w.__CALLS__} (404 is final)` };
+        },
+        retry: async (w) => {
+            w.showAvisoModal(); await settle();
+            const first = read(w);
+            w.closeAvisoModal(); w.showAvisoModal(); await settle();
+            return { ok: same(first, bracketsAll) && same(read(w), filledAll) && w.__CALLS__ === 2,
+                     detail: `500 kept brackets, second open filled, fetches=${w.__CALLS__}` };
+        },
+        neterror: async (w) => {
+            w.showAvisoModal(); await settle();
+            return { ok: same(read(w), bracketsAll) && w.document.getElementById('avisoModal').style.display === 'flex',
+                     detail: 'network error: brackets kept, modal still open' };
+        },
+        markup: async (w) => {
+            w.showAvisoModal(); await settle();
+            await new Promise(r => setTimeout(r, 300));
+            const modal = w.document.getElementById('avisoModal');
+            const ok = !modal.querySelector('img, b') && !w.__XSS__
+                && read(w)[0] === '<img src=x onerror="window.__XSS__=1">Dr. X' && read(w)[1] === '<b>1</b>';
+            return { ok, detail: 'values shown as text, no elements created' };
+        },
+        junk: async (w) => {
+            w.showAvisoModal(); await settle();
+            return { ok: same(read(w), bracketsAll), detail: 'non-string / blank values keep brackets' };
+        },
+    };
+
+    const out = document.createElement('pre');
+    out.textContent = 'running…';
+    document.body.appendChild(out);
+    const load = (name) => new Promise(resolve => {
+        const frame = document.createElement('iframe');
+        frame.width = 300; frame.height = 80;
+        frame.onload = () => setTimeout(() => resolve(frame.contentWindow), 300);
+        frame.src = `${location.pathname}?case=${name}`;
+        document.body.appendChild(frame);
+    });
+    (async () => {
+        const results = [];
+        for (const [name, run] of Object.entries(CASES)) {
+            const w = await load(name);
+            let r;
+            try { r = await run(w); } catch (e) { r = { ok: false, detail: String(e) }; }
+            results.push({ name, ...r });
+        }
+        const allOk = results.every(r => r.ok);
+        out.textContent = results.map(r => `${r.ok ? 'PASS' : 'FAIL'}  ${r.name}: ${r.detail}`).join('\n')
+            + `\n\n${allOk ? 'ALL PASS' : 'SOME FAILED'}`;
+        console.log(out.textContent);
+        window.__RESULT__ = { allOk, results };
+    })();
+}
+</script>
+</body>
+</html>

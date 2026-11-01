@@ -1613,7 +1613,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.2-beta',
+        'version': '0.8.3-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2415,6 +2415,30 @@ def session_check():
         if pendientes is not None:
             body['solicitudes_pendientes'] = pendientes
     return jsonify(body), 200
+
+
+@app.route('/api/aviso-responsable', methods=['GET'])
+@require_auth
+@require_medico
+def aviso_responsable():
+    """The caller's own Responsable data for the patient aviso modal on /
+    (0.8.3): nombre, cédula and the clinic's domicilio fill the bracketed
+    placeholders in templates/legal/aviso_pacientes.html. Always the
+    caller — nothing in the request picks whose data. A value that is
+    empty or whose lookup failed is left out, and the modal keeps its
+    bracket for it. Never the email: usuarios.email is the login, not a
+    contact for patients (the Correo line stays bracketed). An auxiliar
+    gets 404 from @require_medico — not a Responsable."""
+    cedula = get_usuario_cedula(g.usuario['usuario_id'])
+    # get_clinica_context returns '' for both "no address" and a failed
+    # lookup — either way the modal keeps the bracket.
+    domicilio = get_clinica_context(g.usuario['clinica_id'])['direccion']
+    body = {
+        'nombre':    (g.usuario.get('nombre') or '').strip(),
+        'cedula':    (cedula or '').strip(),
+        'domicilio': domicilio.strip(),
+    }
+    return jsonify({k: v for k, v in body.items() if v}), 200
 
 
 @app.route('/api/admin/usuarios', methods=['GET'])
