@@ -65,7 +65,7 @@ Las modificaciones sustanciales, en particular las relativas al tratamiento de l
 Las modificaciones no sustanciales, como correcciones de redacción o de datos de contacto, entrarán en vigor al publicarse.
 
 ### 13. Ley aplicable y jurisdicción
-Estos Términos se rigen por las leyes de los Estados Unidos Mexicanos, incluida la Ley Federal de Protección de Datos Personales en Posesión de los Particulares vigente (publicada en el DOF el 20 de marzo de 2025). Cualquier controversia se someterá a los tribunales competentes de la ciudad de Saltillo, Coahuila de Zaragoza, con renuncia expresa a cualquier otro fuero que pudiera corresponder por razón de domicilio presente o futuro.
+Estos Términos se rigen por las leyes de los Estados Unidos Mexicanos, incluida la Ley Federal de Protección de Datos Personales en Posesión de los Particulares vigente (publicada en el DOF el 20 de marzo de 2025). Cualquier controversia se someterá a los tribunales competentes de la ciudad donde esté registrada la representación legal de Clin.IA™, con renuncia expresa a cualquier otro fuero que pudiera corresponder por razón de domicilio presente o futuro.
 
 ### 14. Contacto
 Para dudas sobre estos Términos: [info@clinianotes.com](mailto:info@clinianotes.com)
