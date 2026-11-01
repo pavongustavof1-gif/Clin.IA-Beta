@@ -69,19 +69,6 @@
     <link rel="icon" type="image/png" sizes="192x192" href="favicon/android-chrome-192x192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="favicon/android-chrome-512x512.png">
 
-    <!-- ══════════════════════════════════════════════════════════════════
-         GOOGLE ANALYTICS 4
-         PLACEHOLDER: reemplaza G-XXXXXXXXXX con tu Measurement ID real.
-         Obtén el ID en Admin → Flujos de datos de tu propiedad GA4.
-    ═══════════════════════════════════════════════════════════════════ -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XXXXXXXXXX"></script>
-    <script>
-        window.dataLayer = window.dataLayer || [];
-        function gtag(){dataLayer.push(arguments);}
-        gtag('js', new Date());
-        gtag('config', 'G-XXXXXXXXXX');
-    </script>
-
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
@@ -288,8 +275,7 @@
 
         /* Brushed aluminum texture — mirrors .btn in backend/static/style.css */
         .btn-primary,
-        .btn-secondary,
-        .btn-submit {
+        .btn-secondary {
             background: linear-gradient(135deg, #ffffff 0%, #f1f5f9 40%, #e2e8f0 100%);
             color: #334155 !important;
             border: 1px solid #cbd5e1;
@@ -297,8 +283,7 @@
         }
 
         .btn-primary:hover,
-        .btn-secondary:hover,
-        .btn-submit:hover {
+        .btn-secondary:hover {
             background: linear-gradient(135deg, #ffffff 0%, #e2e8f0 40%, #cbd5e1 100%);
             border-color: #94a3b8;
             box-shadow: inset 0 1px 0 #ffffff, 0 4px 12px rgba(15, 23, 42, 0.08);
@@ -306,8 +291,7 @@
         }
 
         .btn-primary:active,
-        .btn-secondary:active,
-        .btn-submit:active {
+        .btn-secondary:active {
             transform: translateY(1px) scale(0.985);
             box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
         }
@@ -434,10 +418,10 @@
             line-height: 1.6;
         }
 
-        /* ── Form section ── */
-        .form-section { padding: var(--spacing-lg) 0 var(--spacing-xl); }
+        /* ── Acceso section ── */
+        .acceso-section { padding: var(--spacing-lg) 0 var(--spacing-xl); }
 
-        .form-card {
+        .acceso-card {
             background: var(--bg-card);
             border: 1px solid var(--border-color);
             border-radius: var(--radius-xl);
@@ -447,9 +431,10 @@
             margin: 0 auto;
             position: relative;
             overflow: hidden;
+            text-align: center;
         }
 
-        .form-card::before {
+        .acceso-card::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0;
@@ -458,74 +443,11 @@
             opacity: 0.6;
         }
 
-        .form-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: var(--spacing-md);
-        }
-
-        .form-field { display: flex; flex-direction: column; gap: 0.4rem; }
-        .form-field.full { grid-column: 1 / -1; }
-
-        .form-field label {
-            font-family: 'Outfit', sans-serif;
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--text-primary);
-            letter-spacing: 0.01em;
-        }
-
-        .form-field input,
-        .form-field select {
-            font-family: 'Outfit', sans-serif;
-            font-size: 0.95rem;
-            color: var(--text-primary);
-            background: var(--bg-primary);
-            border: 1px solid var(--border-hover);
-            border-radius: var(--radius-md);
-            padding: 0.7rem 0.85rem;
-            transition: border-color var(--transition), box-shadow var(--transition);
-            width: 100%;
-        }
-
-        .form-field input:focus,
-        .form-field select:focus {
-            outline: none;
-            border-color: var(--teal);
-            box-shadow: 0 0 0 3px rgba(15,110,86,0.12);
-        }
-
-        .form-field .other-input { margin-top: 0.5rem; display: none; }
-        .form-field .other-input.show { display: block; }
-
-        .form-submit {
-            grid-column: 1 / -1;
-            margin-top: 0.5rem;
-        }
-
-        .btn-submit {
-            width: 100%;
-            justify-content: center;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.95rem 2rem;
-            font-family: 'Outfit', sans-serif;
+        .acceso-text {
             font-size: 1rem;
-            font-weight: 700;
-            letter-spacing: 0.06em;
-            border-radius: var(--radius-md);
-            cursor: pointer;
-            transition: all var(--transition);
-        }
-
-        .form-note {
-            text-align: center;
-            font-size: 0.78rem;
-            color: var(--text-muted);
-            font-family: 'DM Mono', monospace;
-            margin-top: var(--spacing-md);
-            letter-spacing: 0.02em;
+            color: var(--text-secondary);
+            line-height: 1.6;
+            margin: 0 0 var(--spacing-md);
         }
 
         /* ── How it works ── */
@@ -928,7 +850,6 @@
             .compliance-grid {
                 grid-template-columns: 1fr;
             }
-            .form-grid { grid-template-columns: 1fr; }
             .proof-item { border-right: none; border-bottom: 1px solid var(--border-color); }
             .proof-item:last-child { border-bottom: none; }
         }
@@ -1286,99 +1207,15 @@
             </div>
         </section>
 
-        <!-- ── 3.2 Form embed (nativo) ── -->
-        <section class="form-section" id="acceso">
+        <!-- ── 3.2 Acceso (Beta por invitación; no form, no data collected here) ── -->
+        <section class="acceso-section" id="acceso">
             <div class="container">
                 <p class="section-eyebrow">Solicita tu acceso</p>
-                <h2 class="section-title">Únete a la Beta de Clin.IA™</h2>
-                <p class="section-subtitle">Déjanos tus datos y te enviamos tu acceso beta en menos de 24 horas.</p>
+                <h2 class="section-title">Clin.IA™ está en Beta por invitación</h2>
 
-                <div class="form-card">
-                    <form id="beta-form" class="form-grid" novalidate>
-                        <div class="form-field full">
-                            <label for="f-nombre">Nombre</label>
-                            <input type="text" id="f-nombre" name="nombre" placeholder="Dr. / Dra. Nombre y apellido" required>
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-email">Email (mandatorio)</label>
-                            <input type="email" id="f-email" name="email" placeholder="tu@correo.com" autocomplete="email" required>
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-cedula">Cédula Profesional <span id="cedula-req">(mandatorio)</span></label>
-                            <input type="text" id="f-cedula" name="cedula" inputmode="numeric" placeholder="Ej. 12345678" required>
-                        </div>
-
-                        <div class="form-field full">
-                            <label for="f-clinica">Nombre o razón social de la Clínica o consultorio</label>
-                            <input type="text" id="f-clinica" name="clinica" placeholder="Opcional" autocomplete="organization">
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-especialidad">Especialidad</label>
-                            <select id="f-especialidad" name="especialidad" data-other="other-especialidad" required>
-                                <option value="" disabled selected>Selecciona…</option>
-                                <option>Alergología</option>
-                                <option>Cardiología</option>
-                                <option>Dermatología</option>
-                                <option>Endocrinología</option>
-                                <option>Gastroenterología</option>
-                                <option>Geriatría</option>
-                                <option>Ginecología y Obstetricia</option>
-                                <option>Medicina General / Familiar</option>
-                                <option>Medicina Interna</option>
-                                <option>Neurología</option>
-                                <option>Oftalmología</option>
-                                <option>Ortopedia y Traumatología</option>
-                                <option>Otorrinolaringología</option>
-                                <option>Pediatría</option>
-                                <option>Psiquiatría</option>
-                                <option>Administrador</option>
-                                <option value="Otra">Otra…</option>
-                            </select>
-                            <input type="text" id="other-especialidad" class="other-input" placeholder="Escribe tu especialidad">
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-consultas">Consultas por semana</label>
-                            <input type="number" id="f-consultas" name="consultas" min="1" max="500" placeholder="Ej. 40">
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-telefono">Teléfono</label>
-                            <input type="tel" id="f-telefono" name="telefono" placeholder="Opcional" autocomplete="tel">
-                        </div>
-
-                        <div class="form-field">
-                            <label for="f-ciudad">Ciudad</label>
-                            <select id="f-ciudad" name="ciudad" data-other="other-ciudad" required>
-                                <option value="" disabled selected>Selecciona…</option>
-                                <option>Ciudad de México</option>
-                                <option>Guadalajara</option>
-                                <option>Monterrey</option>
-                                <option>Puebla</option>
-                                <option>Tijuana</option>
-                                <option>León</option>
-                                <option>Ciudad Juárez</option>
-                                <option>Querétaro</option>
-                                <option>Mérida</option>
-                                <option>San Luis Potosí</option>
-                                <option>Aguascalientes</option>
-                                <option>Cancún</option>
-                                <option>Toluca</option>
-                                <option>Chihuahua</option>
-                                <option>Culiacán</option>
-                                <option value="Otra">Otra…</option>
-                            </select>
-                            <input type="text" id="other-ciudad" class="other-input" placeholder="Escribe tu ciudad">
-                        </div>
-
-                        <div class="form-submit">
-                            <button type="submit" class="btn-submit">ENVIAR</button>
-                        </div>
-                    </form>
-                    <p class="form-note">Respuesta en menos de 24 horas · info@clinianotes.com</p>
+                <div class="acceso-card">
+                    <p class="acceso-text">Durante la fase Beta, el acceso es por invitación. Escríbenos y te contactaremos.</p>
+                    <a href="mailto:info@clinianotes.com?subject=Solicitud%20de%20acceso%20Beta%20%E2%80%94%20Clin.IA%E2%84%A2" class="btn-primary">Escríbenos</a>
                 </div>
             </div>
         </section>
@@ -1870,79 +1707,6 @@
                 window.scrollTo({ top: y, behavior: 'smooth' });
             });
         })();
-
-        // ── "Otra" free-text inputs in the form ──
-        document.querySelectorAll('select[data-other]').forEach(sel => {
-            const other = document.getElementById(sel.dataset.other);
-            sel.addEventListener('change', () => {
-                if (sel.value === 'Otra') {
-                    other.classList.add('show');
-                    other.required = true;
-                } else {
-                    other.classList.remove('show');
-                    other.required = false;
-                }
-            });
-        });
-
-        // ── Cédula is optional for Administrador ──
-        const esAdministrador = () => document.getElementById('f-especialidad').value === 'Administrador';
-        document.getElementById('f-especialidad').addEventListener('change', () => {
-            const admin = esAdministrador();
-            document.getElementById('f-cedula').required = !admin;
-            document.getElementById('cedula-req').textContent = admin ? '(opcional)' : '(mandatorio)';
-        });
-
-        // ── Form submit → mailto pre-llenado ──
-        document.getElementById('beta-form').addEventListener('submit', e => {
-            e.preventDefault();
-            const nombre = document.getElementById('f-nombre').value.trim();
-            const emailInput = document.getElementById('f-email');
-            const email = emailInput.value.trim();
-            const cedula = document.getElementById('f-cedula').value.trim();
-            const clinica = document.getElementById('f-clinica').value.trim();
-            const telefono = document.getElementById('f-telefono').value.trim();
-            let especialidad = document.getElementById('f-especialidad').value;
-            if (especialidad === 'Otra') especialidad = document.getElementById('other-especialidad').value.trim();
-            const consultas = document.getElementById('f-consultas').value.trim();
-            let ciudad = document.getElementById('f-ciudad').value;
-            if (ciudad === 'Otra') ciudad = document.getElementById('other-ciudad').value.trim();
-
-            if (!nombre || !email || !especialidad || !ciudad) {
-                alert('Por favor completa Nombre, Email, Especialidad y Ciudad.');
-                return;
-            }
-            if (!cedula && !esAdministrador()) {
-                alert('Por favor ingresa tu Cédula Profesional.');
-                return;
-            }
-            if (!emailInput.checkValidity()) {
-                alert('Por favor ingresa un email válido.');
-                return;
-            }
-
-            // GA4 event (si GA4 está configurado)
-            if (typeof gtag === 'function') {
-                gtag('event', 'generate_lead', {
-                    especialidad: especialidad,
-                    ciudad: ciudad
-                });
-            }
-
-            const subject = 'Solicitud de acceso Beta — Clin.IA™';
-            const body =
-                'Nombre: ' + nombre + '\n' +
-                'Email: ' + email + '\n' +
-                'Cédula Profesional: ' + (cedula || '(no especificado)') + '\n' +
-                'Clínica o consultorio: ' + (clinica || '(no especificado)') + '\n' +
-                'Teléfono: ' + (telefono || '(no especificado)') + '\n' +
-                'Especialidad: ' + especialidad + '\n' +
-                'Consultas por semana: ' + (consultas || '(no especificado)') + '\n' +
-                'Ciudad: ' + ciudad + '\n';
-            window.location.href = 'mailto:info@clinianotes.com'
-                + '?subject=' + encodeURIComponent(subject)
-                + '&body=' + encodeURIComponent(body);
-        });
 
         // ── Legal modals ──
         function openModal(id) {
