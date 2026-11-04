@@ -939,6 +939,22 @@ body {
     font-size: 0.8rem;
 }
 
+/* 0.8.5: notes under the CIE-11 code (empty field, format, diagnosis changed).
+   Informational / warning only — never blocks Confirmar. */
+.review-field-note {
+    margin: 0.3rem 0 0;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.review-field-note--warn {
+    color: #b45309;
+}
+
+.review-field-note[hidden] {
+    display: none;
+}
+
 .review-input,
 .review-textarea {
     width: 100%;

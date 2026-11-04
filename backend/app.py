@@ -7,6 +7,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from config import Config
 from transcription import TranscriptionService
 from llm_processor import LLMProcessor
+from icd_service import normalize_cie11_code
 from pdf_generator import PDFGenerator
 from logger import logger
 from email_service import (
@@ -1072,6 +1073,64 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre):
 
 # ── Supabase session persistence ─────────────────────────────────────────────
 
+def reconcile_cie11(structured_data: dict, pending_sd: dict) -> None:
+    """Server-side half of the CIE-11 policy, applied to the doctor-reviewed
+    structured_data at confirm (in place). 0.8.5, CIE-11 review #4/#8/#13.
+
+    - The code is stored normalised (trim, uppercase, no spaces). A code that
+      doesn't match the WHO syntax is still stored — the review screen warns,
+      the doctor is responsible; nothing is rejected here.
+    - No code → no titulo_cie11 and no cie11_fuente.
+    - cie11_fuente='oms' (with the WHO title) only when the code equals the
+      WHO value the lookup put on the pending note; any other code is the
+      doctor's: cie11_fuente='medico' and no title. The pending note is the
+      reference, not the client's claim, so an older cached app.js (which
+      sends no fuente) or an edited code can never carry a WHO title it
+      doesn't match. A note created before 0.8.5 has no fuente on its pending
+      copy, so its code counts as the doctor's.
+    """
+    ev = structured_data.get('evaluacion')
+    if not isinstance(ev, dict):
+        return
+    code = normalize_cie11_code(ev.get('codigo_cie11'))
+    if not code:
+        for key in ('codigo_cie11', 'titulo_cie11', 'cie11_fuente'):
+            ev.pop(key, None)
+        return
+    ev['codigo_cie11'] = code
+    pending_ev = pending_sd.get('evaluacion') if isinstance(pending_sd, dict) else None
+    pending_ev = pending_ev if isinstance(pending_ev, dict) else {}
+    who_code = normalize_cie11_code(pending_ev.get('codigo_cie11')) \
+        if pending_ev.get('cie11_fuente') == 'oms' else ''
+    if who_code and code == who_code:
+        ev['cie11_fuente'] = 'oms'
+        who_title = pending_ev.get('titulo_cie11')
+        if isinstance(who_title, str) and who_title.strip():
+            ev['titulo_cie11'] = who_title.strip()
+        else:
+            ev.pop('titulo_cie11', None)
+    else:
+        ev['cie11_fuente'] = 'medico'
+        ev.pop('titulo_cie11', None)
+
+
+def _finish_confirmed_cleanup(session_id: str, row: dict) -> None:
+    """Delete what a confirm leaves behind (sesiones.transcript_text and the
+    trabajos copy) when a confirmed note still has it. Best-effort, logged;
+    only touches what is actually still there."""
+    if row.get('transcript_text'):
+        if _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {'transcript_text': None}):
+            logger.info(f"DB: Transcript text deleted for already-confirmed session {session_id} (late cleanup)")
+        else:
+            logger.warning(f"DB: Could not delete transcript text for already-confirmed {session_id}")
+    jobs = _sb_get(f'/rest/v1/trabajos?session_id=eq.{pg_val(session_id)}&select=job_id&limit=1')
+    if jobs:
+        if _sb_delete(f'/rest/v1/trabajos?session_id=eq.{pg_val(session_id)}'):
+            logger.info(f"DB: trabajos row(s) deleted for already-confirmed session {session_id} (late cleanup)")
+        else:
+            logger.warning(f"DB: could not delete trabajos row(s) for already-confirmed session {session_id}")
+
+
 def strip_transcript(payload: dict) -> dict:
     """
     Return a shallow copy of a session payload with the raw transcript
@@ -1635,7 +1694,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.4-beta',
+        'version': '0.8.5-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -1833,7 +1892,7 @@ def confirm_and_generate():
         # check, since it's already exactly this owner-only rule.
         rows = _sb_get(
             f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}'
-            f'&select=usuario_id,clinica_id,status,full_response&limit=1'
+            f'&select=usuario_id,clinica_id,status,full_response,transcript_text&limit=1'
         )
         if not rows:
             return jsonify({'error': 'Session not found'}), 404
@@ -1846,9 +1905,20 @@ def confirm_and_generate():
         if not session:
             return jsonify({'error': 'Session not found'}), 404
 
+        # 0.8.5 (CIE-11 review #4/#8/#13): normalise the code and settle its
+        # source against the WHO value stored on the pending note.
+        if isinstance(structured_data, dict):
+            reconcile_cie11(structured_data, (session.get('structured_data') or {}) if isinstance(session, dict) else {})
+
         # NOM-024 immutability — reject if already confirmed or cancelled
         current_status = row.get('status')
         if current_status == 'confirmed':
+            # 0.8.5: a previous confirm whose save succeeded but whose
+            # response never reached the browser (timeout) stopped before
+            # its cleanup. Finish it here — owner-only, already checked
+            # above — and still answer SESSION_LOCKED. The email is never
+            # re-sent from here.
+            _finish_confirmed_cleanup(session_id, row)
             return jsonify({
                 'error': 'Esta nota ya fue confirmada y no puede modificarse. Para hacer correcciones, utilice la función de adéndum.',
                 'error_code': 'SESSION_LOCKED'

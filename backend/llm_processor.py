@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
-from icd_service import lookup_cie11
+from icd_service import lookup_cie11, normalize_cie11_code
 import json
 import time
 from typing import Dict, Optional
@@ -17,6 +17,77 @@ class LLMProcessingError(Exception):
     instead of raising, so it silently flowed through as if it were a real
     structured_data result."""
     pass
+
+
+# 0.8.5 (CIE-11 review #4): a CIE-11 code comes only from the WHO lookup or
+# from the doctor — never from Gemini. These keys are removed from Gemini's
+# output before the lookup runs, whatever the lookup then does.
+CIE11_KEYS = ('codigo_cie11', 'titulo_cie11', 'cie11_fuente')
+CIE11_FUENTE_OMS = 'oms'
+CIE11_FUENTE_MEDICO = 'medico'
+
+
+def normalize_evaluacion(data) -> None:
+    """Structural normalisation of evaluacion, in place (0.8.5, review #10/#11).
+    Never invents clinical content:
+      - diagnostico_principal → diagnostico when diagnostico is missing or
+        blank (the PDF reads either key; the review screen, the lookup and
+        the confirm only read diagnostico, so the other spelling was lost).
+      - diagnosticos_adicionales given as one string → a list of its
+        non-blank lines (the review textarea and the shared renderer expect
+        a list).
+    Idempotent: safe to run from extraction and again from validation."""
+    if not isinstance(data, dict):
+        return
+    ev = data.get('evaluacion')
+    if not isinstance(ev, dict):
+        return
+    principal = ev.get('diagnostico_principal')
+    diagnostico = ev.get('diagnostico')
+    if (not isinstance(diagnostico, str) or not diagnostico.strip()) \
+            and isinstance(principal, str) and principal.strip():
+        ev['diagnostico'] = principal
+        del ev['diagnostico_principal']
+    adicionales = ev.get('diagnosticos_adicionales')
+    if isinstance(adicionales, str):
+        lines = [line.strip() for line in adicionales.split('\n') if line.strip()]
+        if lines:
+            ev['diagnosticos_adicionales'] = lines
+        else:
+            del ev['diagnosticos_adicionales']
+
+
+def apply_cie11_lookup(data) -> None:
+    """Strip any Gemini-supplied CIE-11 keys, then fill code + title from the
+    WHO lookup with cie11_fuente='oms'. No WHO code → no CIE-11 keys at all
+    (the review screen shows an empty field for the doctor to fill)."""
+    if not isinstance(data, dict):
+        return
+    ev = data.get('evaluacion')
+    if not isinstance(ev, dict):
+        return
+    for key in CIE11_KEYS:
+        ev.pop(key, None)
+    diagnostico = ev.get('diagnostico')
+    if not isinstance(diagnostico, str) or not diagnostico.strip():
+        return
+    try:
+        cie_result = lookup_cie11(diagnostico)
+    except Exception as e:
+        # Exception type only — the message could carry the diagnosis.
+        logger.warning(f"ICD: Could not inject CIE-11 code (non-fatal): {type(e).__name__}")
+        return
+    code = normalize_cie11_code((cie_result or {}).get('code'))
+    if not code:
+        return
+    ev['codigo_cie11'] = code
+    title = (cie_result or {}).get('title')
+    if isinstance(title, str) and title.strip():
+        ev['titulo_cie11'] = title.strip()
+    ev['cie11_fuente'] = CIE11_FUENTE_OMS
+    # No code/title in the log — a patient's diagnosis code is PHI same as
+    # the free-text diagnosis it came from (Stage H1 fix #11).
+    logger.info("ICD: CIE-11 code injected into structured_data")
 
 
 class LLMProcessor:
@@ -90,7 +161,8 @@ INSTRUCCIONES CRÍTICAS:
 4. Organiza la información según el formato SOAP
 5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
 6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'
-7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.{speaker_instruction}
+7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.
+8. No incluyas códigos CIE-11 ni su título (codigo_cie11, titulo_cie11): el sistema los obtiene de la OMS.{speaker_instruction}
 
 LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a «evaluacion» y «plan»:
 - Redacta los campos de «evaluacion» (diagnostico, diagnosticos_adicionales, impresion_clinica,
@@ -112,7 +184,7 @@ LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a �
     • caída del cabello → alopecia
 
 - Sin abreviaturas: desarróllalas a su forma completa (p. ej. «c/8h» → «cada 8 horas»;
-  «VO» → «vía oral»). Conserva las unidades estándar (mg, mL, mmHg, °C) y el código CIE-11.
+  «VO» → «vía oral»). Conserva las unidades estándar (mg, mL, mmHg, °C).
 
 REGLA DE SEGURIDAD (obligatoria): esta normalización cambia ÚNICAMENTE el registro lingüístico,
 NUNCA el contenido clínico. Está PROHIBIDO añadir diagnósticos, hallazgos, localización anatómica,
@@ -234,22 +306,11 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
                 structured_data = json.loads(cleaned_text)
                 logger.info("LLM: Extraction successful.")
 
-                # CIE-11 lookup — inject code from WHO API based on Gemini's extracted diagnosis
-                try:
-                    diagnostico = structured_data.get('evaluacion', {}).get('diagnostico', '')
-                    if diagnostico:
-                        cie_result = lookup_cie11(diagnostico)
-                        if cie_result:
-                            structured_data.setdefault('evaluacion', {})
-                            structured_data['evaluacion']['codigo_cie11'] = cie_result['code']
-                            structured_data['evaluacion']['titulo_cie11'] = cie_result['title']
-                            # No code/title in the log — a patient's diagnosis
-                            # code is PHI same as the free-text diagnosis it
-                            # came from (Stage H1 fix #11, caught via a live
-                            # log review that still had one in it).
-                            logger.info("ICD: CIE-11 code injected into structured_data")
-                except Exception as e:
-                    logger.warning(f"ICD: Could not inject CIE-11 code (non-fatal): {e}")
+                # 0.8.5: normalise the diagnosis key first (so the lookup
+                # sees diagnostico_principal too), then replace whatever
+                # CIE-11 keys Gemini returned with the WHO lookup's result.
+                normalize_evaluacion(structured_data)
+                apply_cie11_lookup(structured_data)
 
                 return structured_data
 
@@ -347,6 +408,10 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         for section in ("informacion_paciente", "metadata"):
             if not isinstance(data.get(section), dict):
                 data[section] = {}
+
+        # Already run once in extract_structured_data, before the CIE-11
+        # lookup; idempotent, kept here so every validated note has it.
+        normalize_evaluacion(data)
 
         # Check that at least some meaningful data was extracted
         has_content = False

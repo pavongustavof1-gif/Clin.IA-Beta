@@ -23,6 +23,20 @@
     6  confirm answers 503               → review restored with its code, Confirmar
                                            re-enabled, retry confirms the same session
 
+  0.8.5 — CIE-11 review, batch 2 (backend half: tests/test_cie11_integrity.py):
+    7  code edit                         → hidden WHO title cleared, cie11_fuente
+                                           "medico"; back to the WHO value restores it
+    8  diagnosis edit                    → "El diagnóstico cambió; verifique el código
+                                           CIE-11." shown; the code itself untouched
+    9  malformed / empty code            → "Revise el formato del código CIE-11." warns
+                                           but Confirmar still signs; normalised on change;
+                                           no WHO code → "No se obtuvo código CIE-11"
+   10  diagnósticos adicionales          → prefilled one per line, edited, carried
+                                           through confirm, rendered in the summary
+
+  The notes' wording lives in templates/index.html (a static server can't
+  render Jinja); test_cie11_integrity.py pins it. Here only visibility is checked.
+
   Timers inside the iframes run 50× faster (the real 2 s poll delay is 40 ms).
 
   How to run (same as the other harnesses):
@@ -47,9 +61,11 @@ if (CASE) {
         'saturacion_oxigeno', 'peso', 'talla', 'habitus', 'examen_fisico', 'diagnostico', 'codigo_cie11',
         'titulo_cie11', 'impresion_clinica', 'pronostico', 'tratamiento', 'medicamentos', 'recomendaciones',
         'estudios_solicitados', 'seguimiento', 'fecha_hora_consulta'];
+    const TEXTAREA_IDS = ['diagnosticos_adicionales'];
     const CHECKBOXES = ['consentCheckbox', 'consentTratamiento', 'createPDF', 'sendEmailToggle', 'printRawTranscript'];
     let html = '<form id="reviewForm">';
     FORM_IDS.forEach(f => { html += `<input type="text" class="review-input" id="review_${f}">`; });
+    TEXTAREA_IDS.forEach(f => { html += `<textarea class="review-textarea" id="review_${f}"></textarea>`; });
     html += '</form>';
     CHECKBOXES.forEach(id => { html += `<input type="checkbox" id="${id}">`; });
     html += '<input type="file" id="audioFileInput"><select id="speakersExpected"><option value="2">2</option></select>';
@@ -81,7 +97,8 @@ if (CASE) {
         submitted: 0, polls: {}, confirmBodies: [],
         jobs: {
             'job-1': { doneAfter: 2, session: 'SESSION-FAKE-1',
-                       sd: { evaluacion: { diagnostico: 'Diagnóstico ficticio A', codigo_cie11: '5A24/5A11', titulo_cie11: 'Título ficticio A' } } },
+                       sd: { evaluacion: { diagnostico: 'Diagnóstico ficticio A', codigo_cie11: '5A24/5A11', titulo_cie11: 'Título ficticio A',
+                                           cie11_fuente: 'oms', diagnosticos_adicionales: ['Adicional ficticio uno', 'Adicional ficticio dos'] } } },
             'job-2': { doneAfter: 6, session: 'SESSION-FAKE-2',
                        sd: { evaluacion: { diagnostico: 'Diagnóstico ficticio B' } } },
         },
@@ -142,6 +159,15 @@ if (CASE) {
     const code = () => $('review_codigo_cie11').value;
     const shownSession = () => state.pendingResult && state.pendingResult.session_id;
     const giveAudio = () => handleFileUpload({ target: { files: [new File(['fake-audio'], 'consulta-ficticia.webm', { type: 'audio/webm' })] } });
+    const type = (id, value, alsoChange) => {
+        const el = $(id);
+        el.value = value;
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        if (alsoChange) el.dispatchEvent(new Event('change', { bubbles: true }));
+    };
+    const shownNote = (id) => $(id).hidden === false;
+    const openJob1Review = async () => { giveAudio(); $('processBtn').click(); await until(reviewShown); };
+    const lastEv = () => (H.confirmBodies[H.confirmBodies.length - 1] || { structured_data: {} }).structured_data.evaluacion || {};
     const checkConsentAndConfirm = () => {
         if (!$('consentTratamiento').checked) $('consentTratamiento').click();   // real change handler enables Confirmar
         $('confirmAndGenerateBtn').click();
@@ -264,6 +290,77 @@ if (CASE) {
         },
     };
 
+    Object.assign(CASES, {
+        async code_edit_clears_title(c) {
+            await openJob1Review();
+            c.check('WHO code and title prefilled', code() === '5A24/5A11' && $('review_titulo_cie11').value === 'Título ficticio A', `${code()} | ${$('review_titulo_cie11').value}`);
+            type('review_codigo_cie11', '5A11');
+            c.check('editing the code clears the hidden title', $('review_titulo_cie11').value === '');
+            type('review_codigo_cie11', ' 5a24/5a11 ');
+            c.check('typing the WHO value back restores its title', $('review_titulo_cie11').value === 'Título ficticio A');
+            c.check('built note: WHO value → fuente oms with title', JSON.stringify(buildStructuredDataFromForm().evaluacion) === JSON.stringify({
+                diagnostico: 'Diagnóstico ficticio A', diagnosticos_adicionales: ['Adicional ficticio uno', 'Adicional ficticio dos'],
+                codigo_cie11: '5A24/5A11', cie11_fuente: 'oms', titulo_cie11: 'Título ficticio A' }), JSON.stringify(buildStructuredDataFromForm().evaluacion));
+            type('review_codigo_cie11', '5A11', true);
+            checkConsentAndConfirm();
+            await until(() => H.confirmBodies.length === 1);
+            const ev = lastEv();
+            c.check('confirm sends the doctor\'s code: fuente medico, no title', ev.codigo_cie11 === '5A11' && ev.cie11_fuente === 'medico' && !('titulo_cie11' in ev), JSON.stringify(ev));
+        },
+
+        async diagnosis_edit_hint(c) {
+            await openJob1Review();
+            c.check('no hint when the review opens', !shownNote('review_cie11_dx_cambio'));
+            type('review_diagnostico', 'Diagnóstico ficticio A, corregido');
+            c.check('editing the diagnosis shows the hint', shownNote('review_cie11_dx_cambio'));
+            c.check('the code is not changed automatically', code() === '5A24/5A11' && $('review_titulo_cie11').value === 'Título ficticio A');
+            type('review_diagnostico', 'Diagnóstico ficticio A');
+            c.check('back to the original diagnosis hides it', !shownNote('review_cie11_dx_cambio'));
+            type('review_diagnostico', 'Otro diagnóstico ficticio');
+            type('review_codigo_cie11', '');
+            c.check('no hint while the code is empty', !shownNote('review_cie11_dx_cambio'));
+        },
+
+        async malformed_code_warning(c) {
+            await openJob1Review();
+            c.check('valid cluster: no format warning', !shownNote('review_cie11_formato') && !shownNote('review_cie11_vacio'));
+            type('review_codigo_cie11', 'abc');
+            c.check('malformed code warns', shownNote('review_cie11_formato'));
+            type('review_codigo_cie11', ' 5a 11 ', true);
+            c.check('normalised on change, warning gone', code() === '5A11' && !shownNote('review_cie11_formato'), code());
+            type('review_codigo_cie11', 'abc', true);
+            if (!$('consentTratamiento').checked) $('consentTratamiento').click();
+            c.check('Confirmar still enabled with a malformed code', $('confirmAndGenerateBtn').disabled === false);
+            $('confirmAndGenerateBtn').click();
+            await until(() => H.confirmBodies.length === 1);
+            const ev = lastEv();
+            c.check('malformed code is signed as typed (normalised), fuente medico', ev.codigo_cie11 === 'ABC' && ev.cie11_fuente === 'medico' && !('titulo_cie11' in ev), JSON.stringify(ev));
+        },
+
+        async no_who_code_note(c) {
+            H.jobs['job-1'].sd = H.jobs['job-2'].sd;   // a run whose lookup found nothing
+            await openJob1Review();
+            c.check('empty field shows the "No se obtuvo código CIE-11" note', shownNote('review_cie11_vacio'));
+            c.check('no format warning on an empty field', !shownNote('review_cie11_formato'));
+            type('review_codigo_cie11', '5a11', true);
+            c.check('typing a code hides the note', !shownNote('review_cie11_vacio'));
+            c.check('typed code is the doctor\'s', JSON.stringify(buildStructuredDataFromForm().evaluacion) === JSON.stringify({ diagnostico: 'Diagnóstico ficticio B', codigo_cie11: '5A11', cie11_fuente: 'medico' }), JSON.stringify(buildStructuredDataFromForm().evaluacion));
+        },
+
+        async adicionales_roundtrip(c) {
+            await openJob1Review();
+            c.check('prefilled one per line', $('review_diagnosticos_adicionales').value === 'Adicional ficticio uno\nAdicional ficticio dos', JSON.stringify($('review_diagnosticos_adicionales').value));
+            $('review_diagnosticos_adicionales').value += '\n  Adicional ficticio tres  \n\n';
+            checkConsentAndConfirm();
+            await until(() => H.confirmBodies.length === 1);
+            const ev = lastEv();
+            c.check('confirm carries the edited list', JSON.stringify(ev.diagnosticos_adicionales) === JSON.stringify(['Adicional ficticio uno', 'Adicional ficticio dos', 'Adicional ficticio tres']), JSON.stringify(ev.diagnosticos_adicionales));
+            await until(() => $('resultsSection').style.display === 'block');
+            const html = $('formattedData').innerHTML;
+            c.check('summary renders them', html.includes('Diagnósticos Adicionales') && html.includes('<li>Adicional ficticio tres</li>'), html.slice(0, 200));
+        },
+    });
+
     async function runCase() {
         const checks = [];
         const c = { check: (name, pass, detail) => checks.push({ name, pass: !!pass, detail: pass ? undefined : detail }) };
@@ -272,7 +369,8 @@ if (CASE) {
     }
 } else {
     // ── Runner ───────────────────────────────────────────────────────────
-    const NAMES = ['double_click', 'stale_loop_and_cancel', 'upload_during_job', 'new_run_with_review_open', 'slow_auth_confirm_race', 'confirm_save_fails'];
+    const NAMES = ['double_click', 'stale_loop_and_cancel', 'upload_during_job', 'new_run_with_review_open', 'slow_auth_confirm_race', 'confirm_save_fails',
+                   'code_edit_clears_title', 'diagnosis_edit_hint', 'malformed_code_warning', 'no_who_code_note', 'adicionales_roundtrip'];
     const out = document.createElement('pre');
     out.textContent = 'running…';
     document.body.appendChild(out);

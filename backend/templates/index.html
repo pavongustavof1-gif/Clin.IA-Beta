@@ -233,7 +233,7 @@
             </div>
             <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
-            <div class="version-badge">Beta v0.8.4</div>
+            <div class="version-badge">Beta v0.8.5</div>
         </header>
 
         <!-- Main Content -->
@@ -595,17 +595,31 @@
                                     <label class="review-label" for="review_diagnostico">Diagnóstico</label>
                                     <input type="text" id="review_diagnostico" class="review-input">
                                 </div>
+                                <div class="review-field">
+                                    <label class="review-label" for="review_diagnosticos_adicionales">
+                                        Diagnósticos adicionales
+                                        <span class="review-hint">(uno por línea)</span>
+                                    </label>
+                                    <textarea id="review_diagnosticos_adicionales" class="review-textarea" rows="2"></textarea>
+                                </div>
 
-                                <!-- CIE-11 — WHO Embedded Coding Tool -->
+                                <!-- CIE-11 (0.8.5): the code comes only from the WHO lookup
+                                     or from the doctor, never from Gemini. A plain input;
+                                     the hidden title is the WHO title and is cleared as soon
+                                     as the code no longer equals the WHO value. -->
                                 <div class="review-field" id="cie11-field-block">
                                     <label class="review-label" for="review_codigo_cie11">
                                         Código CIE-11
-                                        <span class="review-hint">(sugerido por IA · editable)</span>
+                                        <span class="review-hint">(búsqueda en la OMS · editable)</span>
                                     </label>
                                     <input type="text" id="review_codigo_cie11" class="review-input"
-                                           placeholder="ej. CA40, 5A11, BA00"
+                                           placeholder="ej. CA40, 5A11, 5A24/5A11"
+                                           autocomplete="off" spellcheck="false"
                                            style="text-transform: uppercase; font-family: monospace;">
                                     <input type="hidden" id="review_titulo_cie11">
+                                    <p class="review-field-note" id="review_cie11_vacio" hidden>No se obtuvo código CIE-11; escríbalo.</p>
+                                    <p class="review-field-note review-field-note--warn" id="review_cie11_formato" hidden>Revise el formato del código CIE-11.</p>
+                                    <p class="review-field-note review-field-note--warn" id="review_cie11_dx_cambio" hidden>El diagnóstico cambió; verifique el código CIE-11.</p>
                                 </div>
 
                                 <div class="review-field">
@@ -797,7 +811,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA™ Beta v0.8.4 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.8.5 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>

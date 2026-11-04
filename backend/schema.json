@@ -118,11 +118,16 @@
         },
         "codigo_cie11": {
           "type": "string",
-          "description": "Código CIE-11 primario correspondiente al diagnóstico principal. Ejemplo: CA40, 5A11, BA00. Obtenido vía WHO ICD API — no autogenerar."
+          "description": "Código CIE-11 del diagnóstico principal: código raíz (ej. 5A11) o clúster de la OMS (raíces unidas con /, extensiones con &; ej. 5A24/5A11). Proviene solo de la API de la OMS o del médico, nunca de Gemini. Se guarda normalizado (sin espacios, en mayúsculas)."
         },
         "titulo_cie11": {
           "type": "string",
-          "description": "Descripción oficial en español del código CIE-11 seleccionado. Obtenida vía WHO ICD API."
+          "description": "Descripción oficial en español del código CIE-11, solo cuando el código vino de la OMS (cie11_fuente = oms). Se borra si el médico cambia el código."
+        },
+        "cie11_fuente": {
+          "type": "string",
+          "enum": ["oms", "medico"],
+          "description": "Origen de codigo_cie11: oms (búsqueda en la API de la OMS) o medico (escrito o cambiado por el médico). Ausente cuando no hay código. Nunca proviene de Gemini. No se imprime en el PDF."
         },
         "impresion_clinica": {
           "type": "string",

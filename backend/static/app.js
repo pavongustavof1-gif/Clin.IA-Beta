@@ -110,6 +110,11 @@ const state = {
     pollTimer: null,
     submitting: false,
     confirming: false,
+    // 0.8.5 (CIE-11 review #8/#5): the WHO lookup's code/title for the open
+    // review (null when the code didn't come from the OMS), and the
+    // diagnosis as it was when the review opened.
+    cie11Who: null,
+    reviewDiagnostico: '',
     consentGiven: false,
     consentTimestamp: null
 };
@@ -326,6 +331,18 @@ async function init() {
         elements.confirmAndGenerateBtn.addEventListener('click', confirmAndGenerate);
     }
     document.getElementById('cancelReviewBtn')?.addEventListener('click', cancelReview);
+
+    // CIE-11 code + diagnosis (0.8.5): keep the hidden WHO title and the
+    // notes under the code in step with what the doctor types.
+    const cie11Input = document.getElementById('review_codigo_cie11');
+    if (cie11Input) {
+        cie11Input.addEventListener('input', syncCie11Fields);
+        cie11Input.addEventListener('change', () => {
+            cie11Input.value = normalizeCie11Code(cie11Input.value);
+            syncCie11Fields();
+        });
+    }
+    document.getElementById('review_diagnostico')?.addEventListener('input', refreshCie11Notes);
     document.getElementById('historialBuscarBtn')?.addEventListener('click', searchPatientHistory);
     document.getElementById('historialScopeMine')?.addEventListener('click', () => setHistorialScope('mine'));
     document.getElementById('historialScopeClinica')?.addEventListener('click', () => setHistorialScope('clinica'));
@@ -1013,6 +1030,50 @@ function formatMedicamentosForTextarea(meds) {
 }
 
 // ─────────────────────────────────────────────
+// CIE-11 code (0.8.5, CIE-11 review #4/#8/#5/#13)
+//
+// Policy: a code comes only from the WHO lookup (cie11_fuente "oms") or
+// from the doctor ("medico"), never from Gemini. WHO clusters such as
+// "5A24/5A11" are valid codes. A code that doesn't match the WHO syntax
+// gets a warning but never blocks Confirmar — the doctor is responsible.
+// The server re-checks the source against the pending note at confirm.
+// ─────────────────────────────────────────────
+
+// Must stay identical to icd_service.CIE11_CODE_PATTERN (a pytest checks).
+// ICD-11 Reference Guide §1.2.4.1, §2.9, §2.10.1-2.10.2:
+// https://icdcdn.who.int/icd11referenceguide/en/refguide.pdf
+const CIE11_CODE_PATTERN = '^[1-9A-HJ-NP-WYZ][A-HJ-NP-Z][0-9][0-9A-HJ-NP-Z](?:\\.[0-9A-HJ-NP-Z]{1,2})?(?:&X[0-9A-HJ-NP-Z]{3,5})*(?:/[1-9A-HJ-NP-WYZ][A-HJ-NP-Z][0-9][0-9A-HJ-NP-Z](?:\\.[0-9A-HJ-NP-Z]{1,2})?(?:&X[0-9A-HJ-NP-Z]{3,5})*)*$';
+const CIE11_CODE_RE = new RegExp(CIE11_CODE_PATTERN);
+
+// Trim, uppercase, remove internal spaces — same as the server.
+function normalizeCie11Code(value) {
+    return typeof value === 'string' ? value.replace(/\s+/g, '').toUpperCase() : '';
+}
+
+function isValidCie11Code(code) {
+    return CIE11_CODE_RE.test(code || '');
+}
+
+// The hidden title is the WHO title only while the code equals the WHO
+// value; any other code (typed, changed, replaced) has no title.
+function syncCie11Fields() {
+    const code = normalizeCie11Code(document.getElementById('review_codigo_cie11').value);
+    const who = state.cie11Who;
+    document.getElementById('review_titulo_cie11').value = (who && code === who.code) ? who.title : '';
+    refreshCie11Notes();
+}
+
+function refreshCie11Notes() {
+    const code = normalizeCie11Code(document.getElementById('review_codigo_cie11').value);
+    const diag = (document.getElementById('review_diagnostico').value || '').trim();
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.hidden = !on; };
+    show('review_cie11_vacio', !code);
+    show('review_cie11_formato', !!code && !isValidCie11Code(code));
+    // Only a hint — the code is never changed automatically.
+    show('review_cie11_dx_cambio', !!code && diag !== state.reviewDiagnostico);
+}
+
+// ─────────────────────────────────────────────
 // Review screen
 // ─────────────────────────────────────────────
 function displayReviewScreen(result) {
@@ -1067,12 +1128,23 @@ function displayReviewScreen(result) {
 
     // Evaluación
     setVal('review_diagnostico',      ev.diagnostico);
+    const adicionales = ev.diagnosticos_adicionales;
+    setVal('review_diagnosticos_adicionales',
+        Array.isArray(adicionales) ? adicionales.filter(d => typeof d === 'string').join('\n')
+            : (typeof adicionales === 'string' ? adicionales : ''));
     setVal('review_impresion_clinica', ev.impresion_clinica);
     setVal('review_pronostico',        ev.pronostico);
 
-    // Pre-fill CIE-11 from AI suggestion
-    setVal('review_codigo_cie11', (ev.codigo_cie11 || '').toUpperCase());
-    document.getElementById('review_titulo_cie11').value = ev.titulo_cie11 || '';
+    // CIE-11: a code from the WHO lookup (cie11_fuente "oms") arrives with
+    // its title; a code with any other source (a pending note saved before
+    // 0.8.5, or one the doctor already typed) is shown as the doctor's.
+    const cie11Code = normalizeCie11Code(ev.codigo_cie11);
+    state.cie11Who = (cie11Code && ev.cie11_fuente === 'oms')
+        ? { code: cie11Code, title: typeof ev.titulo_cie11 === 'string' ? ev.titulo_cie11 : '' }
+        : null;
+    state.reviewDiagnostico = typeof ev.diagnostico === 'string' ? ev.diagnostico.trim() : '';
+    setVal('review_codigo_cie11', cie11Code);
+    syncCie11Fields();
 
     // Plan
     setVal('review_tratamiento', plan.tratamiento);
@@ -1159,13 +1231,24 @@ function buildStructuredDataFromForm() {
     // evaluacion
     const ev = {};
     if (getVal('review_diagnostico'))       ev.diagnostico       = getVal('review_diagnostico');
+    const adicionales = parseLines('review_diagnosticos_adicionales');
+    if (adicionales.length)                 ev.diagnosticos_adicionales = adicionales;
     if (getVal('review_impresion_clinica')) ev.impresion_clinica  = getVal('review_impresion_clinica');
     if (getVal('review_pronostico'))        ev.pronostico         = getVal('review_pronostico');
-    const cie11Code  = document.getElementById('review_codigo_cie11').value.trim();
-    const cie11Title = document.getElementById('review_titulo_cie11').value.trim();
+    // CIE-11 (0.8.5): normalised; "oms" with the WHO title only while the
+    // code still equals the WHO value, otherwise the doctor's ("medico")
+    // with no title; no code → no CIE-11 keys at all.
+    const cie11Code = normalizeCie11Code(document.getElementById('review_codigo_cie11').value);
     if (cie11Code) {
         ev.codigo_cie11 = cie11Code;
-        if (cie11Title) ev.titulo_cie11 = cie11Title;
+        const who = state.cie11Who;
+        if (who && cie11Code === who.code) {
+            ev.cie11_fuente = 'oms';
+            const cie11Title = document.getElementById('review_titulo_cie11').value.trim();
+            if (cie11Title) ev.titulo_cie11 = cie11Title;
+        } else {
+            ev.cie11_fuente = 'medico';
+        }
     }
     if (Object.keys(ev).length) sd.evaluacion = ev;
 
@@ -1434,6 +1517,10 @@ function resetApplication() {
     const cie11Field = document.getElementById('review_codigo_cie11');
     if (cie11Field) cie11Field.value = '';
     document.getElementById('review_titulo_cie11').value = '';
+    const adicionalesField = document.getElementById('review_diagnosticos_adicionales');
+    if (adicionalesField) adicionalesField.value = '';
+    state.cie11Who = null;
+    state.reviewDiagnostico = '';
 
     // Clear file input
     elements.audioFileInput.value = '';
