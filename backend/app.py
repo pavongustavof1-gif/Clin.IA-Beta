@@ -1114,6 +1114,30 @@ def reconcile_cie11(structured_data: dict, pending_sd: dict) -> None:
         ev.pop('titulo_cie11', None)
 
 
+def cie11_confirm_outcome(confirmed_sd: dict, pending_sd: dict) -> tuple[str, str]:
+    """(fuente, cambio) for the per-confirm log line — enums only, never the
+    code or title (0.8.6). fuente: the confirmed note's cie11_fuente, or
+    'none' without a code. cambio compares the pending note's code with the
+    confirmed one: kept | changed | cleared | added | absent."""
+    def _ev(sd):
+        ev = sd.get('evaluacion') if isinstance(sd, dict) else None
+        return ev if isinstance(ev, dict) else {}
+    confirmed_ev, pending_ev = _ev(confirmed_sd), _ev(pending_sd)
+    after = normalize_cie11_code(confirmed_ev.get('codigo_cie11'))
+    before = normalize_cie11_code(pending_ev.get('codigo_cie11'))
+    fuente = confirmed_ev.get('cie11_fuente') if after else None
+    fuente = fuente if fuente in ('oms', 'medico') else 'none'
+    if before and after:
+        cambio = 'kept' if before == after else 'changed'
+    elif before:
+        cambio = 'cleared'
+    elif after:
+        cambio = 'added'
+    else:
+        cambio = 'absent'
+    return fuente, cambio
+
+
 def _finish_confirmed_cleanup(session_id: str, row: dict) -> None:
     """Delete what a confirm leaves behind (sesiones.transcript_text and the
     trabajos copy) when a confirmed note still has it. Best-effort, logged;
@@ -1694,7 +1718,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.5-beta',
+        'version': '0.8.6-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2028,6 +2052,12 @@ def confirm_and_generate():
         if not confirmed_saved:
             logger.error(f"Orchestrator: confirmed save failed for session {session_id} — note left pending_review")
             return jsonify({'error': CONFIRM_SAVE_FAILED_ERROR, 'error_code': 'CONFIRM_SAVE_FAILED'}), 503
+
+        # 0.8.6: one CIE-11 line per signed note — enums only (no code, no
+        # title, no diagnosis). See CLAUDE.md "Observability".
+        cie11_fuente, cie11_cambio = cie11_confirm_outcome(
+            structured_data, (session.get('structured_data') or {}) if isinstance(session, dict) else {})
+        logger.info(f"CIE11: session={session_id} fuente={cie11_fuente} cambio={cie11_cambio}")
 
         # Delete transcript text to minimize LFPDPPP exposure
         ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {'transcript_text': None})

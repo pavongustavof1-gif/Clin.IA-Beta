@@ -28,6 +28,7 @@ import pytest
 
 import auth as auth_module
 import app as app_module
+import icd_service
 from tests.fake_db import FakeDB
 
 
@@ -225,6 +226,7 @@ def _reset_process_caches():
     for a reused synthetic user_id. Clears before AND after each test.
     """
     def _clear():
+        icd_service._token_cache.update(token=None, expires_at=0, failed_until=0, failure=None)
         auth_module._usuario_cache.clear()
         auth_module._jwks_keys_by_kid.clear()
         auth_module._jwks_fetched_at = 0.0
@@ -233,6 +235,14 @@ def _reset_process_caches():
     _clear()
     yield
     _clear()
+
+
+@pytest.fixture(autouse=True)
+def _fake_icd_credentials(monkeypatch):
+    """Dummy WHO credentials so lookup_cie11 gets past its not_configured
+    check; every test that reaches the network mocks requests itself."""
+    monkeypatch.setattr(icd_service.Config, 'ICD_CLIENT_ID', 'fake-icd-client-id')
+    monkeypatch.setattr(icd_service.Config, 'ICD_CLIENT_SECRET', 'fake-icd-client-secret')
 
 
 @pytest.fixture(autouse=True)

@@ -8,7 +8,7 @@
 // any clinic session both want that button, via two different backend
 // authorization paths (owner-only vs clinic-wide admin route).
 //
-// generateFormattedHTML() extracted from app.js unchanged — confirmed pure
+// generateFormattedHTML() extracted from app.js — confirmed pure
 // display markup (no inputs/textareas/listeners), safe to reuse verbatim.
 
 function generateFormattedHTML(data) {
@@ -115,16 +115,35 @@ function generateFormattedHTML(data) {
             html += `<p><strong>${e(eval_data.diagnostico)}</strong></p>`;
         }
 
-        if (eval_data.diagnosticos_adicionales && eval_data.diagnosticos_adicionales.length > 0) {
+        // 0.8.6 (CIE-11 review #14): the code, same line as the PDF —
+        // "<code> — <title>", the title only when present. cie11_fuente is
+        // internal provenance and is never shown.
+        const cie11Code = typeof eval_data.codigo_cie11 === 'string' ? eval_data.codigo_cie11.trim() : '';
+        if (cie11Code) {
+            const cie11Title = typeof eval_data.titulo_cie11 === 'string' ? eval_data.titulo_cie11.trim() : '';
+            html += `<p><strong>Código CIE-11:</strong> ${e(cie11Code)}${cie11Title ? ` — ${e(cie11Title)}` : ''}</p>`;
+        }
+
+        // Notes saved before 0.8.5 may hold a single string here.
+        const adicionales = Array.isArray(eval_data.diagnosticos_adicionales)
+            ? eval_data.diagnosticos_adicionales
+            : (typeof eval_data.diagnosticos_adicionales === 'string' && eval_data.diagnosticos_adicionales.trim()
+                ? [eval_data.diagnosticos_adicionales] : []);
+        if (adicionales.length > 0) {
             html += '<h6>Diagnósticos Adicionales</h6>';
             html += '<ul>';
-            eval_data.diagnosticos_adicionales.forEach(d => html += `<li>${e(d)}</li>`);
+            adicionales.forEach(d => html += `<li>${e(d)}</li>`);
             html += '</ul>';
         }
 
         if (eval_data.impresion_clinica) {
             html += '<h6>Impresión Clínica</h6>';
             html += `<p>${e(eval_data.impresion_clinica)}</p>`;
+        }
+
+        if (eval_data.pronostico) {
+            html += '<h6>Pronóstico</h6>';
+            html += `<p>${e(eval_data.pronostico)}</p>`;
         }
 
         html += '</div>';

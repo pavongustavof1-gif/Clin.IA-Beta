@@ -1079,6 +1079,16 @@ function refreshCie11Notes() {
 function displayReviewScreen(result) {
     state.pendingResult = result;
 
+    // 0.8.6 (CIE-11 review #15): a confirm locks the review inputs
+    // (readonly + grey inline style, see confirmAndGenerate) and nothing
+    // used to unlock them, so a second note in the same page load opened
+    // read-only. Every review render starts fully editable.
+    document.querySelectorAll('.review-input, .review-textarea').forEach(el => {
+        el.removeAttribute('readonly');
+        el.style.backgroundColor = '';
+        el.style.color = '';
+    });
+
     elements.progressSection.style.display = 'none';
     elements.reviewSection.style.display = 'block';
     if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'flex';

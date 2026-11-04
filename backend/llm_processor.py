@@ -3,7 +3,7 @@ from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
-from icd_service import lookup_cie11, normalize_cie11_code
+from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome
 import json
 import time
 from typing import Dict, Optional
@@ -65,11 +65,14 @@ def apply_cie11_lookup(data) -> None:
         return
     ev = data.get('evaluacion')
     if not isinstance(ev, dict):
+        # Still one outcome line per job (0.8.6): nothing to look up.
+        log_lookup_outcome('no_diagnosis')
         return
     for key in CIE11_KEYS:
         ev.pop(key, None)
     diagnostico = ev.get('diagnostico')
     if not isinstance(diagnostico, str) or not diagnostico.strip():
+        log_lookup_outcome('no_diagnosis')
         return
     try:
         cie_result = lookup_cie11(diagnostico)

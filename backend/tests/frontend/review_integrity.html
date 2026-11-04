@@ -34,6 +34,15 @@
    10  diagnósticos adicionales          → prefilled one per line, edited, carried
                                            through confirm, rendered in the summary
 
+  0.8.6 — CIE-11 review, batch 3 (backend half: tests/test_cie11_observability.py):
+   11  three views                       → result summary, Historial and the admin
+                                           session view (the shared renderer) show
+                                           "Código CIE-11: <code> — <title>" (title only
+                                           when present) and Pronóstico, escaped, and
+                                           never cie11_fuente
+   12  second note, same page load       → after a confirm locked the review inputs,
+                                           the next review is fully editable
+
   The notes' wording lives in templates/index.html (a static server can't
   render Jinja); test_cie11_integrity.py pins it. Here only visibility is checked.
 
@@ -98,9 +107,15 @@ if (CASE) {
         jobs: {
             'job-1': { doneAfter: 2, session: 'SESSION-FAKE-1',
                        sd: { evaluacion: { diagnostico: 'Diagnóstico ficticio A', codigo_cie11: '5A24/5A11', titulo_cie11: 'Título ficticio A',
-                                           cie11_fuente: 'oms', diagnosticos_adicionales: ['Adicional ficticio uno', 'Adicional ficticio dos'] } } },
+                                           cie11_fuente: 'oms', diagnosticos_adicionales: ['Adicional ficticio uno', 'Adicional ficticio dos'],
+                                           pronostico: 'Pronóstico ficticio favorable' } } },
             'job-2': { doneAfter: 6, session: 'SESSION-FAKE-2',
                        sd: { evaluacion: { diagnostico: 'Diagnóstico ficticio B' } } },
+        },
+        history: {
+            'SESSION-FAKE-H': { session_id: 'SESSION-FAKE-H', status: 'confirmed', timestamp: '2026-11-03T10:00:00', addenda: [],
+                structured_data: { evaluacion: { diagnostico: 'Diagnóstico ficticio H', codigo_cie11: '5A11', cie11_fuente: 'medico',
+                                                 pronostico: 'Pronóstico ficticio reservado' } } },
         },
         pending: { 'SESSION-FAKE-P': { evaluacion: { diagnostico: 'Diagnóstico ficticio P', codigo_cie11: '1A00', titulo_cie11: 'Título ficticio P' } } },
     };
@@ -133,6 +148,8 @@ if (CASE) {
             return json(200, { session_id: m[1], structured_data: JSON.parse(JSON.stringify(H.pending[m[1]])), transcript: { text: 'x' } });
         }
         if (u.endsWith('/api/pending-sessions')) return json(200, { sessions: [] });
+        m = u.match(/\/api\/patient-history\/(SESSION-[A-Z0-9-]+)$/);
+        if (m && H.history[m[1]]) return json(200, H.history[m[1]]);
         if (u.endsWith('/api/confirm-and-generate')) {
             const body = JSON.parse(opts.body);
             H.confirmBodies.push(body);
@@ -300,6 +317,7 @@ if (CASE) {
             c.check('typing the WHO value back restores its title', $('review_titulo_cie11').value === 'Título ficticio A');
             c.check('built note: WHO value → fuente oms with title', JSON.stringify(buildStructuredDataFromForm().evaluacion) === JSON.stringify({
                 diagnostico: 'Diagnóstico ficticio A', diagnosticos_adicionales: ['Adicional ficticio uno', 'Adicional ficticio dos'],
+                pronostico: 'Pronóstico ficticio favorable',
                 codigo_cie11: '5A24/5A11', cie11_fuente: 'oms', titulo_cie11: 'Título ficticio A' }), JSON.stringify(buildStructuredDataFromForm().evaluacion));
             type('review_codigo_cie11', '5A11', true);
             checkConsentAndConfirm();
@@ -361,6 +379,57 @@ if (CASE) {
         },
     });
 
+    Object.assign(CASES, {
+        async three_views(c) {
+            // Result summary, right after a confirm.
+            await openJob1Review();
+            checkConsentAndConfirm();
+            await until(() => $('resultsSection').style.display === 'block');
+            let html = $('formattedData').innerHTML;
+            c.check('summary: code — title', html.includes('<p><strong>Código CIE-11:</strong> 5A24/5A11 — Título ficticio A</p>'), html);
+            c.check('summary: pronóstico', html.includes('<h6>Pronóstico</h6>') && html.includes('<p>Pronóstico ficticio favorable</p>'));
+            c.check('summary: never the source', !/\boms\b|medico|fuente/i.test(html));
+
+            // Historial (doctor), a code without a title.
+            await openHistoryDetail('SESSION-FAKE-H');
+            html = $('historialDetailContent').innerHTML;
+            c.check('Historial: code without a title', html.includes('<p><strong>Código CIE-11:</strong> 5A11</p>'), html.slice(0, 400));
+            c.check('Historial: pronóstico', html.includes('<p>Pronóstico ficticio reservado</p>'));
+            c.check('Historial: never the source', !/\boms\b|medico|fuente/i.test(html));
+
+            // Admin session view: admin.js calls the same renderSessionDetail
+            // with isAdmin; markup in the values must stay text.
+            const box = document.createElement('div');
+            document.body.appendChild(box);
+            renderSessionDetail(box, { session_id: 'SESSION-FAKE-ADM', status: 'confirmed', timestamp: '2026-11-03T10:00:00', addenda: [],
+                autor_nombre: 'Médico Ficticio',
+                structured_data: { evaluacion: { diagnostico: 'Diagnóstico ficticio', codigo_cie11: '5A24/5A11',
+                    titulo_cie11: '<img src=x onerror="window.XSS_RAN=1">Título <b>ficticio</b>', cie11_fuente: 'oms',
+                    pronostico: '<script>window.XSS_RAN=1<\/script>Pronóstico ficticio' } } },
+                { isAdmin: true, canDownloadPdf: true, onDownloadPdf() {}, onAddAddendum: async () => {}, onCancel: async () => {} });
+            html = box.innerHTML;
+            c.check('admin view: code — title, escaped', html.includes('5A24/5A11 — &lt;img src=x onerror="window.XSS_RAN=1"&gt;Título &lt;b&gt;ficticio&lt;/b&gt;'), html.slice(0, 600));
+            c.check('admin view: pronóstico, escaped', html.includes('&lt;script&gt;window.XSS_RAN=1&lt;/script&gt;Pronóstico ficticio'));
+            c.check('admin view: no element created from the values', !box.querySelector('img, b, script') && !window.XSS_RAN);
+            c.check('admin view: never the source', !/\boms\b|fuente/i.test(html));
+        },
+
+        async second_note_editable(c) {
+            await openJob1Review();
+            checkConsentAndConfirm();
+            await until(() => $('resultsSection').style.display === 'block');
+            const inputs = () => [...document.querySelectorAll('.review-input, .review-textarea')];
+            c.check('first confirm locked the review inputs', inputs().filter(el => el.classList.contains('review-input')).every(el => el.hasAttribute('readonly')));
+            giveAudio();
+            $('processBtn').click();
+            await until(() => reviewShown() && shownSession() === 'SESSION-FAKE-2');
+            const locked = inputs().filter(el => el.hasAttribute('readonly') || el.readOnly || el.style.backgroundColor || el.style.color);
+            c.check('second note: every review field editable', shownSession() === 'SESSION-FAKE-2' && locked.length === 0, locked.map(el => el.id).join(','));
+            type('review_codigo_cie11', '5A11', true);
+            c.check('second note: code can be typed and is the doctor\'s', buildStructuredDataFromForm().evaluacion.cie11_fuente === 'medico');
+        },
+    });
+
     async function runCase() {
         const checks = [];
         const c = { check: (name, pass, detail) => checks.push({ name, pass: !!pass, detail: pass ? undefined : detail }) };
@@ -370,7 +439,8 @@ if (CASE) {
 } else {
     // ── Runner ───────────────────────────────────────────────────────────
     const NAMES = ['double_click', 'stale_loop_and_cancel', 'upload_during_job', 'new_run_with_review_open', 'slow_auth_confirm_race', 'confirm_save_fails',
-                   'code_edit_clears_title', 'diagnosis_edit_hint', 'malformed_code_warning', 'no_who_code_note', 'adicionales_roundtrip'];
+                   'code_edit_clears_title', 'diagnosis_edit_hint', 'malformed_code_warning', 'no_who_code_note', 'adicionales_roundtrip',
+                   'three_views', 'second_note_editable'];
     const out = document.createElement('pre');
     out.textContent = 'running…';
     document.body.appendChild(out);

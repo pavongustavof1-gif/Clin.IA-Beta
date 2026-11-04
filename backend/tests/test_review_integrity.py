@@ -68,7 +68,7 @@ def test_icd_http_error_log_has_status_only(icd_log, monkeypatch, status):
     assert icd_service.lookup_cie11(FAKE_DX) is None
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert f'ICD: Lookup failed: HTTP {status}' in text
+    assert f'ICD: outcome=http_{status} cluster=0 ms=' in text
 
 
 def test_icd_connection_error_log_has_type_only(icd_log, monkeypatch):
@@ -82,7 +82,7 @@ def test_icd_connection_error_log_has_type_only(icd_log, monkeypatch):
     assert icd_service.lookup_cie11(FAKE_DX) is None
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert 'ICD: Lookup failed: ConnectionError' in text
+    assert 'ICD: outcome=timeout cluster=0 ms=' in text   # unreachable counts as timeout
 
 
 def test_icd_timeout_and_bad_json_logs_have_type_only(icd_log, monkeypatch):
@@ -90,6 +90,9 @@ def test_icd_timeout_and_bad_json_logs_have_type_only(icd_log, monkeypatch):
         raise requests.Timeout(f'Read timed out. (url: {_full_url(url, params)})')
     monkeypatch.setattr(icd_service.requests, 'get', timeout_get)
     assert icd_service.lookup_cie11(FAKE_DX) is None
+    # 0.8.6: a timeout is cached for FAILURE_CACHE_SECONDS; clear it so the
+    # bad-JSON lookup below actually runs.
+    icd_service._token_cache.update(failed_until=0, failure=None)
 
     class BadJson:
         status_code = 200
@@ -100,8 +103,8 @@ def test_icd_timeout_and_bad_json_logs_have_type_only(icd_log, monkeypatch):
 
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert 'ICD: Lookup failed: Timeout' in text
-    assert 'ICD: Lookup failed: ValueError' in text
+    assert 'ICD: outcome=timeout cluster=0 ms=' in text
+    assert 'ICD: outcome=bad_json cluster=0 ms=' in text
 
 
 def test_icd_success_still_returns_code(icd_log, monkeypatch):
