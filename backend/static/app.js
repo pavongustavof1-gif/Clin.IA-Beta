@@ -101,6 +101,15 @@ const state = {
     maxDurationSeconds: 2700, // 45 minutes
     consultationTimestamp: null,
     pendingResult: null,
+    // 0.8.4 (CIE-11 review #1/#2): exactly one job may render a review.
+    // activeJobId is that job; every poll loop checks it before and after
+    // each await and stops itself once it no longer matches. submitting
+    // covers the upload itself, before a job_id exists; confirming covers
+    // the confirm-and-generate request.
+    activeJobId: null,
+    pollTimer: null,
+    submitting: false,
+    confirming: false,
     consentGiven: false,
     consentTimestamp: null
 };
@@ -573,7 +582,7 @@ function handleRecordingStop() {
     elements.audioDuration.textContent = `${Math.floor(durationSeconds / 60)}:${String(Math.floor(durationSeconds % 60)).padStart(2, '0')}`;
     
     // Enable process button
-    elements.processBtn.disabled = false;
+    refreshProcessBtn(); // unless a run is already in flight
     
     console.log('[ClinIA] Audio ready for processing');
 }
@@ -617,7 +626,7 @@ function handleFileUpload(event) {
     };
     
     // Enable process button
-    elements.processBtn.disabled = false;
+    refreshProcessBtn(); // unless a run is already in flight
     
     // Hide recording status
     elements.recordingStatus.style.display = 'none';
@@ -628,10 +637,52 @@ function handleFileUpload(event) {
 // ─────────────────────────────────────────────
 // Processing functions
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+// Single active run (0.8.4, CIE-11 review #1)
+// ─────────────────────────────────────────────
+function isRunInFlight() {
+    return state.submitting || state.activeJobId !== null || state.confirming;
+}
+
+function refreshProcessBtn() {
+    elements.processBtn.disabled = !state.currentAudioBlob || isRunInFlight();
+}
+
+function isReviewOpen() {
+    return !!state.pendingResult && elements.reviewSection.style.display !== 'none';
+}
+
+// Stops the active poll loop (if any) and forgets its job. The job keeps
+// running server-side; its note lands in Pendientes like any other.
+function stopJobPolling() {
+    if (state.pollTimer) clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+    state.activeJobId = null;
+    localStorage.removeItem('clinia_job_id');
+    refreshProcessBtn();
+}
+
+const REPLACE_REVIEW_PROMPT = 'Esto genera una nota nueva y reemplaza la revisión actual. ¿Desea continuar?';
+
 async function processAudio() {
     if (!state.currentAudioBlob) {
         showError('No hay audio para procesar');
         return;
+    }
+    // One run at a time: a second click (or any other caller) while an
+    // upload, job or confirm is in flight does nothing.
+    if (isRunInFlight()) return;
+    if (isReviewOpen() && !confirm(REPLACE_REVIEW_PROMPT)) return;
+
+    state.submitting = true;
+    refreshProcessBtn();
+
+    // The open review (if any) is being replaced — it can't be confirmed
+    // any more from here; its note stays in Pendientes.
+    if (state.pendingResult) {
+        state.pendingResult = null;
+        elements.reviewSection.style.display = 'none';
+        if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'none';
     }
     
     console.log('[ClinIA] Starting audio processing pipeline...');
@@ -668,7 +719,10 @@ async function processAudio() {
             body: formData
         });
 
-        if (response.status === 401) return handleSessionExpired();
+        if (response.status === 401) {
+            state.submitting = false;
+            return handleSessionExpired();
+        }
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -683,6 +737,7 @@ async function processAudio() {
             localStorage.setItem('clinia_job_id', job_id);
             updateProgress(20, 'Audio recibido — iniciando transcripción...', 1);
             startJobPolling(job_id);
+            state.submitting = false;
             return;
         }
 
@@ -690,10 +745,14 @@ async function processAudio() {
         const result = await response.json();
         state.sessionId = result.session_id;
         await sleep(400);
+        state.submitting = false;
+        refreshProcessBtn();
         displayReviewScreen(result);
 
     } catch (error) {
         console.error('[ClinIA] Processing error:', error);
+        state.submitting = false;
+        refreshProcessBtn();
         showError(`Error durante el procesamiento: ${error.message}`);
         elements.progressSection.style.display = 'none';
     }
@@ -705,11 +764,22 @@ async function processAudio() {
 // has NOT been reviewed/confirmed (CURP doesn't exist yet at this point,
 // entered only during review), so the ONLY correct behavior is to enter
 // the review screen directly, exactly as an uninterrupted flow would.
-async function handleJobDone(data) {
+//
+// jobId: the job this result belongs to. A result for any job other than
+// the active one is dropped (0.8.4, CIE-11 review #1) — it must never
+// replace the review screen. The job ends here, so Procesar re-enables.
+async function handleJobDone(data, jobId) {
+    if (state.activeJobId !== jobId) return;
+    // The job stays active (Procesar disabled) through the short delay
+    // below, and is re-checked after it.
+    if (state.pollTimer) clearTimeout(state.pollTimer);
+    state.pollTimer = null;
     elements.progressSection.style.display = 'block';
     updateProgress(100, 'Listo para revisión.', 3);
-    state.sessionId = data.session_id;
     await sleep(400);
+    if (state.activeJobId !== jobId) return;
+    stopJobPolling();
+    state.sessionId = data.session_id;
     displayReviewScreen({
         session_id:      data.session_id,
         status:          'pending_review',
@@ -748,10 +818,13 @@ async function checkResumedJob(jobId) {
             } else {
                 updateProgress(10, 'Reanudando — en cola, esperando turno...', null);
             }
+            if (isRunInFlight() || isReviewOpen()) return; // something newer owns the screen
             startJobPolling(jobId);
         } else if (data.status === 'done') {
             localStorage.removeItem('clinia_job_id');
-            await handleJobDone(data);
+            if (isRunInFlight() || isReviewOpen()) return; // something newer owns the screen
+            state.activeJobId = jobId;
+            await handleJobDone(data, jobId);
         } else {
             // 'error' status, or any unexpected value — clear silently,
             // same as a not-found job. No error shown for a stale job the
@@ -780,33 +853,48 @@ function nextPollDelayMs(pollCount) {
     return 7000;                        // long-running jobs: settle at 7s
 }
 
+// Only one loop is ever live: starting one stops any other, and a loop
+// whose jobId is no longer state.activeJobId (stopped, cancelled, or
+// superseded) exits at its next check without touching the screen.
 function startJobPolling(jobId) {
+    if (state.pollTimer) clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+    state.activeJobId = jobId;
+    refreshProcessBtn();
+
     let pollCount = 0;
     const startedAt = Date.now();
-    let pollTimer = null;
+    const isCurrent = () => state.activeJobId === jobId;
 
     const scheduleNext = () => {
-        pollTimer = setTimeout(poll, nextPollDelayMs(pollCount));
+        if (!isCurrent()) return;
+        state.pollTimer = setTimeout(poll, nextPollDelayMs(pollCount));
+    };
+
+    const endWithError = (message) => {
+        stopJobPolling();
+        elements.progressSection.style.display = 'none';
+        showError(message);
     };
 
     const poll = async () => {
+        if (!isCurrent()) return;
         pollCount++;
         if (Date.now() - startedAt >= POLL_GIVE_UP_MS) {
-            localStorage.removeItem('clinia_job_id');
-            elements.progressSection.style.display = 'none';
-            showError('El procesamiento está tardando más de lo esperado. Por favor intente subir el audio nuevamente.');
-            return;
+            return endWithError('El procesamiento está tardando más de lo esperado. Por favor intente subir el audio nuevamente.');
         }
         try {
             const res = await fetch(`${API_BASE_URL}/api/job-status/${jobId}`, {
                 headers: await getAuthHeaders()
             });
+            if (!isCurrent()) return;
             if (res.status === 401) {
                 return handleSessionExpired();
             }
             if (!res.ok) return scheduleNext(); // transient error — keep polling
 
             const data = await res.json();
+            if (!isCurrent()) return;
 
             if (data.status === 'queued') {
                 updateProgress(10, 'En cola — esperando turno para procesar...', null);
@@ -818,12 +906,9 @@ function startJobPolling(jobId) {
                 updateProgress(70, 'Extrayendo información médica...', 2);
                 scheduleNext();
             } else if (data.status === 'done') {
-                localStorage.removeItem('clinia_job_id');
-                await handleJobDone(data);
+                await handleJobDone(data, jobId);
             } else if (data.status === 'error') {
-                localStorage.removeItem('clinia_job_id');
-                elements.progressSection.style.display = 'none';
-                showError(data.error_message || 'Error durante el procesamiento');
+                endWithError(data.error_message || 'Error durante el procesamiento');
             } else {
                 scheduleNext(); // unrecognized status — keep polling rather than silently stopping
             }
@@ -1133,7 +1218,16 @@ function buildStructuredDataFromForm() {
 }
 
 async function confirmAndGenerate() {
+    // 0.8.4 (CIE-11 review #2): the session_id is read together with the
+    // form, before any await — anything that changes state.pendingResult
+    // during the request can no longer sign this content into another
+    // session. Confirmar stays disabled for the whole request.
+    if (state.confirming || !state.pendingResult) return;
+    const sessionId = state.pendingResult.session_id;
     const sd = buildStructuredDataFromForm();
+    state.confirming = true;
+    if (elements.confirmAndGenerateBtn) elements.confirmAndGenerateBtn.disabled = true;
+    refreshProcessBtn();
 
     // Preserve actualizacion_antecedentes (background field — no form input)
     const antecedentes = state.pendingResult?.structured_data?.actualizacion_antecedentes;
@@ -1149,7 +1243,7 @@ async function confirmAndGenerate() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...(await getAuthHeaders()) },
             body: JSON.stringify({
-                session_id: state.pendingResult.session_id,
+                session_id: sessionId,
                 structured_data: sd,
                 create_pdf: elements.createPDF ? elements.createPDF.checked : true,
                 send_email: elements.sendEmailToggle ? elements.sendEmailToggle.checked : true,
@@ -1158,13 +1252,18 @@ async function confirmAndGenerate() {
             })
         });
 
-        if (response.status === 401) return handleSessionExpired();
+        if (response.status === 401) {
+            state.confirming = false;
+            return handleSessionExpired();
+        }
 
         if (!response.ok) {
             const errorData = await response.json();
             throw new Error(errorData.error || 'Error al generar el documento');
         }
 
+        state.confirming = false;
+        refreshProcessBtn();
         updateProgress(100, '¡Completado!', 3);
         const result = await response.json();
 
@@ -1190,6 +1289,12 @@ async function confirmAndGenerate() {
 
     } catch (error) {
         console.error('[ClinIA] Confirm error:', error);
+        state.confirming = false;
+        refreshProcessBtn();
+        // Same consent rule as the checkbox's own change handler.
+        if (elements.confirmAndGenerateBtn) {
+            elements.confirmAndGenerateBtn.disabled = !(elements.consentTratamiento && elements.consentTratamiento.checked);
+        }
         showError(`Error al generar el documento: ${error.message}`);
         elements.progressSection.style.display = 'none';
         elements.reviewSection.style.display = 'block';
@@ -1198,10 +1303,13 @@ async function confirmAndGenerate() {
 }
 
 function cancelReview() {
+    // Cancelar also stops any active poll loop, so nothing can re-open a
+    // review behind the doctor's back (0.8.4, CIE-11 review #1).
+    stopJobPolling();
     state.pendingResult = null;
     elements.reviewSection.style.display = 'none';
     if (elements.reviewActionsSection) elements.reviewActionsSection.style.display = 'none';
-    elements.processBtn.disabled = false;
+    refreshProcessBtn();
     window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -1275,7 +1383,10 @@ function showError(message) {
 function resetApplication() {
     console.log('[ClinIA] Resetting application...');
     
-    // Reset state
+    // Reset state — including any active poll loop (it would otherwise
+    // re-open a review over the reset screen).
+    stopJobPolling();
+    state.pendingResult = null;
     state.currentAudioBlob = null;
     state.sessionId = null;
     state.audioChunks = [];
@@ -1583,6 +1694,10 @@ async function continuePendingSession(sessionId) {
         }
 
         const data = await res.json();
+        // A note opened from Pendientes owns the review screen: stop
+        // watching any in-flight job so its result can't replace this
+        // review (the job's own note will land in Pendientes).
+        stopJobPolling();
         hidePendingSessionsView();
         state.sessionId = data.session_id;
         displayReviewScreen({

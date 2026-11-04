@@ -1036,7 +1036,7 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre):
             'word_count':       transcript_result.get('words', 0),
         }
 
-        save_session(session_id, {
+        saved = save_session(session_id, {
             'session_id':        session_id,
             'status':            'pending_review',
             'transcript':        transcript_payload,
@@ -1045,6 +1045,14 @@ def _run_job(job_id, audio_path, params, usuario_id, clinica_id, nombre):
             'consent_given':     params['consent_given'],
             'consent_timestamp': params['consent_timestamp'],
         }, usuario_id=usuario_id, clinica_id=clinica_id)
+
+        # 0.8.4 (CIE-11 review #16): without its sesiones row the note can be
+        # reviewed from trabajos but never confirmed (confirm answers 404),
+        # so a failed save is a failed job, not 'done'.
+        if not saved:
+            logger.error(f"Job {job_id}: could not save pending session — marking job as error")
+            _sb_patch_job(job_id, {'status': 'error', 'error_message': 'No se pudo guardar la nota. Intente de nuevo.'})
+            return
 
         _sb_patch_job(job_id, {
             'status':          'done',
@@ -1093,8 +1101,26 @@ def strip_transcript(payload: dict) -> dict:
     return stripped
 
 
-def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
-    """Upsert a session to Supabase sesiones table. Silently logs on failure — never raises."""
+def _sb_upsert_session(body: dict) -> None:
+    """POST one sesiones row with merge-duplicates (an upsert on session_id).
+    Raises on any failure — save_session turns that into False."""
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones?on_conflict=session_id'
+    payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(
+        url, data=payload,
+        headers=_sb_headers(extra={'Prefer': 'resolution=merge-duplicates'}),
+        method='POST'
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        resp.read()
+
+
+def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str) -> bool:
+    """Upsert a session to Supabase sesiones table. Never raises: logs and
+    returns False on failure, True once the row is written. Callers that
+    must not continue on a failed write (_run_job reporting 'done',
+    confirm_and_generate emailing the PDF and deleting the transcript)
+    check the result — 0.8.4, CIE-11 review findings #3/#16."""
     try:
         def _ts(val):
             if not val or str(val).strip() == '':
@@ -1130,20 +1156,15 @@ def save_session(session_id: str, data: dict, usuario_id: str, clinica_id: str):
             'paciente_curp':        paciente_curp,
             'full_response':        data,
         }
-        url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/sesiones?on_conflict=session_id'
-        payload = json.dumps(body, ensure_ascii=False, default=str).encode()
-        req = urllib.request.Request(
-            url, data=payload,
-            headers=_sb_headers(extra={'Prefer': 'resolution=merge-duplicates'}),
-            method='POST'
-        )
-        with urllib.request.urlopen(req, timeout=10) as resp:
-            resp.read()
+        _sb_upsert_session(body)
         logger.info(f"DB: Session {session_id} saved to Supabase.")
+        return True
     except urllib.error.HTTPError as e:
         logger.warning(f"DB: Could not save session {session_id}: {e.code} {e.read().decode()}")
+        return False
     except Exception as e:
         logger.warning(f"DB: Could not save session {session_id}: {e}")
+        return False
 
 
 def load_session(session_id: str) -> dict | None:
@@ -1305,6 +1326,7 @@ def get_usuarios_cedulas(usuario_ids: list) -> dict | None:
 
 
 PDF_LOOKUP_FAILED_ERROR = 'No se pudo generar el PDF. Intente de nuevo.'
+CONFIRM_SAVE_FAILED_ERROR = 'No se pudo guardar la nota. Intente de nuevo.'
 
 
 def _adenda_with_author_cedulas(adenda: list) -> list | None:
@@ -1613,7 +1635,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.3-beta',
+        'version': '0.8.4-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -1918,7 +1940,7 @@ def confirm_and_generate():
         # response, not something retained (Stage H1 fix #10). `session`
         # itself is never mutated (strip_transcript returns a copy), so
         # building `response` before or after this call is equivalent.
-        save_session(session_id, strip_transcript({
+        confirmed_saved = save_session(session_id, strip_transcript({
             **session,
             'structured_data': structured_data,
             'document': doc_info,
@@ -1927,6 +1949,15 @@ def confirm_and_generate():
             'timestamp': locked_at,
             'consent_tratamiento': consent_tratamiento
         }), usuario_id=row['usuario_id'], clinica_id=row['clinica_id'])
+
+        # 0.8.4 (CIE-11 review #3): stop before anything irreversible. A
+        # failed upsert writes nothing, so the row is still pending_review
+        # with its transcript and trabajos copy intact, and no PDF has left
+        # the server — the doctor presses Confirmar again (the frontend
+        # restores the review form on any non-2xx).
+        if not confirmed_saved:
+            logger.error(f"Orchestrator: confirmed save failed for session {session_id} — note left pending_review")
+            return jsonify({'error': CONFIRM_SAVE_FAILED_ERROR, 'error_code': 'CONFIRM_SAVE_FAILED'}), 503
 
         # Delete transcript text to minimize LFPDPPP exposure
         ok = _sb_patch(f'/rest/v1/sesiones?session_id=eq.{pg_val(session_id)}', {'transcript_text': None})

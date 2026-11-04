@@ -500,7 +500,7 @@ def saved(monkeypatch):
     """save_session does a raw urllib POST conftest doesn't route through
     FakeDB — record calls instead of letting it attempt the network."""
     calls = []
-    monkeypatch.setattr(app_module, 'save_session', lambda sid, data, **k: calls.append((sid, data['status'])))
+    monkeypatch.setattr(app_module, 'save_session', lambda sid, data, **k: calls.append((sid, data['status'])) or True)
     return calls
 
 

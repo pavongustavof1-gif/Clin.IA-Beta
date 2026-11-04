@@ -98,5 +98,14 @@ def lookup_cie11(diagnosis_text: str) -> dict | None:
         return {'code': code, 'title': title}
 
     except Exception as e:
-        logger.error(f"ICD: Lookup failed: {e}")
+        # Never log str(e): requests puts the full request URL in HTTPError
+        # and ConnectionError messages ("... for url: ...?q=<diagnóstico>",
+        # "Max retries exceeded with url: ...?q=..."), and the query is the
+        # patient's diagnosis — PHI. Status code and exception type only.
+        response = getattr(e, 'response', None)
+        status = getattr(response, 'status_code', None)
+        if status is not None:
+            logger.error(f"ICD: Lookup failed: HTTP {status}")
+        else:
+            logger.error(f"ICD: Lookup failed: {type(e).__name__}")
         return None

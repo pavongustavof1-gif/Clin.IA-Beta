@@ -131,3 +131,15 @@ class FakeDB:
         row = dict(body)
         self.tables.setdefault(table, []).append(row)
         return row
+
+    def upsert(self, table: str, body: dict, key: str) -> dict:
+        """POST ...?on_conflict=<key> with Prefer: resolution=merge-duplicates:
+        merge into the row with the same key, or insert a new one."""
+        rows = self.tables.setdefault(table, [])
+        for row in rows:
+            if row.get(key) == body.get(key):
+                row.update(body)
+                return row
+        row = dict(body)
+        rows.append(row)
+        return row

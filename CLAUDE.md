@@ -1,6 +1,6 @@
 # Clin.IA — guide for Claude Code
 
-Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.8.3-beta); **Beta 2** is being planned/built.
+Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.8.4-beta); **Beta 2** is being planned/built.
 
 **Source of truth for Beta 2 scope and strategy:** `ClinIA_Hoja_de_Ruta_Beta2_v<latest>.md` in iCloud: `~/Library/Mobile Documents/com~apple~CloudDocs/AI/TAS/ClinIA/Roadmap/Beta 2/` (not in this repo; highest version number wins; items are numbered `#45…`). Read it before starting any Beta 2 work.
 
@@ -18,7 +18,7 @@ cd backend && venv/bin/python -m pytest tests/ -q      # 623 tests, offline, ~0.
 ```
 - Fully offline: `conftest.py` mocks Supabase/AssemblyAI/Gemini/Resend and JWT verification. No real credentials exist or are needed in this sandbox.
 - **`tests/route_inventory.py` lists every route and its auth policy; a test fails if a route exists without an entry.** Adding a route means adding an inventory entry (and cross-clinic/auth cases in `test_route_authorization.py`).
-- JS has no test runner. `backend/tests/frontend/medicamentos_roundtrip.html`, `auxiliar_redirect.html`, `aviso_responsable.html` (fills/keeps the aviso's brackets) and `superadmin_page.html` (fake /api/superadmin/* with state; click through approve/reject/delete) load the real `static/app.js` against a stand-in DOM/stubbed fetch; `pendientes_banner.html` loads the real `utils.js` + banner CSS (show/hide, singular/plural); serve `backend/` over HTTP (e.g. `python3 -m http.server`) and open them. They can't run from `file://`. Wiring JS tests into CI is roadmap item #49.
+- JS has no test runner. `backend/tests/frontend/medicamentos_roundtrip.html`, `auxiliar_redirect.html`, `aviso_responsable.html` (fills/keeps the aviso's brackets) and `superadmin_page.html` (fake /api/superadmin/* with state; click through approve/reject/delete) and `review_integrity.html` (0.8.4: one active job, no stale-poll re-render of the review, confirm's session_id read with the form, 503 retry) load the real `static/app.js` against a stand-in DOM/stubbed fetch; `pendientes_banner.html` loads the real `utils.js` + banner CSS (show/hide, singular/plural); serve `backend/` over HTTP (e.g. `python3 -m http.server`) and open them. They can't run from `file://`. Wiring JS tests into CI is roadmap item #49.
 - Local dev server without real credentials: set dummy values for `SUPABASE_URL, SUPABASE_SERVICE_KEY, SUPABASE_ANON_KEY, GEMINI_API_KEY, ASSEMBLYAI_API_KEY, FLASK_SECRET_KEY, RESEND_API_KEY` (see the CI workflow) and run `venv/bin/python app.py`. Real login/Storage/email can only be tested in the user's own environment.
 
 ## Working rules (user's explicit preferences)

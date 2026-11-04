@@ -174,6 +174,9 @@ def _patch_data_layer(db, monkeypatch):
     monkeypatch.setattr(app_module, 'send_usuario_agregado_email', lambda *a, **k: True)
     monkeypatch.setattr(app_module, 'send_rejection_email', lambda *a, **k: True)
     monkeypatch.setattr(app_module, '_sb_delete_quiet', db.delete)
+    # save_session's raw urllib upsert (0.8.4: split out so the real
+    # save_session body-building runs here and only the write is faked).
+    monkeypatch.setattr(app_module, '_sb_upsert_session', lambda body: db.upsert('sesiones', body, 'session_id'))
     # The real helper sends HEAD + Prefer: count=exact; the fake counts the
     # rows db.get would return for the same filter.
     monkeypatch.setattr(app_module, '_sb_count_quiet', lambda path: len(db.get(path)))
