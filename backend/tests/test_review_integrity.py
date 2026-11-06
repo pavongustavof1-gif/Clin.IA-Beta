@@ -68,7 +68,7 @@ def test_icd_http_error_log_has_status_only(icd_log, monkeypatch, status):
     assert icd_service.lookup_cie11(FAKE_DX) is None
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert f'ICD: outcome=http_{status} cluster=0 ms=' in text
+    assert f'ICD: outcome=http_{status} stage=full cluster=0 ms=' in text
 
 
 def test_icd_connection_error_log_has_type_only(icd_log, monkeypatch):
@@ -82,7 +82,7 @@ def test_icd_connection_error_log_has_type_only(icd_log, monkeypatch):
     assert icd_service.lookup_cie11(FAKE_DX) is None
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert 'ICD: outcome=timeout cluster=0 ms=' in text   # unreachable counts as timeout
+    assert 'ICD: outcome=timeout stage=full cluster=0 ms=' in text   # unreachable counts as timeout
 
 
 def test_icd_timeout_and_bad_json_logs_have_type_only(icd_log, monkeypatch):
@@ -103,8 +103,8 @@ def test_icd_timeout_and_bad_json_logs_have_type_only(icd_log, monkeypatch):
 
     text = icd_log.getvalue()
     _assert_no_phi(text)
-    assert 'ICD: outcome=timeout cluster=0 ms=' in text
-    assert 'ICD: outcome=bad_json cluster=0 ms=' in text
+    assert 'ICD: outcome=timeout stage=full cluster=0 ms=' in text
+    assert 'ICD: outcome=bad_json stage=full cluster=0 ms=' in text
 
 
 def test_icd_success_still_returns_code(icd_log, monkeypatch):

@@ -1092,6 +1092,9 @@ def reconcile_cie11(structured_data: dict, pending_sd: dict) -> None:
     ev = structured_data.get('evaluacion')
     if not isinstance(ev, dict):
         return
+    # 0.8.7: the lookup's internal search term never belongs in a signed
+    # note (the review screen never sends it; this is the server's guard).
+    ev.pop('termino_busqueda_cie11', None)
     code = normalize_cie11_code(ev.get('codigo_cie11'))
     if not code:
         for key in ('codigo_cie11', 'titulo_cie11', 'cie11_fuente'):
@@ -1718,7 +1721,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.6-beta',
+        'version': '0.8.7-beta',
         'timestamp': datetime.now().isoformat()
     })
 

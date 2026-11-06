@@ -124,6 +124,10 @@
           "type": "string",
           "description": "Descripción oficial en español del código CIE-11, solo cuando el código vino de la OMS (cie11_fuente = oms). Se borra si el médico cambia el código."
         },
+        "termino_busqueda_cie11": {
+          "type": "string",
+          "description": "Interno (0.8.7): la condición principal del diagnóstico en su forma estándar más breve, sin causa, gravedad, estado de control, lateralidad ni otros calificativos (ej. «Lumbalgia», «Diabetes mellitus tipo 2»). Lo escribe Gemini solo con palabras del diagnóstico; el servidor lo descarta si contiene una palabra que no está en él. Se usa para buscar en la OMS y se elimina antes de la revisión: nunca llega a la nota guardada ni al PDF."
+        },
         "cie11_fuente": {
           "type": "string",
           "enum": ["oms", "medico"],

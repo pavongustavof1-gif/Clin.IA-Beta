@@ -29,15 +29,17 @@ FAILURE_CACHE_SECONDS = 60
 # with one clear error, instead of a failed request on every job.
 _RELEASE_RE = re.compile(r'^\d{4}-(0[1-9]|1[0-2])$')
 SEARCH_ENDPOINT = None
+AUTOCODE_ENDPOINT = None
 
 
 def configure_release(value) -> bool:
     """Validate the release and build SEARCH_ENDPOINT from it. Returns whether
     the lookup is enabled. Run at import; tests call it directly."""
-    global SEARCH_ENDPOINT
+    global SEARCH_ENDPOINT, AUTOCODE_ENDPOINT
     release = value.strip() if isinstance(value, str) else ''
     if not _RELEASE_RE.match(release):
         SEARCH_ENDPOINT = None
+        AUTOCODE_ENDPOINT = None
         # The value is configuration, not PHI; shown (shortened) so the
         # typo is visible in the log.
         logger.error(
@@ -46,21 +48,31 @@ def configure_release(value) -> bool:
         )
         return False
     SEARCH_ENDPOINT = f'https://id.who.int/icd/release/11/{release}/mms/search'
+    AUTOCODE_ENDPOINT = f'https://id.who.int/icd/release/11/{release}/mms/autocode'
     return True
 
 
 configure_release(Config.ICD11_RELEASE_VERSION)
 
 
-# ── Outcome log (0.8.6) ────────────────────────────────────────────────────
-# One line per lookup, enums and numbers only — never the URL, the query
-# (the diagnosis), the code or the title (all PHI):
-#   ICD: outcome=<ok|no_results|no_code|http_NNN|timeout|token_failed|
-#                 not_configured|bad_json|no_diagnosis> cluster=<0|1> ms=<n>
-# timeout also covers an unreachable endpoint (any connection error).
-def log_lookup_outcome(outcome: str, cluster: bool = False, ms: int = 0) -> None:
-    line = f"ICD: outcome={outcome} cluster={1 if cluster else 0} ms={int(ms)}"
-    if outcome in ('ok', 'no_results', 'no_code', 'no_diagnosis'):
+# ── Outcome log (0.8.6; stage added in 0.8.7) ─────────────────────────────
+# One line per stage tried, enums and numbers only — never the URL, the
+# query (the diagnosis or the search term), the code or the title (all PHI):
+#   ICD: outcome=<ok|no_results|no_code|low_score|http_NNN|timeout|
+#                 token_failed|not_configured|bad_json|no_diagnosis|
+#                 term_rejected> stage=<full|term|flexi|autocode|none>
+#        cluster=<0|1> ms=<n> [score=<0.00-1.00>, autocode only]
+# stage=none: the chain never started (no diagnosis, not configured, cached
+# failure, no token). timeout also covers an unreachable endpoint.
+_INFO_OUTCOMES = ('ok', 'no_results', 'no_code', 'low_score', 'no_diagnosis', 'term_rejected')
+
+
+def log_lookup_outcome(outcome: str, cluster: bool = False, ms: int = 0,
+                       stage: str = 'none', score=None) -> None:
+    line = f"ICD: outcome={outcome} stage={stage} cluster={1 if cluster else 0} ms={int(ms)}"
+    if score is not None:
+        line += f" score={score:.2f}"
+    if outcome in _INFO_OUTCOMES:
         logger.info(line)
     else:
         logger.warning(line)
@@ -146,16 +158,138 @@ def _get_token() -> str | None:
             return None
 
 
-def lookup_cie11(diagnosis_text: str) -> dict | None:
+# ── Lookup chain (0.8.7) ───────────────────────────────────────────────────
+# Regular search "will only give you results that contain all of the words
+# that you've used in your search" (useFlexisearch, ICD-API v2 OpenAPI,
+# https://id.who.int/swagger/v2/swagger.json), so a descriptive diagnosis
+# ("Lumbalgia por contractura muscular secundaria a esfuerzo físico") finds
+# nothing. The chain tries, and the first coded result wins:
+#   full     — /search with the whole diagnosis (as before 0.8.7)
+#   term     — /search with the short term from the extraction, if accepted
+#   flexi    — /search with useFlexisearch=true on the whole diagnosis ("the
+#              results do not have to contain all of the words"; WHO: use it
+#              "only when regular search does not provide a result")
+#   autocode — /autocode on the whole diagnosis, kept only if matchScore >=
+#              Config.CIE11_AUTOCODE_MIN_SCORE
+# A failed request (HTTP error, timeout, bad JSON) at any stage stops the
+# chain: no retries inside a job. Timeouts feed the 60 s failure cache.
+_STOP = object()   # a stage's "request failed — end the chain" result
+
+
+def _who_get(url: str, params: dict, token: str):
+    """GET a WHO endpoint. Returns the parsed JSON, or (_STOP, outcome)."""
+    try:
+        resp = requests.get(
+            url,
+            params=params,
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Accept': 'application/json',
+                'Accept-Language': 'es',
+                'API-Version': 'v2',
+            },
+            timeout=10
+        )
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        # Never str(e): requests puts the full URL, query included, in
+        # HTTPError and ConnectionError messages.
+        status = getattr(getattr(e, 'response', None), 'status_code', None)
+        return _STOP, (f'http_{status}' if status else 'timeout')
+    except requests.RequestException:
+        # Timeout or unreachable: cache it so the next jobs don't each wait.
+        with _token_lock:
+            _remember_failure('timeout')
+        return _STOP, 'timeout'
+    try:
+        return resp.json()
+    except Exception:
+        return _STOP, 'bad_json'
+
+
+def _search_stage(text: str, token: str, flexible: bool):
+    """One /search. Returns {'code','title'}, an outcome string (nothing
+    coded: no_results / no_code), or (_STOP, outcome)."""
+    params = {'q': text, 'flatResults': 'true', 'highlightingEnabled': 'false'}
+    if flexible:
+        params['useFlexisearch'] = 'true'
+    results = _who_get(SEARCH_ENDPOINT, params, token)
+    if isinstance(results, tuple):
+        return results
+    if not isinstance(results, dict) or results.get('error') is True:
+        return _STOP, 'bad_json'
+    dest_entities = results.get('destinationEntities', [])
+    if dest_entities is None:
+        dest_entities = []
+    if not isinstance(dest_entities, list):
+        return _STOP, 'bad_json'
+    if not dest_entities:
+        return 'no_results'
+
+    # 0.8.5 (CIE-11 review #6, #9): the highest-scoring entity that has a
+    # code, not simply the first one — the API documents score as "Higher
+    # numbers are better matches" but not that results are sorted. Entities
+    # with an empty code (blocks, groupings) don't count; if none has a code
+    # it's "no result": no code, no title. Clusters ("5A24/5A11") count like
+    # any code. Ties keep API order.
+    coded = [e for e in dest_entities
+             if isinstance(e, dict) and normalize_cie11_code(e.get('theCode'))]
+    if not coded:
+        return 'no_code'
+
+    def _score(entity):
+        try:
+            return float(entity.get('score') or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    top = max(coded, key=_score)
+    title = top.get('title') or ''
+    if not isinstance(title, str):
+        title = ''
+    # Strip HTML tags the API sometimes includes in title
+    title = re.sub(r'<[^>]+>', '', title).strip()
+    return {'code': normalize_cie11_code(top.get('theCode')), 'title': title}
+
+
+def _autocode_stage(text: str, token: str):
+    """One /autocode. Returns ({'code','title'} | outcome, score) or
+    ((_STOP, outcome), None). matchThreshold is sent AND re-checked here,
+    since the response for a below-threshold match isn't documented."""
+    threshold = Config.CIE11_AUTOCODE_MIN_SCORE
+    result = _who_get(AUTOCODE_ENDPOINT, {'searchText': text, 'matchThreshold': str(threshold)}, token)
+    if isinstance(result, tuple):
+        return result, None
+    if not isinstance(result, dict):
+        return (_STOP, 'bad_json'), None
+    try:
+        score = float(result.get('matchScore'))
+    except (TypeError, ValueError):
+        score = None
+    code = normalize_cie11_code(result.get('theCode'))
+    if not code:
+        return 'no_code', score
+    if score is None or score < threshold:
+        return 'low_score', score
+    # /autocode returns no title (only matchingText, "the best matching
+    # phrase", which may be an index term rather than the entity's title),
+    # so the code is kept without one.
+    return {'code': code, 'title': ''}, score
+
+
+def lookup_cie11(diagnosis_text: str, search_term: str | None = None) -> dict | None:
     """
-    Search the WHO ICD-11 MMS API for the best matching code.
+    Find the CIE-11 code for a diagnosis through the WHO ICD-11 MMS API,
+    trying full → term → flexi → autocode (see the chain notes above).
 
     Args:
         diagnosis_text: Free-text diagnosis in Spanish (from Gemini extraction)
+        search_term: the extraction's short search term, already accepted by
+            llm_processor's guard; None skips the term stage.
 
     Returns:
-        dict with 'code' and 'title' of the best coded result, or None.
-        Every call logs exactly one outcome line (log_lookup_outcome).
+        dict with 'code' and 'title' (title '' from autocode), or None.
+        Logs one outcome line per stage tried (log_lookup_outcome).
     """
     started = time.monotonic()
     elapsed = lambda: (time.monotonic() - started) * 1000
@@ -177,71 +311,29 @@ def lookup_cie11(diagnosis_text: str) -> dict | None:
         log_lookup_outcome(_cached_failure() or 'token_failed', ms=elapsed())
         return None
 
-    try:
-        resp = requests.get(
-            SEARCH_ENDPOINT,
-            params={'q': diagnosis_text, 'flatResults': 'true', 'highlightingEnabled': 'false'},
-            headers={
-                'Authorization': f'Bearer {token}',
-                'Accept': 'application/json',
-                'Accept-Language': 'es',
-                'API-Version': 'v2',
-            },
-            timeout=10
-        )
-        resp.raise_for_status()
-    except requests.HTTPError as e:
-        # Never str(e): requests puts the full URL, q=<diagnóstico>
-        # included, in HTTPError and ConnectionError messages.
-        status = getattr(getattr(e, 'response', None), 'status_code', None)
-        log_lookup_outcome(f'http_{status}' if status else 'timeout', ms=elapsed())
-        return None
-    except requests.RequestException:
-        # Timeout or unreachable: cache it so the next jobs don't each wait.
-        with _token_lock:
-            _remember_failure('timeout')
-        log_lookup_outcome('timeout', ms=elapsed())
-        return None
+    diagnosis = diagnosis_text.strip()
+    term = search_term.strip() if isinstance(search_term, str) else ''
+    stages = [('full', lambda: _search_stage(diagnosis, token, flexible=False))]
+    # Same text as the diagnosis = the same search again; skip it.
+    if term and term.casefold() != diagnosis.casefold():
+        stages.append(('term', lambda: _search_stage(term, token, flexible=False)))
+    stages.append(('flexi', lambda: _search_stage(diagnosis, token, flexible=True)))
+    stages.append(('autocode', lambda: _autocode_stage(diagnosis, token)))
 
-    try:
-        results = resp.json()
-        dest_entities = results.get('destinationEntities', [])
-        if not isinstance(dest_entities, list):
-            raise ValueError('destinationEntities is not a list')
-    except Exception:
-        log_lookup_outcome('bad_json', ms=elapsed())
-        return None
-
-    if not dest_entities:
-        log_lookup_outcome('no_results', ms=elapsed())
-        return None
-
-    # 0.8.5 (CIE-11 review #6, #9): the highest-scoring entity that has a
-    # code, not simply the first one — the API documents score as "Higher
-    # numbers are better matches" but not that results are sorted. Entities
-    # with an empty code (blocks, groupings) don't count; if none has a code
-    # it's "no result": no code, no title. Clusters ("5A24/5A11") count like
-    # any code. Ties keep API order.
-    coded = [e for e in dest_entities
-             if isinstance(e, dict) and normalize_cie11_code(e.get('theCode'))]
-    if not coded:
-        log_lookup_outcome('no_code', ms=elapsed())
-        return None
-
-    def _score(entity):
-        try:
-            return float(entity.get('score') or 0)
-        except (TypeError, ValueError):
-            return 0.0
-
-    top = max(coded, key=_score)
-    code = normalize_cie11_code(top.get('theCode'))
-    title = top.get('title') or ''
-    if not isinstance(title, str):
-        title = ''
-
-    # Strip HTML tags the API sometimes includes in title
-    title = re.sub(r'<[^>]+>', '', title).strip()
-
-    log_lookup_outcome('ok', cluster=('/' in code or '&' in code), ms=elapsed())
-    return {'code': code, 'title': title}
+    for stage, run in stages:
+        stage_started = time.monotonic()
+        stage_ms = lambda: (time.monotonic() - stage_started) * 1000
+        score = None
+        result = run()
+        if stage == 'autocode':
+            result, score = result
+        if isinstance(result, tuple):          # request failed — stop
+            log_lookup_outcome(result[1], stage=stage, ms=stage_ms(), score=score)
+            return None
+        if isinstance(result, dict):           # coded result — done
+            code = result['code']
+            log_lookup_outcome('ok', stage=stage, cluster=('/' in code or '&' in code),
+                               ms=stage_ms(), score=score)
+            return result
+        log_lookup_outcome(result, stage=stage, ms=stage_ms(), score=score)
+    return None

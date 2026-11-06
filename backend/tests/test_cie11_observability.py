@@ -31,8 +31,8 @@ FAKE_DX = 'neumonía ficticia del paciente de prueba'
 FAKE_CODE = '5A24/5A11'
 FAKE_TITLE = 'Título ficticio combinado'
 OUTCOME_RE = re.compile(
-    r'^ICD: outcome=(ok|no_results|no_code|http_\d{3}|timeout|token_failed|not_configured|bad_json|no_diagnosis)'
-    r' cluster=[01] ms=\d+$')
+    r'^ICD: outcome=(ok|no_results|no_code|low_score|http_\d{3}|timeout|token_failed|not_configured|bad_json|no_diagnosis|term_rejected)'
+    r' stage=(full|term|flexi|autocode|none) cluster=[01] ms=\d+( score=[01]\.\d\d)?$')
 CONFIRM_RE = re.compile(r'^CIE11: session=\S+ fuente=(oms|medico|none) cambio=(kept|changed|cleared|added|absent)$')
 
 
@@ -118,7 +118,7 @@ def test_invalid_release_disables_lookup_with_one_error(value, log, who, restore
     for _ in range(3):
         assert icd_service.lookup_cie11(FAKE_DX) is None
     assert who['token_calls'] == 0 and who['search_calls'] == 0
-    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=not_configured cluster=0 ms=0'] * 3
+    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=not_configured stage=none cluster=0 ms=0'] * 3
     assert len([l for l in log.getvalue().splitlines() if 'ICD11_RELEASE_VERSION' in l]) == 1
 
 
@@ -139,7 +139,7 @@ def test_missing_credentials_is_not_configured(monkeypatch, log, who):
     monkeypatch.setattr(icd_service.Config, 'ICD_CLIENT_SECRET', '')
     assert icd_service.lookup_cie11(FAKE_DX) is None
     assert who['token_calls'] == 0
-    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=not_configured cluster=0 ms=0']
+    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=not_configured stage=none cluster=0 ms=0']
 
 
 # ── #17: token lock and failure cache ───────────────────────────────────
@@ -164,7 +164,7 @@ def test_token_failure_is_cached_for_60_seconds(who, log, monkeypatch):
     assert icd_service.lookup_cie11(FAKE_DX) is None
     assert icd_service.lookup_cie11(FAKE_DX) is None
     assert who['token_calls'] == 1 and who['search_calls'] == 0
-    assert [l.split(' cluster')[0] for l in _lines(log, 'ICD: outcome=')] == ['ICD: outcome=token_failed'] * 2
+    assert [l.split(' cluster')[0] for l in _lines(log, 'ICD: outcome=')] == ['ICD: outcome=token_failed stage=none'] * 2
 
     clock['now'] += icd_service.FAILURE_CACHE_SECONDS + 1
     who['token'] = lambda: _Resp(200, {'access_token': 'tok', 'expires_in': 3600})
@@ -187,7 +187,9 @@ def test_search_timeout_or_unreachable_is_cached(who, log, exc):
     for _ in range(3):
         assert icd_service.lookup_cie11(FAKE_DX) is None
     assert who['search_calls'] == 1
-    assert [l.split(' cluster')[0] for l in _lines(log, 'ICD: outcome=')] == ['ICD: outcome=timeout'] * 3
+    # The first lookup fails at stage=full; the next two never start (cache).
+    assert [l.split(' cluster')[0] for l in _lines(log, 'ICD: outcome=')] == \
+        ['ICD: outcome=timeout stage=full'] + ['ICD: outcome=timeout stage=none'] * 2
 
 
 def test_http_errors_are_not_cached(who, log):
@@ -231,30 +233,32 @@ def test_one_outcome_line_per_lookup_without_phi(who, log, search, outcome, clus
     who['search'] = search
     icd_service.lookup_cie11(FAKE_DX)
     lines = _lines(log, 'ICD: outcome=')
-    assert len(lines) == 1, log.getvalue()
-    assert OUTCOME_RE.match(lines[0]), lines[0]
-    assert lines[0].startswith(f'ICD: outcome={outcome} cluster={cluster} ms=')
+    # 0.8.7: an empty full search moves on to flexi and autocode (no term
+    # here); a hit or a failed request ends the chain at stage=full.
+    assert len(lines) == (3 if outcome in ('no_results', 'no_code') else 1), log.getvalue()
+    assert all(OUTCOME_RE.match(l) for l in lines), lines
+    assert lines[0].startswith(f'ICD: outcome={outcome} stage=full cluster={cluster} ms=')
     _assert_no_phi(log.getvalue())
 
 
 @pytest.mark.parametrize('dx', ['', '   ', None, 7])
 def test_no_diagnosis_outcome(who, log, dx):
     assert icd_service.lookup_cie11(dx) is None
-    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=no_diagnosis cluster=0 ms=0']
+    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=no_diagnosis stage=none cluster=0 ms=0']
     assert who['token_calls'] == 0
 
 
 @pytest.mark.parametrize('data', [{'evaluacion': {'impresion_clinica': 'x'}}, {'subjetivo': {}}, {'evaluacion': 'x'}])
 def test_extraction_without_diagnosis_still_logs_one_line(who, log, data):
     apply_cie11_lookup(data)
-    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=no_diagnosis cluster=0 ms=0']
+    assert _lines(log, 'ICD: outcome=') == ['ICD: outcome=no_diagnosis stage=none cluster=0 ms=0']
 
 
 def test_extraction_with_diagnosis_logs_exactly_one_line(who, log):
     data = {'evaluacion': {'diagnostico': FAKE_DX}}
     apply_cie11_lookup(data)
     assert data['evaluacion']['codigo_cie11'] == FAKE_CODE
-    assert _lines(log, 'ICD: outcome=') == [l for l in _lines(log, 'ICD: outcome=ok cluster=1 ms=')]
+    assert _lines(log, 'ICD: outcome=') == [l for l in _lines(log, 'ICD: outcome=ok stage=full cluster=1 ms=')]
     assert len(_lines(log, 'ICD: outcome=')) == 1
     _assert_no_phi(log.getvalue())
 

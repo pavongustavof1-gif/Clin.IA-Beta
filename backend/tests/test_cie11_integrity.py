@@ -137,7 +137,7 @@ def test_client_pattern_is_identical_to_server_pattern():
 def _extract(monkeypatch, gemini_json, lookup):
     calls = []
 
-    def fake_lookup(text):
+    def fake_lookup(text, term=None):
         calls.append(text)
         if isinstance(lookup, Exception):
             raise lookup

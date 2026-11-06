@@ -5,7 +5,9 @@ from config import Config
 from logger import logger
 from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome
 import json
+import re
 import time
+import unicodedata
 from typing import Dict, Optional
 
 
@@ -57,10 +59,42 @@ def normalize_evaluacion(data) -> None:
             del ev['diagnosticos_adicionales']
 
 
+# 0.8.7: the short search term Gemini derives from its own diagnosis
+# (prompt rule 9). Internal only — popped before the lookup, so it never
+# reaches the review screen, the saved note or the PDF.
+CIE11_TERM_KEY = 'termino_busqueda_cie11'
+
+# Function words ignored by the term guard. "tipo" etc. stay: they carry
+# meaning ("Diabetes mellitus tipo 2").
+_TERM_STOPWORDS = frozenset({
+    'a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
+    'o', 'para', 'por', 'que', 'se', 'sin', 'su', 'sus', 'u', 'un', 'una',
+    'unas', 'unos', 'y',
+})
+
+
+def _guard_words(text: str) -> set:
+    """Lowercased, accent-free content words (stopwords removed)."""
+    folded = unicodedata.normalize('NFKD', text.lower())
+    folded = ''.join(ch for ch in folded if not unicodedata.combining(ch))
+    return {w for w in re.findall(r'[a-z0-9]+', folded) if w not in _TERM_STOPWORDS}
+
+
+def accept_search_term(term, diagnostico: str) -> bool:
+    """The term guard: accept only a term whose every content word also
+    appears in the diagnosis, so it can narrow the diagnosis but never add
+    a condition to it."""
+    if not isinstance(term, str) or not isinstance(diagnostico, str):
+        return False
+    words = _guard_words(term)
+    return bool(words) and words <= _guard_words(diagnostico)
+
+
 def apply_cie11_lookup(data) -> None:
-    """Strip any Gemini-supplied CIE-11 keys, then fill code + title from the
-    WHO lookup with cie11_fuente='oms'. No WHO code → no CIE-11 keys at all
-    (the review screen shows an empty field for the doctor to fill)."""
+    """Strip any Gemini-supplied CIE-11 keys and the internal search term,
+    then fill code + title from the WHO lookup chain with cie11_fuente='oms'.
+    No WHO code → no CIE-11 keys at all (the review screen shows an empty
+    field for the doctor to fill)."""
     if not isinstance(data, dict):
         return
     ev = data.get('evaluacion')
@@ -70,12 +104,17 @@ def apply_cie11_lookup(data) -> None:
         return
     for key in CIE11_KEYS:
         ev.pop(key, None)
+    term = ev.pop(CIE11_TERM_KEY, None)
     diagnostico = ev.get('diagnostico')
     if not isinstance(diagnostico, str) or not diagnostico.strip():
         log_lookup_outcome('no_diagnosis')
         return
+    if term is not None and not accept_search_term(term, diagnostico):
+        # No text in the log: the term is as much PHI as the diagnosis.
+        log_lookup_outcome('term_rejected', stage='term')
+        term = None
     try:
-        cie_result = lookup_cie11(diagnostico)
+        cie_result = lookup_cie11(diagnostico, term)
     except Exception as e:
         # Exception type only — the message could carry the diagnosis.
         logger.warning(f"ICD: Could not inject CIE-11 code (non-fatal): {type(e).__name__}")
@@ -165,7 +204,8 @@ INSTRUCCIONES CRÍTICAS:
 5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
 6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'
 7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.
-8. No incluyas códigos CIE-11 ni su título (codigo_cie11, titulo_cie11): el sistema los obtiene de la OMS.{speaker_instruction}
+8. No incluyas códigos CIE-11 ni su título (codigo_cie11, titulo_cie11): el sistema los obtiene de la OMS.
+9. termino_busqueda_cie11: escribe la condición principal de tu «diagnostico» en su forma estándar más breve, sin causa, gravedad, estado de control, lateralidad ni otros calificativos. Obtenlo únicamente del diagnóstico que redactaste y usa solo palabras que aparezcan en él; nunca agregues una condición y nunca escribas un código. Ejemplos: «Lumbalgia por contractura muscular secundaria a esfuerzo físico» → «Lumbalgia»; «Diabetes mellitus tipo 2 con control glucémico subóptimo» → «Diabetes mellitus tipo 2». Si no hay diagnóstico, omite este campo.{speaker_instruction}
 
 LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a «evaluacion» y «plan»:
 - Redacta los campos de «evaluacion» (diagnostico, diagnosticos_adicionales, impresion_clinica,
@@ -236,7 +276,8 @@ Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
     "diagnostico": "string - diagnóstico principal",
     "diagnosticos_adicionales": ["otros diagnósticos o diagnósticos diferenciales"],
     "impresion_clinica": "string - impresión general del médico",
-    "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)"
+    "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)",
+    "termino_busqueda_cie11": "string - condición principal del diagnóstico en su forma estándar más breve (ver instrucción 9)"
   }},
   "plan": {{
     "tratamiento": "string - plan de tratamiento general",

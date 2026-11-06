@@ -19,6 +19,16 @@ class Config:
     ICD_CLIENT_ID        = os.environ.get('ICD_CLIENT_ID', '')
     ICD_CLIENT_SECRET    = os.environ.get('ICD_CLIENT_SECRET', '')
     ICD11_RELEASE_VERSION = os.environ.get('ICD11_RELEASE_VERSION', '2026-01')
+    # 0.8.7: last stage of the CIE-11 lookup chain (/autocode). WHO documents
+    # matchScore as "a value between 0 and 1 ... The higher the score the
+    # better the match" but not its default threshold
+    # (https://id.who.int/swagger/v2/swagger.json, AutoCode). 0.80 is a
+    # deliberately conservative start: autocode always returns its single best
+    # guess, and by this stage three searches have already failed, so a weak
+    # match is more likely wrong than right — and a wrong code shown as "OMS"
+    # is worse than an empty field the doctor fills. The outcome log carries
+    # the score (a number, not PHI) so this can be calibrated from real runs.
+    CIE11_AUTOCODE_MIN_SCORE = 0.80
 
     # Resend email delivery
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
