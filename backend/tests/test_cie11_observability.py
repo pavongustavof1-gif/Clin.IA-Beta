@@ -29,10 +29,10 @@ from tests.test_route_authorization import _call
 
 FAKE_DX = 'neumonía ficticia del paciente de prueba'
 FAKE_CODE = '5A24/5A11'
-FAKE_TITLE = 'Título ficticio combinado'
+FAKE_TITLE = 'Neumonía ficticia, título combinado'  # 0.8.8: relevant to FAKE_DX
 OUTCOME_RE = re.compile(
-    r'^ICD: outcome=(ok|no_results|no_code|low_score|http_\d{3}|timeout|token_failed|not_configured|bad_json|no_diagnosis|term_rejected)'
-    r' stage=(full|term|flexi|autocode|none) cluster=[01] ms=\d+( score=[01]\.\d\d)?$')
+    r'^ICD: outcome=(ok|no_results|no_code|low_score|irrelevant|http_\d{3}|timeout|token_failed|not_configured|bad_json|no_diagnosis|term_rejected)'
+    r' stage=(full|term|autocode|none) cluster=[01] ms=\d+( score=[01]\.\d\d)?$')
 CONFIRM_RE = re.compile(r'^CIE11: session=\S+ fuente=(oms|medico|none) cambio=(kept|changed|cleared|added|absent)$')
 
 
@@ -233,9 +233,9 @@ def test_one_outcome_line_per_lookup_without_phi(who, log, search, outcome, clus
     who['search'] = search
     icd_service.lookup_cie11(FAKE_DX)
     lines = _lines(log, 'ICD: outcome=')
-    # 0.8.7: an empty full search moves on to flexi and autocode (no term
-    # here); a hit or a failed request ends the chain at stage=full.
-    assert len(lines) == (3 if outcome in ('no_results', 'no_code') else 1), log.getvalue()
+    # An empty full search moves on to autocode (no term here; 0.8.8: no
+    # flexi stage); a hit or a failed request ends the chain at stage=full.
+    assert len(lines) == (2 if outcome in ('no_results', 'no_code') else 1), log.getvalue()
     assert all(OUTCOME_RE.match(l) for l in lines), lines
     assert lines[0].startswith(f'ICD: outcome={outcome} stage=full cluster={cluster} ms=')
     _assert_no_phi(log.getvalue())

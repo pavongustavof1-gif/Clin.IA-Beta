@@ -111,9 +111,10 @@ def test_icd_success_still_returns_code(icd_log, monkeypatch):
     class Ok:
         status_code = 200
         def raise_for_status(self): pass
-        def json(self): return {'destinationEntities': [{'theCode': '5A11', 'title': 'Título ficticio'}]}
+        # 0.8.8: the title shares a word with the search (relevance check).
+        def json(self): return {'destinationEntities': [{'theCode': '5A11', 'title': 'Diabetes ficticia (título)'}]}
     monkeypatch.setattr(icd_service.requests, 'get', lambda *a, **k: Ok())
-    assert icd_service.lookup_cie11(FAKE_DX) == {'code': '5A11', 'title': 'Título ficticio'}
+    assert icd_service.lookup_cie11(FAKE_DX) == {'code': '5A11', 'title': 'Diabetes ficticia (título)'}
     assert FAKE_DX not in icd_log.getvalue()
 
 

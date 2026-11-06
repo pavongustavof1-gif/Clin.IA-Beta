@@ -4,6 +4,7 @@
 import re
 import threading
 import time
+import unicodedata
 
 import requests
 from config import Config
@@ -58,13 +59,13 @@ configure_release(Config.ICD11_RELEASE_VERSION)
 # ── Outcome log (0.8.6; stage added in 0.8.7) ─────────────────────────────
 # One line per stage tried, enums and numbers only — never the URL, the
 # query (the diagnosis or the search term), the code or the title (all PHI):
-#   ICD: outcome=<ok|no_results|no_code|low_score|http_NNN|timeout|
-#                 token_failed|not_configured|bad_json|no_diagnosis|
-#                 term_rejected> stage=<full|term|flexi|autocode|none>
+#   ICD: outcome=<ok|no_results|no_code|low_score|irrelevant|http_NNN|
+#                 timeout|token_failed|not_configured|bad_json|no_diagnosis|
+#                 term_rejected> stage=<full|term|autocode|none>
 #        cluster=<0|1> ms=<n> [score=<0.00-1.00>, autocode only]
 # stage=none: the chain never started (no diagnosis, not configured, cached
 # failure, no token). timeout also covers an unreachable endpoint.
-_INFO_OUTCOMES = ('ok', 'no_results', 'no_code', 'low_score', 'no_diagnosis', 'term_rejected')
+_INFO_OUTCOMES = ('ok', 'no_results', 'no_code', 'low_score', 'irrelevant', 'no_diagnosis', 'term_rejected')
 
 
 def log_lookup_outcome(outcome: str, cluster: bool = False, ms: int = 0,
@@ -158,19 +159,49 @@ def _get_token() -> str | None:
             return None
 
 
-# ── Lookup chain (0.8.7) ───────────────────────────────────────────────────
+# ── Content words (0.8.7 term guard; 0.8.8 relevance check) ────────────────
+# Function words ignored when comparing texts. "tipo" etc. stay: they carry
+# meaning ("Diabetes mellitus tipo 2").
+CONTENT_STOPWORDS = frozenset({
+    'a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
+    'o', 'para', 'por', 'que', 'se', 'sin', 'su', 'sus', 'u', 'un', 'una',
+    'unas', 'unos', 'y',
+})
+
+
+def content_words(text) -> set:
+    """Lowercased, accent-free whole words, stopwords removed. Non-str → empty."""
+    if not isinstance(text, str):
+        return set()
+    folded = unicodedata.normalize('NFKD', text.lower())
+    folded = ''.join(ch for ch in folded if not unicodedata.combining(ch))
+    return {w for w in re.findall(r'[a-z0-9]+', folded) if w not in CONTENT_STOPWORDS}
+
+
+def is_relevant(matched_text, searched_text) -> bool:
+    """0.8.8 relevance check: the matched text (a search result's title, or
+    autocode's matchingText) must share at least one content word with the
+    text that was searched. Whole words only, same normalisation as the term
+    guard — so "Afecto inapropiado" is not a match for "Control glucémico
+    inadecuado"."""
+    return bool(content_words(matched_text) & content_words(searched_text))
+
+
+# ── Lookup chain (0.8.7; flexible search removed in 0.8.8) ─────────────────
 # Regular search "will only give you results that contain all of the words
 # that you've used in your search" (useFlexisearch, ICD-API v2 OpenAPI,
 # https://id.who.int/swagger/v2/swagger.json), so a descriptive diagnosis
 # ("Lumbalgia por contractura muscular secundaria a esfuerzo físico") finds
-# nothing. The chain tries, and the first coded result wins:
+# nothing. The chain tries, and the first coded, relevant result wins:
 #   full     — /search with the whole diagnosis (as before 0.8.7)
 #   term     — /search with the short term from the extraction, if accepted
-#   flexi    — /search with useFlexisearch=true on the whole diagnosis ("the
-#              results do not have to contain all of the words"; WHO: use it
-#              "only when regular search does not provide a result")
 #   autocode — /autocode on the whole diagnosis, kept only if matchScore >=
 #              Config.CIE11_AUTOCODE_MIN_SCORE
+# 0.8.7 also had a useFlexisearch stage ("the results do not have to
+# contain all of the words"). In production it turned "Control glucémico
+# inadecuado" into MB24.64 "Afecto inapropiado" — a wrong code is worse than
+# none, so it is gone. Every stage's result must also pass is_relevant()
+# (outcome=irrelevant otherwise).
 # A failed request (HTTP error, timeout, bad JSON) at any stage stops the
 # chain: no retries inside a job. Timeouts feed the 60 s failure cache.
 _STOP = object()   # a stage's "request failed — end the chain" result
@@ -207,12 +238,10 @@ def _who_get(url: str, params: dict, token: str):
         return _STOP, 'bad_json'
 
 
-def _search_stage(text: str, token: str, flexible: bool):
-    """One /search. Returns {'code','title'}, an outcome string (nothing
-    coded: no_results / no_code), or (_STOP, outcome)."""
+def _search_stage(text: str, token: str):
+    """One regular /search. Returns {'code','title'}, an outcome string
+    (no_results / no_code / irrelevant), or (_STOP, outcome)."""
     params = {'q': text, 'flatResults': 'true', 'highlightingEnabled': 'false'}
-    if flexible:
-        params['useFlexisearch'] = 'true'
     results = _who_get(SEARCH_ENDPOINT, params, token)
     if isinstance(results, tuple):
         return results
@@ -249,6 +278,10 @@ def _search_stage(text: str, token: str, flexible: bool):
         title = ''
     # Strip HTML tags the API sometimes includes in title
     title = re.sub(r'<[^>]+>', '', title).strip()
+    # The chosen entity itself must be relevant; a lower-scored one is never
+    # promoted in its place.
+    if not is_relevant(title, text):
+        return 'irrelevant'
     return {'code': normalize_cie11_code(top.get('theCode')), 'title': title}
 
 
@@ -271,6 +304,8 @@ def _autocode_stage(text: str, token: str):
         return 'no_code', score
     if score is None or score < threshold:
         return 'low_score', score
+    if not is_relevant(result.get('matchingText'), text):
+        return 'irrelevant', score
     # /autocode returns no title (only matchingText, "the best matching
     # phrase", which may be an index term rather than the entity's title),
     # so the code is kept without one.
@@ -280,7 +315,7 @@ def _autocode_stage(text: str, token: str):
 def lookup_cie11(diagnosis_text: str, search_term: str | None = None) -> dict | None:
     """
     Find the CIE-11 code for a diagnosis through the WHO ICD-11 MMS API,
-    trying full → term → flexi → autocode (see the chain notes above).
+    trying full → term → autocode (see the chain notes above).
 
     Args:
         diagnosis_text: Free-text diagnosis in Spanish (from Gemini extraction)
@@ -313,11 +348,10 @@ def lookup_cie11(diagnosis_text: str, search_term: str | None = None) -> dict | 
 
     diagnosis = diagnosis_text.strip()
     term = search_term.strip() if isinstance(search_term, str) else ''
-    stages = [('full', lambda: _search_stage(diagnosis, token, flexible=False))]
+    stages = [('full', lambda: _search_stage(diagnosis, token))]
     # Same text as the diagnosis = the same search again; skip it.
     if term and term.casefold() != diagnosis.casefold():
-        stages.append(('term', lambda: _search_stage(term, token, flexible=False)))
-    stages.append(('flexi', lambda: _search_stage(diagnosis, token, flexible=True)))
+        stages.append(('term', lambda: _search_stage(term, token)))
     stages.append(('autocode', lambda: _autocode_stage(diagnosis, token)))
 
     for stage, run in stages:

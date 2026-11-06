@@ -3,11 +3,9 @@ from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
-from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome
+from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome, content_words
 import json
-import re
 import time
-import unicodedata
 from typing import Dict, Optional
 
 
@@ -64,30 +62,14 @@ def normalize_evaluacion(data) -> None:
 # reaches the review screen, the saved note or the PDF.
 CIE11_TERM_KEY = 'termino_busqueda_cie11'
 
-# Function words ignored by the term guard. "tipo" etc. stay: they carry
-# meaning ("Diabetes mellitus tipo 2").
-_TERM_STOPWORDS = frozenset({
-    'a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
-    'o', 'para', 'por', 'que', 'se', 'sin', 'su', 'sus', 'u', 'un', 'una',
-    'unas', 'unos', 'y',
-})
-
-
-def _guard_words(text: str) -> set:
-    """Lowercased, accent-free content words (stopwords removed)."""
-    folded = unicodedata.normalize('NFKD', text.lower())
-    folded = ''.join(ch for ch in folded if not unicodedata.combining(ch))
-    return {w for w in re.findall(r'[a-z0-9]+', folded) if w not in _TERM_STOPWORDS}
-
-
 def accept_search_term(term, diagnostico: str) -> bool:
     """The term guard: accept only a term whose every content word also
     appears in the diagnosis, so it can narrow the diagnosis but never add
     a condition to it."""
     if not isinstance(term, str) or not isinstance(diagnostico, str):
         return False
-    words = _guard_words(term)
-    return bool(words) and words <= _guard_words(diagnostico)
+    words = content_words(term)
+    return bool(words) and words <= content_words(diagnostico)
 
 
 def apply_cie11_lookup(data) -> None:

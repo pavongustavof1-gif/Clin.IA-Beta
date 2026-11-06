@@ -80,15 +80,16 @@ def test_coded_entity_beats_a_higher_scoring_uncoded_one(who):
 
 
 def test_highest_score_wins_when_results_are_unsorted(who):
-    assert who([{'theCode': '5A10', 'title': 'Uno', 'score': 0.2},
-                {'theCode': '5A24/5A11', 'title': 'Dos', 'score': 0.31},
-                {'theCode': '5A11', 'title': 'Tres', 'score': 0.97},
-                {'theCode': '5A12', 'title': 'Cuatro', 'score': 0.5}])['code'] == '5A11'
+    assert who([{'theCode': '5A10', 'title': 'Uno ficticio', 'score': 0.2},
+                {'theCode': '5A24/5A11', 'title': 'Dos ficticio', 'score': 0.31},
+                {'theCode': '5A11', 'title': 'Tres ficticio', 'score': 0.97},
+                {'theCode': '5A12', 'title': 'Cuatro ficticio', 'score': 0.5}])['code'] == '5A11'
 
 
 def test_tie_and_missing_scores_keep_api_order(who):
-    assert who([{'theCode': '5A10', 'title': 'Uno'}, {'theCode': '5A11', 'title': 'Dos'}])['code'] == '5A10'
-    assert who([{'theCode': '5A10', 'score': 'x'}, {'theCode': '5A11', 'score': 0.1}])['code'] == '5A11'
+    assert who([{'theCode': '5A10', 'title': 'Uno ficticio'}, {'theCode': '5A11', 'title': 'Dos ficticio'}])['code'] == '5A10'
+    assert who([{'theCode': '5A10', 'score': 'x', 'title': 'Uno ficticio'},
+                {'theCode': '5A11', 'score': 0.1, 'title': 'Dos ficticio'}])['code'] == '5A11'
 
 
 def test_only_empty_codes_is_no_result(who):
