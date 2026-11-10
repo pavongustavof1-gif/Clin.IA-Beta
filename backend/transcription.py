@@ -6,6 +6,17 @@ from logger import logger
 from typing import Dict
 
 
+# #89 (0.8.10): pin the speech model. AssemblyAI's default when the request
+# names none is ["universal-3-5-pro", "universal-2"] (POST /v2/transcript,
+# https://www.assemblyai.com/docs/pre-recorded-audio/select-the-speech-model);
+# naming it here keeps transcripts from shifting when that default changes.
+# `speech_models` (plural) is the current parameter — the singular
+# `speech_model` "has been replaced with the `speech_models` parameter" — and
+# SDK 0.64.2 already types it as a plain List[str], so the value needs no SDK
+# enum, upgrade or raw passthrough.
+SPEECH_MODELS = ["universal-3-5-pro"]
+
+
 class TranscriptionService:
     """Handles audio transcription using AssemblyAI"""
 
@@ -39,6 +50,7 @@ class TranscriptionService:
             format_text=True,
             speaker_labels=True,  # Identify doctor vs patient (helpful for SOAP)
             domain="medical-v1",  # Medical Mode: improved accuracy for medications, dosages, diagnoses
+            speech_models=list(SPEECH_MODELS),  # #89: pinned, see SPEECH_MODELS
             **({'speakers_expected': speakers_expected} if speakers_expected > 0 else {})
         )
 
@@ -61,6 +73,10 @@ class TranscriptionService:
             # Check status
             if transcript.status == aai.TranscriptStatus.error:
                 raise Exception(f"Transcription failed: {transcript.error}")
+
+            # #89: which model AssemblyAI actually used (`speech_model_used`
+            # in the response). A model name only — never transcript text.
+            logger.info(f"ASR: speech_model={getattr(transcript, 'speech_model_used', None) or 'unknown'}")
 
             # Prepare result
             result = {

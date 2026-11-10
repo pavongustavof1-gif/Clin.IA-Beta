@@ -1,6 +1,6 @@
 # Clin.IA — guide for Claude Code
 
-Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.8.9-beta); **Beta 2** is being planned/built.
+Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consultation → AssemblyAI transcribes → Gemini extracts a SOAP note → doctor reviews/edits → confirms (note is then immutable, NOM-024; corrections are addenda) → PDF with a consent letter + the note. Currently **Beta 1** (live with two real doctors, version 0.8.10-beta); **Beta 2** is being planned/built.
 
 **Source of truth for Beta 2 scope and strategy:** `ClinIA_Hoja_de_Ruta_Beta2_v<latest>.md` in iCloud: `~/Library/Mobile Documents/com~apple~CloudDocs/AI/TAS/ClinIA/Roadmap/Beta 2/` (not in this repo; highest version number wins; items are numbered `#45…`). Read it before starting any Beta 2 work.
 
@@ -14,7 +14,7 @@ Flask + Supabase medical-notes app (Mexico, Spanish UI). Doctors record a consul
 
 ## Run the tests
 ```
-cd backend && venv/bin/python -m pytest tests/ -q      # 889 tests, offline, ~1 s
+cd backend && venv/bin/python -m pytest tests/ -q      # 898 tests, offline, ~1 s
 ```
 - Fully offline: `conftest.py` mocks Supabase/AssemblyAI/Gemini/Resend and JWT verification. No real credentials exist or are needed in this sandbox.
 - **`tests/route_inventory.py` lists every route and its auth policy; a test fails if a route exists without an entry.** Adding a route means adding an inventory entry (and cross-clinic/auth cases in `test_route_authorization.py`).
@@ -41,6 +41,7 @@ cd backend && venv/bin/python -m pytest tests/ -q      # 889 tests, offline, ~1 
 - **Single-instance assumption:** the rate limiter (`memory://`), JWKS cache, `_usuario_cache`, logo cache and startup job reaper are per-process. Correct only with one gunicorn worker/instance (current Dockerfile).
 - **Render deploys keep the old instance alive until the new one is healthy**, but jobs running on the old instance are interrupted — don't deploy with `trabajos` rows in `queued/transcribing/extracting`.
 - **CSP:** inline scripts need the per-request nonce (`g.csp_nonce`); same-origin external scripts are fine. Page config reaches static JS through `window.CLINIA_CONFIG`.
+- **AssemblyAI speech model is pinned (#89, 0.8.10):** `transcription.SPEECH_MODELS = ["universal-3-5-pro"]` is sent as `speech_models` (the singular `speech_model` is deprecated upstream; SDK 0.64.2 types the plural as `List[str]`, so no upgrade was needed). Pinned so results don't shift when AssemblyAI's default list changes. One INFO line per job, `ASR: speech_model=<speech_model_used>` (model name only). `tests/test_transcription_speech_model.py` asserts the exact request body the SDK builds.
 - **Gemini is non-deterministic.** The same recording can yield differently worded notes; that is not a pipeline bug. The note the doctor reviews is frozen: `confirm_and_generate` renders the submitted `structured_data` verbatim (no second extraction).
 - **`llm_processor.validate_against_schema` normalizes** `informacion_paciente` and `metadata` to `{}` when Gemini omits them (it is told to omit empty fields); an extraction with no S/O/A/P content still fails on purpose.
 - **Medications textarea** joins/splits fields on `" - "` via `MEDICAMENTO_FIELD_SEPARATOR` (a bare `-` collided with "8-12 horas"); untouched medications are sent back as the original objects. The proper fix (separate fields) is roadmap #73.
