@@ -2,9 +2,10 @@
 # 0.8.7 — the CIE-11 lookup finds codes for descriptive diagnoses.
 # Regular WHO search only returns entities containing ALL the query's words,
 # so "Lumbalgia por contractura muscular secundaria a esfuerzo físico" found
-# nothing. The lookup is now a chain — full → term → autocode (0.8.8: the
-# flexible-search stage is gone, every result must pass the relevance
-# check), first coded, relevant result wins — fed by a short search term Gemini derives from its own
+# nothing. The lookup is now a chain — full → term → autocode →
+# autocode_term (0.8.8: the flexible-search stage is gone, every result must
+# pass the relevance check; 0.8.9: autocode_term, and matched property
+# values count as relevance), first coded, relevant result wins — fed by a short search term Gemini derives from its own
 # diagnosis, which a server guard accepts only if every content word is in
 # the diagnosis, and which never leaves the extraction.
 # Invented data only; WHO and Gemini are mocked, no network.
@@ -54,7 +55,7 @@ class _Resp:
 
 def _stage_of(url, params):
     if url.endswith('/autocode'):
-        return 'autocode'
+        return 'autocode' if params.get('searchText') == DX else 'autocode_term'
     if params.get('useFlexisearch') == 'true':
         return 'flexi'
     return 'term' if params.get('q') != DX else 'full'
@@ -137,7 +138,7 @@ def test_flexible_search_is_never_requested(who, log):
     # Every stage empty: the whole chain runs, and no request asks for
     # useFlexisearch (0.8.8 — it produced an unrelated code in production).
     assert icd_service.lookup_cie11(DX, TERM) is None
-    assert [c[0] for c in who['calls']] == ['full', 'term', 'autocode']
+    assert [c[0] for c in who['calls']] == ['full', 'term', 'autocode', 'autocode_term']
     assert all('useFlexisearch' not in params for _, params in who['calls'])
     assert 'stage=flexi' not in log.getvalue()
 
@@ -171,7 +172,7 @@ def test_autocode_cluster_is_a_hit(who, log):
 ], ids=['just-below', 'low', 'no-score', 'bad-score', 'empty-code', 'no-code', 'empty'])
 def test_autocode_below_threshold_or_uncoded_is_rejected(who, log, body, outcome):
     who['answers']['autocode'] = body
-    assert icd_service.lookup_cie11(DX, TERM) is None
+    assert icd_service.lookup_cie11(DX) is None    # no term: autocode is the last stage
     assert _outcomes(log)[-1] == f'{outcome} autocode'
 
 
@@ -192,7 +193,7 @@ def test_no_term_skips_the_term_stage(who, log):
 
 # ── A failed request at any stage ends the chain ────────────────────────
 
-STAGES = ['full', 'term', 'autocode']
+STAGES = ['full', 'term', 'autocode', 'autocode_term']
 
 
 @pytest.mark.parametrize('stage', STAGES)
@@ -416,8 +417,8 @@ def test_search_result_unrelated_to_the_searched_text_is_irrelevant(who, log, st
     who['answers'][stage] = {'destinationEntities': [{'theCode': 'MB24.64', 'title': 'Afecto inapropiado', 'score': 1}]}
     assert icd_service.lookup_cie11(DX, TERM) is None
     assert f'irrelevant {stage}' in _outcomes(log)
-    # irrelevant is "no result": the chain goes on to the next stage.
-    assert who['calls'][-1][0] == 'autocode'
+    # irrelevant is "no result": the chain goes on to the last stage.
+    assert who['calls'][-1][0] == 'autocode_term'
     _assert_no_phi(log)
 
 
@@ -451,7 +452,7 @@ def test_autocode_above_threshold_but_irrelevant_is_rejected(who, log, matching_
     if matching_text is not None:
         body['matchingText'] = matching_text
     who['answers']['autocode'] = body
-    assert icd_service.lookup_cie11(DX, TERM) is None
+    assert icd_service.lookup_cie11(DX) is None    # no term: autocode is the last stage
     assert _outcomes(log)[-1] == 'irrelevant autocode'
     assert 'score=0.99' in log.getvalue()
     _assert_no_phi(log)
@@ -479,3 +480,138 @@ def test_is_relevant(matched, searched, relevant):
 def test_term_guard_and_relevance_share_one_normaliser():
     assert llm_processor.content_words is icd_service.content_words
     assert icd_service.content_words('Diabetes de tipo 2, con Lumbalgía') == {'diabetes', 'tipo', '2', 'lumbalgia'}
+
+
+# ── 0.8.9: synonyms through matchingPVs, and autocode on the term ───────
+# Production (Dialogo 6): term "Lumbalgia" → ME84.2Z "Dolor lumbar, sin
+# especificación" was rejected as irrelevant: the title shares no word with
+# "Lumbalgia", but WHO matched it through an index term. Each search entity
+# lists what matched in matchingPVs ("List of property values that match the
+# search string"), each with a `label` (ISimpleEntity / ISimplePropertyValue,
+# https://id.who.int/swagger/v2/swagger.json).
+
+LUMBAR = {'theCode': 'ME84.2Z', 'title': 'Dolor lumbar, sin especificación', 'score': 0.8}
+
+
+def _with_pvs(entity, *labels, **extra):
+    return {**entity, 'matchingPVs': [{'propertyId': 'Synonym', 'label': l, 'score': 0.8, 'important': True,
+                                       'propertyValueType': 0, **extra} for l in labels]}
+
+
+def test_term_matched_through_a_property_value_is_accepted(who, log):
+    who['answers']['term'] = {'destinationEntities': [_with_pvs(LUMBAR, 'Lumbalgia')]}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') == {'code': 'ME84.2Z', 'title': 'Dolor lumbar, sin especificación'}
+    assert _outcomes(log) == ['no_results full', 'ok term']
+    _assert_no_phi(log)
+    assert 'Dolor' not in log.getvalue()
+
+
+def test_highlighted_property_value_label_still_counts(who, log):
+    # The spec says labels carry highlight markup (<em class="found">…</em>).
+    who['answers']['term'] = {'destinationEntities': [_with_pvs(LUMBAR, '<em class="found">Lumbalgia</em>')]}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia')['code'] == 'ME84.2Z'
+
+
+@pytest.mark.parametrize('pvs', [None, [], 'Lumbalgia', [{'label': 'Dolor de espalda baja'}], [{'label': None}],
+                                 [{'propertyId': 'Synonym'}], ['Lumbalgia'], [{'label': 'Lumbalgias'}]],
+                         ids=['missing', 'empty', 'not-a-list', 'unrelated-label', 'null-label', 'no-label',
+                              'item-not-dict', 'not-a-whole-word'])
+def test_same_entity_without_a_matching_property_is_rejected(who, log, pvs):
+    entity = dict(LUMBAR)
+    if pvs is not None:
+        entity['matchingPVs'] = pvs
+    who['answers']['term'] = {'destinationEntities': [entity]}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') is None
+    assert 'irrelevant term' in _outcomes(log)
+
+
+def test_unrelated_entity_with_unrelated_property_values_is_still_rejected(who, log):
+    dx = 'Control glucémico inadecuado'
+    # The mock keys stages by the fixture DX, so this search is filed as 'term'.
+    who['answers']['term'] = {'destinationEntities': [
+        _with_pvs({'theCode': 'MB24.64', 'title': 'Afecto inapropiado', 'score': 0.9},
+                  'Afecto inapropiado', 'Afectividad <em class="found">inadecuada</em> ficticia')]}
+    assert icd_service.lookup_cie11(dx) is None
+    assert _outcomes(log)[0] == 'irrelevant full'
+    for secret in (dx, 'glucémico', 'Afecto', 'MB24'):
+        assert secret not in log.getvalue()
+
+
+def test_property_values_of_a_lower_entity_never_promote_it(who, log):
+    who['answers']['term'] = {'destinationEntities': [
+        {'theCode': 'MB24.64', 'title': 'Afecto inapropiado', 'score': 0.9, 'matchingPVs': []},
+        _with_pvs(LUMBAR, 'Lumbalgia')]}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') is None
+    assert 'irrelevant term' in _outcomes(log)
+
+
+def test_autocode_term_hit_above_threshold_is_accepted(who, log):
+    who['answers']['autocode_term'] = {'theCode': 'ME84.2Z', 'matchScore': 0.92, 'matchingText': 'Lumbalgia'}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') == {'code': 'ME84.2Z', 'title': ''}
+    assert [c[0] for c in who['calls']] == ['full', 'term', 'autocode', 'autocode_term']
+    assert who['calls'][3][1] == {'searchText': 'Lumbalgia', 'matchThreshold': str(Config.CIE11_AUTOCODE_MIN_SCORE)}
+    assert _outcomes(log) == ['no_results full', 'no_results term', 'no_code autocode', 'ok autocode_term']
+    assert 'score=0.92' in log.getvalue()
+    _assert_no_phi(log)
+
+
+@pytest.mark.parametrize('body,outcome', [
+    ({'theCode': 'ME84.2Z', 'matchScore': 0.79, 'matchingText': 'Lumbalgia'}, 'low_score'),
+    ({'theCode': 'ME84.2Z', 'matchingText': 'Lumbalgia'}, 'low_score'),
+    ({'theCode': '', 'matchScore': 0.95, 'matchingText': 'Lumbalgia'}, 'no_code'),
+    ({'theCode': 'MB24.64', 'matchScore': 0.99, 'matchingText': 'Afecto inapropiado'}, 'irrelevant'),
+], ids=['below-threshold', 'no-score', 'no-code', 'irrelevant'])
+def test_autocode_term_rejections(who, log, body, outcome):
+    who['answers']['autocode_term'] = body
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') is None
+    assert _outcomes(log)[-1] == f'{outcome} autocode_term'
+
+
+def test_autocode_term_relevance_is_checked_against_the_term(who, log):
+    # "Contractura" is in the diagnosis but not in the term searched.
+    who['answers']['autocode_term'] = {'theCode': 'FB30', 'matchScore': 0.95, 'matchingText': 'Contractura ficticia'}
+    assert icd_service.lookup_cie11(DX, 'Lumbalgia') is None
+    assert _outcomes(log)[-1] == 'irrelevant autocode_term'
+
+
+def test_no_autocode_term_without_an_accepted_term(who, log):
+    icd_service.lookup_cie11(DX)
+    icd_service.lookup_cie11(DX, f' {DX} ')            # same as the diagnosis
+    data = {'evaluacion': {'diagnostico': DX, CIE11_TERM_KEY: 'Hernia discal ficticia'}}   # rejected
+    apply_cie11_lookup(data)
+    assert 'autocode_term' not in [c[0] for c in who['calls']]
+    assert all(p.get('searchText') in (None, DX) for _, p in who['calls'])
+
+
+def test_production_dialogo_6_now_gets_the_code(who, log, monkeypatch):
+    """The production sequence, end to end through apply_cie11_lookup: full
+    search empty, term search returns ME84.2Z by synonym."""
+    dx = 'Lumbalgia por contractura muscular secundaria a esfuerzo físico'
+
+    def get(url, params=None, headers=None, timeout=None):
+        params = params or {}
+        who['calls'].append(('x', dict(params)))
+        if params.get('q') == 'Lumbalgia':
+            return _Resp(200, {'destinationEntities': [_with_pvs(LUMBAR, 'Lumbalgia')]})
+        return _Resp(200, EMPTY if 'q' in params else {'theCode': '', 'matchScore': 0})
+    monkeypatch.setattr(icd_service.requests, 'get', get)   # the fixture's token mock stays
+    data = {'evaluacion': {'diagnostico': dx, CIE11_TERM_KEY: 'Lumbalgia'}}
+    apply_cie11_lookup(data)
+    assert data['evaluacion'] == {'diagnostico': dx, 'codigo_cie11': 'ME84.2Z',
+                                  'titulo_cie11': 'Dolor lumbar, sin especificación', 'cie11_fuente': 'oms'}
+    assert _outcomes(log) == ['no_results full', 'ok term']
+    for secret in (dx, 'Lumbalgia', 'ME84', 'Dolor lumbar'):
+        assert secret not in log.getvalue()
+
+
+@pytest.mark.parametrize('entity,searched,relevant', [
+    (LUMBAR, 'Lumbalgia', False),
+    (_with_pvs(LUMBAR, 'Lumbalgia'), 'Lumbalgia', True),
+    (_with_pvs(LUMBAR, 'Lumbalgía, inespecífica'), 'lumbalgia', True),
+    (_with_pvs(LUMBAR, 'Dolor de espalda'), 'Lumbalgia', False),
+    (LUMBAR, 'Dolor lumbar', True),                      # the title alone still counts
+    (_with_pvs({'theCode': 'X', 'title': 'Afecto inapropiado'}, 'Afecto'), 'Control glucémico inadecuado', False),
+])
+def test_is_relevant_entity(entity, searched, relevant):
+    title = icd_service._strip_tags(entity.get('title'))
+    assert icd_service.is_relevant_entity(entity, title, searched) is relevant

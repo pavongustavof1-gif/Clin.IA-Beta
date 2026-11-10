@@ -61,7 +61,7 @@ configure_release(Config.ICD11_RELEASE_VERSION)
 # query (the diagnosis or the search term), the code or the title (all PHI):
 #   ICD: outcome=<ok|no_results|no_code|low_score|irrelevant|http_NNN|
 #                 timeout|token_failed|not_configured|bad_json|no_diagnosis|
-#                 term_rejected> stage=<full|term|autocode|none>
+#                 term_rejected> stage=<full|term|autocode|autocode_term|none>
 #        cluster=<0|1> ms=<n> [score=<0.00-1.00>, autocode only]
 # stage=none: the chain never started (no diagnosis, not configured, cached
 # failure, no token). timeout also covers an unreachable endpoint.
@@ -187,6 +187,31 @@ def is_relevant(matched_text, searched_text) -> bool:
     return bool(content_words(matched_text) & content_words(searched_text))
 
 
+def _strip_tags(text) -> str:
+    """Remove WHO's highlighting markup (e.g. <em class="found">…</em>)."""
+    return re.sub(r'<[^>]+>', '', text).strip() if isinstance(text, str) else ''
+
+
+def is_relevant_entity(entity: dict, title: str, searched_text: str) -> bool:
+    """0.8.9: a search entity is relevant if the searched text shares a
+    content word with its title OR with any property value the response says
+    matched it. WHO search covers "all index terms of an entity. i.e. titles,
+    synonyms, fully specified term, ..." (medicalCodingMode), and each entity
+    lists them in matchingPVs, "List of property values that match the search
+    string", each with a `label` (ISimpleEntity / ISimplePropertyValue,
+    https://id.who.int/swagger/v2/swagger.json). So "Lumbalgia" → ME84.2Z
+    "Dolor lumbar, sin especificación" is accepted through a matched label
+    "Lumbalgia", while an entity none of whose texts share a word is still
+    rejected."""
+    if is_relevant(title, searched_text):
+        return True
+    pvs = entity.get('matchingPVs')
+    if not isinstance(pvs, list):
+        return False
+    return any(isinstance(pv, dict) and is_relevant(_strip_tags(pv.get('label')), searched_text)
+               for pv in pvs)
+
+
 # ── Lookup chain (0.8.7; flexible search removed in 0.8.8) ─────────────────
 # Regular search "will only give you results that contain all of the words
 # that you've used in your search" (useFlexisearch, ICD-API v2 OpenAPI,
@@ -197,11 +222,14 @@ def is_relevant(matched_text, searched_text) -> bool:
 #   term     — /search with the short term from the extraction, if accepted
 #   autocode — /autocode on the whole diagnosis, kept only if matchScore >=
 #              Config.CIE11_AUTOCODE_MIN_SCORE
+#   autocode_term — /autocode on the accepted short term (0.8.9), same
+#              threshold and relevance check against the term
 # 0.8.7 also had a useFlexisearch stage ("the results do not have to
 # contain all of the words"). In production it turned "Control glucémico
 # inadecuado" into MB24.64 "Afecto inapropiado" — a wrong code is worse than
-# none, so it is gone. Every stage's result must also pass is_relevant()
-# (outcome=irrelevant otherwise).
+# none, so it is gone. Every stage's result must also be relevant
+# (outcome=irrelevant otherwise): a search entity by its title or any of its
+# matchingPVs labels (0.8.9, is_relevant_entity), autocode by matchingText.
 # A failed request (HTTP error, timeout, bad JSON) at any stage stops the
 # chain: no retries inside a job. Timeouts feed the 60 s failure cache.
 _STOP = object()   # a stage's "request failed — end the chain" result
@@ -277,10 +305,10 @@ def _search_stage(text: str, token: str):
     if not isinstance(title, str):
         title = ''
     # Strip HTML tags the API sometimes includes in title
-    title = re.sub(r'<[^>]+>', '', title).strip()
+    title = _strip_tags(title)
     # The chosen entity itself must be relevant; a lower-scored one is never
     # promoted in its place.
-    if not is_relevant(title, text):
+    if not is_relevant_entity(top, title, text):
         return 'irrelevant'
     return {'code': normalize_cie11_code(top.get('theCode')), 'title': title}
 
@@ -315,12 +343,13 @@ def _autocode_stage(text: str, token: str):
 def lookup_cie11(diagnosis_text: str, search_term: str | None = None) -> dict | None:
     """
     Find the CIE-11 code for a diagnosis through the WHO ICD-11 MMS API,
-    trying full → term → autocode (see the chain notes above).
+    trying full → term → autocode → autocode_term (see the chain notes above).
 
     Args:
         diagnosis_text: Free-text diagnosis in Spanish (from Gemini extraction)
         search_term: the extraction's short search term, already accepted by
-            llm_processor's guard; None skips the term stage.
+            llm_processor's guard; None skips the term and autocode_term
+            stages.
 
     Returns:
         dict with 'code' and 'title' (title '' from autocode), or None.
@@ -348,18 +377,21 @@ def lookup_cie11(diagnosis_text: str, search_term: str | None = None) -> dict | 
 
     diagnosis = diagnosis_text.strip()
     term = search_term.strip() if isinstance(search_term, str) else ''
+    # Same text as the diagnosis = the same request again; skip it.
+    use_term = bool(term) and term.casefold() != diagnosis.casefold()
     stages = [('full', lambda: _search_stage(diagnosis, token))]
-    # Same text as the diagnosis = the same search again; skip it.
-    if term and term.casefold() != diagnosis.casefold():
+    if use_term:
         stages.append(('term', lambda: _search_stage(term, token)))
     stages.append(('autocode', lambda: _autocode_stage(diagnosis, token)))
+    if use_term:
+        stages.append(('autocode_term', lambda: _autocode_stage(term, token)))
 
     for stage, run in stages:
         stage_started = time.monotonic()
         stage_ms = lambda: (time.monotonic() - stage_started) * 1000
         score = None
         result = run()
-        if stage == 'autocode':
+        if stage.startswith('autocode'):
             result, score = result
         if isinstance(result, tuple):          # request failed — stop
             log_lookup_outcome(result[1], stage=stage, ms=stage_ms(), score=score)
