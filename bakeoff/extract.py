@@ -65,7 +65,9 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
         (lambda s, m, r: is_done(run_path(s.id, m.name, r, runs_dir)))
     # The budget check uses the real prompts these calls will send.
     prompts = {s.id: core.build_prompt(utterances_for(s)) for s in scenarios}
-    schemas = {s.id: core.gateway_schema(utterances_for(s)) for s in scenarios}   # roles keys = its speakers
+    # Only a json_schema model needs the wire schema (roles keys = the scenario's speakers).
+    needs_schema = any(spec.output_mode == 'json_schema' for spec in specs)
+    schemas = {s.id: core.gateway_schema(utterances_for(s)) if needs_schema else None for s in scenarios}
     lines = []
     for spec in specs:
         calls = sum(1 for s in scenarios for r in range(1, runs + 1) if not planned_done(s, spec, r))
@@ -106,6 +108,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                     'created_at': datetime.now(timezone.utc).isoformat(timespec='seconds'),
                     'request': gateway.request_params(body),
                     'sent_temperature': body.get('temperature'),
+                    'output_mode': spec.output_mode,
                     'http_status': res['http_status'], 'attempts': res['attempts'],
                     'latency_s': res['latency_s'], 'error': res['error'],
                     'request_id': (res['body'] or {}).get('request_id') if isinstance(res['body'], dict) else None,

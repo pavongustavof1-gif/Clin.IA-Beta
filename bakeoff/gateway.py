@@ -5,7 +5,9 @@ Docs (read 2026-11-11): https://assemblyai.com/docs/api-reference/llm-gateway/cr
   - "Authorization: <key>" — the key itself, "not prefixed with Bearer"
   - max_tokens "Default is 1000", so 8192 is always sent (a full note with
     reasoning can exceed 1000 and would be cut off)
-  - response_format json_schema; `strict` defaults to false
+  - response_format: the only documented type is json_schema ("Use
+    `json_schema` for structured outputs"); json_object is not documented
+    for any model. See OUTPUT_MODES.
   - model_region: omitted on purpose ("omit this field for default in-region
     processing")
   - usage: input_tokens / output_tokens / total_tokens; body field request_id
@@ -24,19 +26,38 @@ TIMEOUT_S = 120
 MAX_RETRIES = 3            # retries after the first attempt, for 429 and 5xx only
 SCHEMA_NAME = 'nota_soap'
 
+# How the JSON output is requested (models.yaml `output_mode`):
+#   none        — no response_format; the prompt's JSON template only. Closest
+#                 to production, which sends Gemini response_mime_type JSON and
+#                 no schema; production's clean_json_response strips fences.
+#   json_object — response_format {"type": "json_object"} (JSON mode), for a
+#                 model whose Gateway docs say it supports it.
+#   json_schema — response_format json_schema with extraction_core.wire_schema
+#                 (strict false). Kept for later; no bake-off model uses it.
+OUTPUT_MODES = ('none', 'json_object', 'json_schema')
 
-def build_request(spec, prompt: str, schema: dict) -> dict:
-    """The JSON body. temperature only for models that accept it (not Claude
-    Haiku/Sonnet 5.5); reasoning_effort only for a variant that sets it."""
+
+def build_request(spec, prompt: str, schema: dict | None = None) -> dict:
+    """The JSON body. response_format follows spec.output_mode (`schema` is
+    needed only for json_schema); temperature only for models that accept it
+    (not Claude Haiku/Sonnet 5.5); reasoning_effort only for a variant that
+    sets it."""
     body = {
         'model': spec.model,
         'messages': [{'role': 'user', 'content': prompt}],
         'max_tokens': MAX_TOKENS,
-        'response_format': {
+    }
+    if spec.output_mode == 'json_object':
+        body['response_format'] = {'type': 'json_object'}
+    elif spec.output_mode == 'json_schema':
+        if schema is None:
+            raise ValueError(f'{spec.name}: output_mode json_schema needs a schema')
+        body['response_format'] = {
             'type': 'json_schema',
             'json_schema': {'name': SCHEMA_NAME, 'schema': schema, 'strict': False},
-        },
-    }
+        }
+    elif spec.output_mode != 'none':
+        raise ValueError(f'{spec.name}: unknown output_mode {spec.output_mode!r}')
     if spec.accepts_temperature:
         body['temperature'] = TEMPERATURE
     if spec.reasoning_effort:
@@ -50,11 +71,11 @@ def request_params(body: dict) -> dict:
     the run files record parameters, not 9 KB of repeated prompt."""
     prompt = body['messages'][0]['content']
     params = {k: v for k, v in body.items() if k != 'messages'}
-    params['response_format'] = {
-        'type': body['response_format']['type'],
-        'json_schema': {'name': body['response_format']['json_schema']['name'],
-                        'strict': body['response_format']['json_schema']['strict']},
-    }
+    rf = body.get('response_format')
+    if rf and rf['type'] == 'json_schema':     # the schema itself isn't repeated in every run file
+        params['response_format'] = {'type': 'json_schema',
+                                     'json_schema': {'name': rf['json_schema']['name'],
+                                                     'strict': rf['json_schema']['strict']}}
     params['prompt_sha256'] = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
     params['prompt_chars'] = len(prompt)
     params['messages'] = [{'role': 'user', 'content': '<production prompt; see prompt_sha256>'}]

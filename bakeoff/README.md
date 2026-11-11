@@ -42,6 +42,10 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
 5. **`extract`**: scenario × model × `--runs` (default 3). One file per call in
    `runs/`. Successful calls are never repeated (failed ones are), unless you pass
    `--force`. No CIE-11/WHO lookup: `termino_busqueda_cie11` stays as the model wrote it.
+   How JSON is requested is each model's `output_mode` in `models.yaml` (`none`: no
+   `response_format`, the prompt's JSON template only, as production sends no schema;
+   `json_object`; `json_schema`: `extraction_core.wire_schema`). All four models use
+   `none`; the mode is recorded in every run file and shown by `tally`.
 6. **`check`**: automated checks per run → `scores/checks.csv`,
    `scores/checks_by_model.csv`, and run-to-run consistency → `scores/consistency.csv`.
 7. **`blind`**: one random run per model per scenario (seeded; the seed is saved),

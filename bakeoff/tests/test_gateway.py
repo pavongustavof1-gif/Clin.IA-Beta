@@ -1,3 +1,6 @@
+import json
+from dataclasses import replace
+
 import pytest
 import requests
 
@@ -20,8 +23,7 @@ def test_request_shape(models_cfg):
     body = gateway.build_request(models_cfg.models['gemini-2.5-flash'], 'prompt ficticio', SCHEMA)
     assert body['model'] == 'gemini-2.5-flash'
     assert body['max_tokens'] == 8192
-    assert body['response_format'] == {'type': 'json_schema',
-                                       'json_schema': {'name': 'nota_soap', 'schema': SCHEMA, 'strict': False}}
+    assert 'response_format' not in body          # output_mode none
     assert 'model_region' not in body
     assert 'reasoning_effort' not in body
 
@@ -39,7 +41,51 @@ def test_request_params_record_what_was_sent_without_the_prompt(models_cfg):
     assert 'prompt ficticio' not in str(params)
     assert params['prompt_chars'] == len('prompt ficticio largo') and len(params['prompt_sha256']) == 64
     assert params['max_tokens'] == 8192 and 'temperature' not in params
-    assert params['response_format']['json_schema']['strict'] is False
+    assert 'response_format' not in params and 'response_format' not in body
+
+
+MODES = {'gemini-2.5-flash': 'none', 'gemini-3.5-flash-lite': 'none', 'claude-haiku-5-5': 'none',
+         'claude-sonnet-5-5': 'none'}
+
+
+def test_the_four_models_send_no_schema_and_match_their_output_mode(models_cfg):
+    # Decision 2026-11-11: no schema for any model (production sends Gemini none).
+    for spec in models_cfg.default_models():
+        assert spec.output_mode == MODES[spec.name], spec.name
+        body = gateway.build_request(spec, 'prompt ficticio', SCHEMA)
+        assert 'json_schema' not in json.dumps(body), spec.name
+        expected = {'none': None, 'json_object': {'type': 'json_object'}}[spec.output_mode]
+        assert body.get('response_format') == expected, spec.name
+    assert set(MODES) == {s.name for s in models_cfg.default_models()}
+    assert models_cfg.models['gemini-3.5-flash-lite@low'].output_mode == 'none'
+
+
+def test_each_output_mode_builds_its_response_format(models_cfg):
+    base = models_cfg.models['claude-haiku-5-5']
+    assert 'response_format' not in gateway.build_request(replace(base, output_mode='none'), 'p', SCHEMA)
+    assert gateway.build_request(replace(base, output_mode='json_object'), 'p')['response_format'] == \
+        {'type': 'json_object'}
+    body = gateway.build_request(replace(base, output_mode='json_schema'), 'p', SCHEMA)
+    assert body['response_format'] == {'type': 'json_schema',
+                                       'json_schema': {'name': 'nota_soap', 'schema': SCHEMA, 'strict': False}}
+    params = gateway.request_params(body)
+    assert params['response_format'] == {'type': 'json_schema', 'json_schema': {'name': 'nota_soap', 'strict': False}}
+    assert gateway.request_params(gateway.build_request(replace(base, output_mode='json_object'), 'p'))[
+        'response_format'] == {'type': 'json_object'}
+    with pytest.raises(ValueError):
+        gateway.build_request(replace(base, output_mode='json_schema'), 'p')        # no schema given
+    with pytest.raises(ValueError):
+        gateway.build_request(replace(base, output_mode='xml'), 'p', SCHEMA)
+
+
+@pytest.mark.parametrize('mode', ['', 'xml', None])
+def test_models_yaml_requires_a_known_output_mode(tmp_path, mode):
+    from bakeoff.models import load_models
+    line = '' if mode is None else f'    output_mode: "{mode}"\n'
+    (tmp_path / 'm.yaml').write_text('models:\n  x:\n    model: x\n    price_in: 1\n    price_out: 1\n'
+                                     '    accepts_temperature: true\n    est_output_tokens: 1\n' + line)
+    with pytest.raises(ValueError):
+        load_models(tmp_path / 'm.yaml')
 
 
 def test_auth_header_is_the_bare_key_and_timeout_120():

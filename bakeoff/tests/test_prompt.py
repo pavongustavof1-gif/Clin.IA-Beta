@@ -78,8 +78,9 @@ def test_full_schema_is_untouched_by_building_the_wire_schema():
     assert full['properties']['roles_detectados']['propertyNames'] == {'pattern': '^Hablante '}
 
 
-def test_request_body_carries_the_wire_schema(models_cfg):
-    spec = models_cfg.models['claude-haiku-5-5']
+def test_json_schema_mode_carries_the_wire_schema(models_cfg):
+    from dataclasses import replace
+    spec = replace(models_cfg.models['claude-haiku-5-5'], output_mode='json_schema')   # no bake-off model uses it
     body = gateway.build_request(spec, 'x', core.gateway_schema(_case('lumbalgia_dos_hablantes')['utterances']))
     assert 'propertyNames' not in json.dumps(body)
 

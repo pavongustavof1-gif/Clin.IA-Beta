@@ -20,6 +20,14 @@
 #   default "thinking" as output tokens, hence the higher figure. Replace with
 #   observed averages after the first runs (`tally` reports them).
 # optional: true = not run unless named with --models.
+# output_mode: how JSON is requested (bakeoff/gateway.py OUTPUT_MODES):
+#   none | json_object | json_schema. Decision 2026-11-11: no schema for any
+#   model, to match production (Gemini gets response_mime_type JSON, no
+#   schema). json_object would be used where the Gateway documents it, but
+#   neither available-models nor the create-chat-completion reference nor
+#   llm-gateway/structured-outputs mentions json_object for any model — the
+#   only documented response_format type is json_schema — so all are "none":
+#   no response_format, the prompt's JSON template only.
 
 surcharge: 0.10          # in-region +10% (see above)
 
@@ -31,6 +39,7 @@ models:
     price_out: 2.50
     accepts_temperature: true
     est_output_tokens: 3500
+    output_mode: none
 
   gemini-3.5-flash-lite:
     model: gemini-3.5-flash-lite
@@ -39,6 +48,7 @@ models:
     price_out: 2.50
     accepts_temperature: true
     est_output_tokens: 2500
+    output_mode: none
 
   claude-haiku-5-5:
     model: claude-haiku-5-5
@@ -47,6 +57,7 @@ models:
     price_out: 0.50
     accepts_temperature: false
     est_output_tokens: 1600
+    output_mode: none
 
   claude-sonnet-5-5:
     model: claude-sonnet-5-5
@@ -55,6 +66,7 @@ models:
     price_out: 10.00
     accepts_temperature: false
     est_output_tokens: 1600
+    output_mode: none
 
   # Optional 5th variant. available-models lists `reasoning_effort` among
   # gemini-3.5-flash-lite's supported parameters, but neither that page nor
@@ -69,6 +81,7 @@ models:
     accepts_temperature: true
     reasoning_effort: low
     est_output_tokens: 1800
+    output_mode: none
     optional: true
 
 # Token estimation (no tokenizer offline). Spanish prompt text averages about

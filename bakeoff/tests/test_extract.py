@@ -122,3 +122,21 @@ def test_successful_call_prints_no_body(tmp_path, text_scenario, models_cfg):
                     lambda s: UTTERANCES, runs_dir=tmp_path / 'runs', post=_post()[0], sleep=lambda s: None,
                     log=lines.append)
     assert ': ok (' in lines[-1]
+
+
+def test_run_file_records_the_output_mode_and_no_schema_is_sent(tmp_path, text_scenario, models_cfg):
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, runs=1, post=post)
+    assert sent and all('response_format' not in b for b in sent)
+    for spec in models_cfg.default_models():
+        rec = json.loads((tmp_path / 'runs' / 'BO-T1' / f'{spec.name}__run1.json').read_text(encoding='utf-8'))
+        assert rec['output_mode'] == spec.output_mode == 'none'
+        assert 'response_format' not in rec['request']
+
+
+def test_json_schema_mode_sends_the_scenario_wire_schema(tmp_path, text_scenario, models_cfg):
+    from dataclasses import replace
+    post, sent = _post()
+    spec = replace(models_cfg.models['claude-haiku-5-5'], output_mode='json_schema')
+    _run(tmp_path, text_scenario, models_cfg, specs=[spec], runs=1, post=post)
+    assert sent[0]['response_format']['json_schema']['schema'] == core.gateway_schema(UTTERANCES)

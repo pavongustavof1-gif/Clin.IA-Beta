@@ -5,6 +5,7 @@ from pathlib import Path
 import yaml
 
 from bakeoff import paths
+from bakeoff.gateway import OUTPUT_MODES
 
 
 @dataclass
@@ -15,6 +16,7 @@ class ModelSpec:
     price_out: float
     accepts_temperature: bool
     est_output_tokens: int
+    output_mode: str = 'none'     # gateway.OUTPUT_MODES
     reasoning_effort: str | None = None
     optional: bool = False
     role: str = ''
@@ -47,11 +49,13 @@ def load_models(path: Path | None = None) -> ModelsConfig:
     data = yaml.safe_load((path or paths.MODELS_FILE).read_text(encoding='utf-8'))
     models = {}
     for name, m in data['models'].items():
+        if m.get('output_mode') not in OUTPUT_MODES:
+            raise ValueError(f'models.yaml: {name}: output_mode must be one of {", ".join(OUTPUT_MODES)}')
         models[name] = ModelSpec(
             name=name, model=m['model'], price_in=float(m['price_in']), price_out=float(m['price_out']),
             accepts_temperature=bool(m['accepts_temperature']), est_output_tokens=int(m['est_output_tokens']),
             reasoning_effort=m.get('reasoning_effort'), optional=bool(m.get('optional', False)),
-            role=m.get('role', ''),
+            role=m.get('role', ''), output_mode=m['output_mode'],
         )
     est = data.get('estimation', {})
     return ModelsConfig(models=models, surcharge=float(data.get('surcharge', 0)),

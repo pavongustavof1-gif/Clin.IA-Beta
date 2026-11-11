@@ -74,9 +74,11 @@ def tally(scenarios, records, key: dict, scores: dict) -> str:
     lines = ['# Bake-off summary (#83)', '',
              'Invented data only. Blind scores are 1-5 (completeness, accuracy/no inventions, '
              'clinical usefulness; total out of 15). Checks and consistency cover every run; '
-             'cost and latency are per call.', '']
+             'cost and latency are per call. Output mode = how JSON was requested (none: prompt '
+             'template only; json_object; json_schema).', '']
     overall = defaultdict(lambda: {'totals': [], 'safety': 0, 'scored': 0, 'checks_p': 0, 'checks_t': 0,
-                                   'cons': [], 'costs': [], 'lat': [], 'fail': 0, 'calls': 0, 'out_tok': []})
+                                   'cons': [], 'costs': [], 'lat': [], 'fail': 0, 'calls': 0, 'out_tok': [],
+                                   'modes': set()})
     for s in sorted(scenarios, key=lambda s: s.id):
         present = [m for m in models if runs_by.get((s.id, m))]
         if not present:
@@ -98,6 +100,7 @@ def tally(scenarios, records, key: dict, scores: dict) -> str:
             o['cons'].append(cons[(s.id, m)]['mean_agreement'])
             o['costs'] += [c for c in costs if c is not None]; o['lat'] += [l for l in lats if l is not None]
             o['fail'] += fails; o['calls'] += len(runs)
+            o['modes'] |= {r.get('output_mode') or '?' for r in runs}
             o['out_tok'] += [r['usage']['output_tokens'] for r in runs
                              if r.get('usage') and r['usage'].get('output_tokens') is not None]
             if sc:
@@ -123,16 +126,17 @@ def tally(scenarios, records, key: dict, scores: dict) -> str:
             'blind_mean': _mean(o['totals']), 'checks': (o['checks_p'] / o['checks_t']) if o['checks_t'] else None,
             'consistency': _mean(o['cons']), 'cost': _mean(o['costs']), 'total_cost': sum(o['costs']),
             'latency': _mean(o['lat']), 'fail': o['fail'], 'calls': o['calls'], 'out_tok': _mean(o['out_tok']),
+            'modes': ', '.join(sorted(o['modes'])),
         })
     ranking.sort(key=lambda r: (r['safety'], -(r['blind_mean'] or 0), -(r['checks'] or 0), r['cost'] or 0))
     lines += ['## Overall ranking', '',
               'Order: fewest safety errors, then highest mean blind score, then check pass rate, then cost.', '',
-              '| # | Model | Safety errors | Blind mean /15 (notes scored) | Checks | Consistency | '
+              '| # | Model | Output mode | Safety errors | Blind mean /15 (notes scored) | Checks | Consistency | '
               'Mean latency s | Mean cost/call USD | Total cost USD | Failures | Mean output tokens |',
-              '|---|---|---|---|---|---|---|---|---|---|---|']
+              '|---|---|---|---|---|---|---|---|---|---|---|---|']
     for i, r in enumerate(ranking, 1):
         lines.append('| ' + ' | '.join([
-            str(i), r['model'], str(r['safety']), f'{_fmt(r["blind_mean"])} ({r["scored"]})',
+            str(i), r['model'], r['modes'], str(r['safety']), f'{_fmt(r["blind_mean"])} ({r["scored"]})',
             _fmt(r['checks'], pct=True), _fmt(r['consistency'], pct=True), _fmt(r['latency'], digits=1),
             _fmt(r['cost'], digits=4), _fmt(r['total_cost'], digits=4), f'{r["fail"]}/{r["calls"]}',
             _fmt(r['out_tok'], digits=0),
