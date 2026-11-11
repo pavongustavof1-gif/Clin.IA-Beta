@@ -1,0 +1,35 @@
+{
+  "_comment": "Invented consultations (no PHI) for the prompt-pinning goldens of #83. Captured from llm_processor.LLMProcessor.create_extraction_prompt at 0.8.10-beta, before extraction_core existed. utterances = AssemblyAI's [{speaker, text}], rendered as [Hablante X]: text.",
+  "lumbalgia_dos_hablantes": {
+    "transcript": "texto plano ficticio (ignorado cuando hay utterances)",
+    "utterances": [
+      {"speaker": "A", "text": "Buenos días, ¿qué le trae por aquí?"},
+      {"speaker": "B", "text": "Me duele la espalda baja desde que cargué unas cajas el sábado."},
+      {"speaker": "A", "text": "A la exploración hay contractura paravertebral lumbar. Es una lumbalgia por contractura muscular; le indico paracetamol 500 mg cada 8 horas por 5 días."},
+      {"speaker": "B", "text": "¿Y puedo trabajar?"},
+      {"speaker": "A", "text": "Sí, evite cargar peso y regrese en una semana si no mejora."}
+    ]
+  },
+  "diabetes_tres_hablantes": {
+    "transcript": "",
+    "utterances": [
+      {"speaker": "A", "text": "Paciente ficticio de 58 años, viene a control de su diabetes."},
+      {"speaker": "C", "text": "Doctor, él no ha seguido la dieta, come mucho pan."},
+      {"speaker": "B", "text": "Es cierto, y a veces se me olvida la metformina."},
+      {"speaker": "A", "text": "Su glucosa capilar hoy es de 210 mg/dL, presión 130/85. Diabetes mellitus tipo 2 con control glucémico subóptimo. Continúe metformina 850 mg cada 12 horas y le pido hemoglobina glucosilada."},
+      {"speaker": "C", "text": "Por cierto, a su hermano le acaban de diagnosticar hipertensión."}
+    ]
+  },
+  "comillas_y_llaves": {
+    "transcript": "",
+    "utterances": [
+      {"speaker": "1", "text": "Texto con \"comillas dobles\", llaves {como esta} y una barra \\ invertida."},
+      {"speaker": "2", "text": "Línea con acentos ñ ü é y un emoji 🙂 ficticio."},
+      {"speaker": "1", "text": ""}
+    ]
+  },
+  "plano_sin_hablantes": {
+    "transcript": "Doctor ficticio: ¿cómo sigue? Paciente ficticio: mejor, ya sin fiebre desde ayer.",
+    "utterances": null
+  }
+}

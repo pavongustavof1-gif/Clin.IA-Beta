@@ -3,7 +3,19 @@ from google import genai
 from google.genai import types # For configuration
 from config import Config
 from logger import logger
-from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome, content_words
+from icd_service import lookup_cie11, normalize_cie11_code, log_lookup_outcome
+# #83: the pure half (prompt, JSON cleaner, validator, CIE-11 term helpers)
+# lives in extraction_core, shared with the bake-off harness. Re-exported
+# here so existing callers (`from llm_processor import ...`) keep working.
+from extraction_core import (  # noqa: F401
+    CIE11_TERM_KEY,
+    accept_search_term,
+    clean_json_response,
+    content_words,
+    create_extraction_prompt,
+    normalize_evaluacion,
+    validate_against_schema,
+)
 import json
 import time
 from typing import Dict, Optional
@@ -25,51 +37,6 @@ class LLMProcessingError(Exception):
 CIE11_KEYS = ('codigo_cie11', 'titulo_cie11', 'cie11_fuente')
 CIE11_FUENTE_OMS = 'oms'
 CIE11_FUENTE_MEDICO = 'medico'
-
-
-def normalize_evaluacion(data) -> None:
-    """Structural normalisation of evaluacion, in place (0.8.5, review #10/#11).
-    Never invents clinical content:
-      - diagnostico_principal → diagnostico when diagnostico is missing or
-        blank (the PDF reads either key; the review screen, the lookup and
-        the confirm only read diagnostico, so the other spelling was lost).
-      - diagnosticos_adicionales given as one string → a list of its
-        non-blank lines (the review textarea and the shared renderer expect
-        a list).
-    Idempotent: safe to run from extraction and again from validation."""
-    if not isinstance(data, dict):
-        return
-    ev = data.get('evaluacion')
-    if not isinstance(ev, dict):
-        return
-    principal = ev.get('diagnostico_principal')
-    diagnostico = ev.get('diagnostico')
-    if (not isinstance(diagnostico, str) or not diagnostico.strip()) \
-            and isinstance(principal, str) and principal.strip():
-        ev['diagnostico'] = principal
-        del ev['diagnostico_principal']
-    adicionales = ev.get('diagnosticos_adicionales')
-    if isinstance(adicionales, str):
-        lines = [line.strip() for line in adicionales.split('\n') if line.strip()]
-        if lines:
-            ev['diagnosticos_adicionales'] = lines
-        else:
-            del ev['diagnosticos_adicionales']
-
-
-# 0.8.7: the short search term Gemini derives from its own diagnosis
-# (prompt rule 9). Internal only — popped before the lookup, so it never
-# reaches the review screen, the saved note or the PDF.
-CIE11_TERM_KEY = 'termino_busqueda_cie11'
-
-def accept_search_term(term, diagnostico: str) -> bool:
-    """The term guard: accept only a term whose every content word also
-    appears in the diagnosis, so it can narrow the diagnosis but never add
-    a condition to it."""
-    if not isinstance(term, str) or not isinstance(diagnostico, str):
-        return False
-    words = content_words(term)
-    return bool(words) and words <= content_words(diagnostico)
 
 
 def apply_cie11_lookup(data) -> None:
@@ -123,181 +90,9 @@ class LLMProcessor:
         self.model_id = 'gemini-2.5-flash'
 
     def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
-        """
-        Create detailed prompt for Gemini to extract medical information
-
-        Args:
-            transcript: Raw Spanish transcript from AssemblyAI
-            utterances: Optional speaker-labeled utterances from AssemblyAI
-
-        Returns:
-            Formatted prompt for LLM
-        """
-        if utterances:
-            # Neutral, anonymous speaker labels only (Hablante A/B/...) —
-            # the raw AssemblyAI diarization label, no clinical-role guess.
-            # Gemini determines the actual role itself; see speaker_instruction
-            # below (Fix #30 — replaces the old word-count heuristic, which
-            # assumed "most words = doctor" and was frequently backwards,
-            # since patients often talk more than the doctor).
-            transcript_content = "\n".join(
-                f"[Hablante {u['speaker']}]: {u['text']}" for u in utterances
-            )
-            speaker_instruction = (
-                "\n6. La transcripción está etiquetada por interlocutor anónimo "
-                "(Hablante A, Hablante B, …), sin asignar rol clínico alguno. "
-                "PRIMERO determina el rol clínico de cada interlocutor a partir "
-                "del diálogo: el médico hace las preguntas clínicas, conduce la "
-                "exploración, y da el diagnóstico, el pronóstico y el plan/"
-                "indicaciones; el paciente describe síntomas, antecedentes y "
-                "responde a las preguntas; puede haber un familiar o enfermera. "
-                "No asumas que quien más habla es el médico — el paciente con "
-                "frecuencia habla más. DESPUÉS extrae el SOAP según esa "
-                "determinación: Subjetivo principalmente del paciente (y "
-                "familiar, si está presente); Objetivo de los hallazgos de "
-                "exploración del médico; Evaluación y Plan del médico. "
-                "Reporta tu determinación en el campo \"roles_detectados\" del "
-                "JSON de salida (ver esquema abajo) — una entrada por cada "
-                "\"Hablante X\" que aparezca en la transcripción."
-            )
-            # Only meaningful when there are speaker-labeled utterances —
-            # omitted from the schema entirely in the flat-transcript
-            # fallback below, where there's no per-speaker role to report.
-            roles_detectados_field = (
-                '  "roles_detectados": {\n'
-                '    "Hablante A": "médico|paciente|familiar|enfermera",\n'
-                '    "Hablante B": "médico|paciente|familiar|enfermera"\n'
-                '  },\n'
-            )
-        else:
-            transcript_content = transcript
-            speaker_instruction = ""
-            roles_detectados_field = ""
-
-        prompt = f"""Eres un asistente médico especializado en crear notas clínicas siguiendo el formato SOAP (Subjetivo, Objetivo, Evaluación, Plan).
-
-Tu tarea es analizar la siguiente transcripción de una consulta médica en español y extraer toda la información relevante en un formato JSON estructurado.
-
-INSTRUCCIONES CRÍTICAS:
-1. Debes extraer ÚNICAMENTE información que esté explícitamente mencionada en la transcripción
-2. Si cierta información no está presente, omite ese campo (no inventes datos)
-3. En las secciones Subjetivo y Objetivo, mantén los términos como aparecen en la transcripción (incluidas las palabras del paciente). En las secciones Evaluación y Plan, aplica el lenguaje técnico-médico según la sección «LENGUAJE TÉCNICO-MÉDICO» de abajo. En todos los casos, asegura la congruencia de género entre los artículos (definidos e indefinidos) y el sustantivo que les sigue
-4. Organiza la información según el formato SOAP
-5. Identifica y separa la información del paciente, síntomas, hallazgos, diagnóstico y plan de tratamiento
-6. Para peso y talla, escucha frases como 'el paciente pesa', 'la talla es', 'pesa X kilos', 'mide X'. Para habitus exterior, escucha frases como 'paciente consciente y orientado', 'bien orientado en tiempo y espacio', 'estado nutricional adecuado', 'paciente masculino/femenino, adulto'
-7. curp: NUNCA autogenerar ni inferir. Solo incluir si el médico lo menciona explícitamente durante la consulta.
-8. No incluyas códigos CIE-11 ni su título (codigo_cie11, titulo_cie11): el sistema los obtiene de la OMS.
-9. termino_busqueda_cie11: escribe la condición principal de tu «diagnostico» en su forma estándar más breve, sin causa, gravedad, estado de control, lateralidad ni otros calificativos. Obtenlo únicamente del diagnóstico que redactaste y usa solo palabras que aparezcan en él; nunca agregues una condición y nunca escribas un código. Ejemplos: «Lumbalgia por contractura muscular secundaria a esfuerzo físico» → «Lumbalgia»; «Diabetes mellitus tipo 2 con control glucémico subóptimo» → «Diabetes mellitus tipo 2». Si no hay diagnóstico, omite este campo.{speaker_instruction}
-
-LENGUAJE TÉCNICO-MÉDICO (NOM-004-SSA3-2012, §5.11) — aplica ÚNICAMENTE a «evaluacion» y «plan»:
-- Redacta los campos de «evaluacion» (diagnostico, diagnosticos_adicionales, impresion_clinica,
-  pronostico) y de «plan» (tratamiento, medicamentos, recomendaciones, estudios_solicitados,
-  seguimiento) en lenguaje técnico-médico formal.
-- Sustituye términos coloquiales por su equivalente técnico. Sustituciones canónicas (lista ampliable):
-    • panza / barriga / tripa → abdomen (o «cavidad abdominal» según contexto)
-    • vahído → síncope
-    • dolor de cabeza → cefalea
-    • fiebre → pirexia/hipertermia (o síndrome febril)
-    • zumbido en los oídos → acúfenos (o tinnitus)
-    • ver lucesitas brillantes → fosfenos
-    • mareo con sensación de que todo gira → vértigo
-    • falta de aire / ahogo → disnea
-    • moretón → equimosis
-    • roncha con picazón → urticaria (la lesión física en sí se llama habón)
-    • sangrado por la nariz → epistaxis
-    • mal aliento → halitosis
-    • caída del cabello → alopecia
-
-- Sin abreviaturas: desarróllalas a su forma completa (p. ej. «c/8h» → «cada 8 horas»;
-  «VO» → «vía oral»). Conserva las unidades estándar (mg, mL, mmHg, °C).
-
-REGLA DE SEGURIDAD (obligatoria): esta normalización cambia ÚNICAMENTE el registro lingüístico,
-NUNCA el contenido clínico. Está PROHIBIDO añadir diagnósticos, hallazgos, localización anatómica,
-lateralidad, severidad, temporalidad o cualquier detalle no explícito en la transcripción, o inferir
-más de lo que dijo el médico. Si no existe un equivalente técnico claro y unívoco, conserva el término
-original. Preserva el significado clínico exactamente. Ante la duda, no cambies nada.
-
-Las secciones «subjetivo» y «objetivo» NO se modifican.
-
-TRANSCRIPCIÓN:
-{transcript_content}
-
-FORMATO DE SALIDA:
-Debes responder ÚNICAMENTE con un objeto JSON válido que siga este esquema:
-
-{{
-{roles_detectados_field}  "informacion_paciente": {{
-    "nombre_del_paciente": "string (si se menciona)",
-    "fecha_de_nacimiento": "string en formato DD/MM/YYYY (si se menciona)",
-    "edad": "string (si se menciona)",
-    "genero": "string (si se menciona)",
-    "numero_expediente": "string - número de expediente si se menciona explícitamente; omitir si no se menciona",
-    "curp": "string - CURP del paciente si se menciona explícitamente en la consulta; omitir si no se menciona. Nunca autogenerar."
-  }},
-  "subjetivo": {{
-    "motivo_de_consulta": "string - razón principal de la visita",
-    "sintomas": ["lista de síntomas mencionados por el paciente"],
-    "historia_de_enfermedad_actual": "string - descripción de cómo empezó y evolucionó",
-    "duracion_sintomas": "string - hace cuánto empezaron los síntomas"
-  }},
-  "objetivo": {{
-    "signos_vitales": {{
-      "presion_arterial": "string (si se menciona)",
-      "frecuencia_cardiaca": "string (si se menciona)",
-      "temperatura": "string (si se menciona)",
-      "frecuencia_respiratoria": "string (si se menciona)",
-      "saturacion_oxigeno": "string (si se menciona)",
-      "peso": "string en kg (si se menciona)",
-      "talla": "string en cm o metros (si se menciona)"
-    }},
-    "habitus_exterior": "string - descripción general del paciente: edad aparente, estado de consciencia, orientación, estado nutricional (si se menciona)",
-    "examen_fisico": "string - hallazgos del examen físico",
-    "hallazgos": ["lista de hallazgos objetivos"]
-  }},
-  "evaluacion": {{
-    "diagnostico": "string - diagnóstico principal",
-    "diagnosticos_adicionales": ["otros diagnósticos o diagnósticos diferenciales"],
-    "impresion_clinica": "string - impresión general del médico",
-    "pronostico": "string - pronóstico esperado por el médico (favorable, reservado, o descripción)",
-    "termino_busqueda_cie11": "string - condición principal del diagnóstico en su forma estándar más breve (ver instrucción 9)"
-  }},
-  "plan": {{
-    "tratamiento": "string - plan de tratamiento general",
-    "medicamentos": [
-      {{
-        "nombre": "nombre del medicamento",
-        "dosis": "dosis prescrita",
-        "frecuencia": "con qué frecuencia tomar",
-        "duracion": "por cuánto tiempo"
-      }}
-    ],
-    "recomendaciones": ["lista de recomendaciones e instrucciones"],
-    "estudios_solicitados": ["laboratorios, imágenes u otros estudios solicitados"],
-    "seguimiento": "string - instrucciones de seguimiento"
-  }},
-  "metadata": {{
-    "fecha_consulta": "string (si se menciona)",
-    "medico": "string (si se menciona)",
-    "duracion_consulta": "string (si se puede determinar)"
-  }},
-  "actualizacion_antecedentes": {{
-    "detectado": "true o false - detecta si el paciente menciona antecedentes hereditarios, familiares o personales nuevos no capturados previamente (por ejemplo, un diagnóstico reciente de un familiar)",
-    "contenido": "string - descripción del antecedente nuevo mencionado (omitir si detectado es false)"
-  }}
-}}
-
-REGLAS IMPORTANTES:
-- IMPORTANTE: Si necesitas citar al paciente o usar comillas dentro de un texto, usa SOLO comillas simples ('ejemplo'). NUNCA uses comillas dobles dentro de un valor de texto, ya que esto destruye el formato JSON.
-- Responde SOLO con el JSON, sin texto adicional antes o después
-- No incluyas ```json ni ningún otro formato de código
-- Si un campo no tiene información, omítelo del JSON
-- Asegúrate de que el JSON sea válido y pueda ser parseado
-- Usa comillas dobles estrictamente para las llaves y estructura general del JSON.
-- Mantén los acentos y caracteres especiales del español
-
-Ahora extrae la información de la transcripción y genera el JSON:"""
-        
-        return prompt
+        """The extraction prompt — lives in extraction_core (#83), shared
+        verbatim with the bake-off harness."""
+        return create_extraction_prompt(transcript, utterances)
     
     def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
         """
@@ -375,81 +170,13 @@ Ahora extrae la información de la transcripción y genera el JSON:"""
         )
 
     def _clean_json_response(self, response: str) -> str:
-        """
-        Clean LLM response to extract pure JSON
-        """
-        # Remove any leading/trailing whitespace
-        response = response.strip()
-        
-        # Remove any text before first { or after last }
-        first_brace = response.find('{')
-        last_brace = response.rfind('}')
-        
-        if first_brace != -1 and last_brace != -1:
-            response = response[first_brace:last_brace + 1]
-        
-        return response
+        """Clean LLM response to extract pure JSON (extraction_core, #83)."""
+        return clean_json_response(response)
     
     def validate_against_schema(self, data: Dict) -> tuple[bool, Optional[str]]:
-        """
-        Validate extracted data against JSON schema, normalizing in place
-        for non-clinical fields that can legitimately be missing.
-
-        The extraction prompt tells Gemini to omit ANY field it has no
-        info for (create_extraction_prompt, instruction #2) — so every
-        top-level section is a candidate for this, not just patient
-        identity. Enumerated here:
-          - informacion_paciente: non-clinical, normalized to {} if
-            missing/malformed. A consultation whose audio never states
-            the patient's name is normal input — the doctor fills gaps
-            on the existing review screen.
-          - metadata: non-clinical, normalized to {} if missing/malformed
-            for the same reason (previously defaulted ad hoc in app.py's
-            _run_job right before writing fecha_hora_consulta into it —
-            centralized here instead so there's one place that owns
-            "which fields can be structurally absent").
-          - roles_detectados, actualizacion_antecedentes: non-clinical,
-            but genuinely optional/not-applicable rather than "omitted
-            despite being expected" (roles_detectados only exists at all
-            for speaker-diarized transcripts; actualizacion_antecedentes
-            is a conditional detector field) — every reader already uses
-            .get()/optional-chaining, so there's no crash to guard
-            against and normalizing them here would misrepresent
-            "not applicable" as "empty".
-          - subjetivo/objetivo/evaluacion/plan: clinical content, NOT
-            individually required — see the has_content check below,
-            which requires at least one of the four, not all. That is
-            the real "did we extract anything at all" failure and must
-            stay a hard failure, not be normalized away.
-
-        Never invent values: this only fills in structural emptiness,
-        never clinical content.
-
-        Args:
-            data: Extracted data dictionary
-
-        Returns:
-            Tuple of (is_valid, error_message)
-        """
-        for section in ("informacion_paciente", "metadata"):
-            if not isinstance(data.get(section), dict):
-                data[section] = {}
-
-        # Already run once in extract_structured_data, before the CIE-11
-        # lookup; idempotent, kept here so every validated note has it.
-        normalize_evaluacion(data)
-
-        # Check that at least some meaningful data was extracted
-        has_content = False
-        for section in ["subjetivo", "objetivo", "evaluacion", "plan"]:
-            if section in data and data[section]:
-                has_content = True
-                break
-        
-        if not has_content:
-            return False, "No meaningful medical data extracted"
-        
-        return True, None
+        """Structural validation + normalisation in place — see
+        extraction_core.validate_against_schema (#83) for the rules."""
+        return validate_against_schema(data)
 
 
 

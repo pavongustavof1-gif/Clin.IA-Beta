@@ -7,12 +7,10 @@
 # static by Flask itself) and excluding any of them would break the app
 # on boot or on first request, not just at build time.
 #
-# schema.json is NOT excluded either, but as of Stage E1 it's no longer
-# loaded by anything (llm_processor's self.schema load was dead code —
-# validate_against_schema does its own manual field checks — and was
-# removed). Left un-excluded anyway since there's no cost to it staying
-# in the image; if it's still unused later, dropping it is a separate,
-# deliberate call, not a side effect of a .dockerignore edit.
+# extraction_schema.json (the JSON Schema of the model's output, #83) is a
+# documentation/test artifact read only by tests/test_extraction_core.py and
+# the bake-off harness; nothing at runtime loads it. The old, stale
+# schema.json was deleted in 0.8.11.
 
 # Local virtualenv — ~165MB, never needed inside the image (requirements.txt
 # is installed fresh via pip in the Dockerfile)

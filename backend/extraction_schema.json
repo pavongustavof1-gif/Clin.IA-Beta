@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://clinianotes.com/schemas/extraction-0.8.11.json",
+  "title": "Nota SOAP extraída (salida del modelo)",
+  "description": "#83 (0.8.11): the JSON object the extraction prompt (extraction_core.create_extraction_prompt) asks the model for, field by field. Every field is optional — the prompt says to omit any field without information — so there is no \"required\" anywhere (compatible with a strict:false response_format). Extra fields are allowed: production's own checks are extraction_core.validate_against_schema and the CIE-11 step, not this schema. Codes and titles (codigo_cie11, titulo_cie11, cie11_fuente) are deliberately absent: the model must not produce them (prompt rule 8); the server adds them from the WHO lookup after extraction.",
+  "type": "object",
+  "properties": {
+    "roles_detectados": {
+      "type": "object",
+      "description": "Only with speaker-labeled utterances: the clinical role of each \"Hablante X\". The prompt asks for médico|paciente|familiar|enfermera; app._friendly_speaker_label accepts case/accent variants, so values are typed as strings, not an enum.",
+      "propertyNames": { "pattern": "^Hablante " },
+      "additionalProperties": { "type": "string" }
+    },
+    "informacion_paciente": {
+      "type": "object",
+      "properties": {
+        "nombre_del_paciente": { "type": "string" },
+        "fecha_de_nacimiento": { "type": "string", "description": "DD/MM/YYYY" },
+        "edad": { "type": "string" },
+        "genero": { "type": "string" },
+        "numero_expediente": { "type": "string" },
+        "curp": { "type": "string", "description": "Only if stated in the consultation; never generated." }
+      }
+    },
+    "subjetivo": {
+      "type": "object",
+      "properties": {
+        "motivo_de_consulta": { "type": "string" },
+        "sintomas": { "type": "array", "items": { "type": "string" } },
+        "historia_de_enfermedad_actual": { "type": "string" },
+        "duracion_sintomas": { "type": "string" }
+      }
+    },
+    "objetivo": {
+      "type": "object",
+      "properties": {
+        "signos_vitales": {
+          "type": "object",
+          "properties": {
+            "presion_arterial": { "type": "string" },
+            "frecuencia_cardiaca": { "type": "string" },
+            "temperatura": { "type": "string" },
+            "frecuencia_respiratoria": { "type": "string" },
+            "saturacion_oxigeno": { "type": "string" },
+            "peso": { "type": "string" },
+            "talla": { "type": "string" }
+          }
+        },
+        "habitus_exterior": { "type": "string" },
+        "examen_fisico": { "type": "string" },
+        "hallazgos": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "evaluacion": {
+      "type": "object",
+      "properties": {
+        "diagnostico": { "type": "string" },
+        "diagnosticos_adicionales": { "type": "array", "items": { "type": "string" } },
+        "impresion_clinica": { "type": "string" },
+        "pronostico": { "type": "string" },
+        "termino_busqueda_cie11": {
+          "type": "string",
+          "description": "Internal (prompt rule 9): the shortest standard wording of the principal condition, only words from diagnostico. Used for the WHO lookup and removed before the review screen."
+        }
+      }
+    },
+    "plan": {
+      "type": "object",
+      "properties": {
+        "tratamiento": { "type": "string" },
+        "medicamentos": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "nombre": { "type": "string" },
+              "dosis": { "type": "string" },
+              "frecuencia": { "type": "string" },
+              "duracion": { "type": "string" }
+            }
+          }
+        },
+        "recomendaciones": { "type": "array", "items": { "type": "string" } },
+        "estudios_solicitados": { "type": "array", "items": { "type": "string" } },
+        "seguimiento": { "type": "string" }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "properties": {
+        "fecha_consulta": { "type": "string" },
+        "medico": { "type": "string" },
+        "duracion_consulta": { "type": "string" }
+      }
+    },
+    "actualizacion_antecedentes": {
+      "type": "object",
+      "properties": {
+        "detectado": {
+          "description": "The prompt asks for \"true o false\"; models return either a JSON boolean or the string.",
+          "anyOf": [
+            { "type": "boolean" },
+            { "type": "string", "enum": ["true", "false"] }
+          ]
+        },
+        "contenido": { "type": "string" }
+      }
+    }
+  }
+}

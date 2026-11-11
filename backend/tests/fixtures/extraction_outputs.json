@@ -1,0 +1,68 @@
+{
+  "_comment": "Invented model responses (no PHI), one per prompt_inputs.json case, shaped as the extraction prompt asks. Validated against extraction_schema.json and extraction_core.validate_against_schema by tests/test_extraction_core.py.",
+  "lumbalgia_dos_hablantes": {
+    "roles_detectados": {"Hablante A": "médico", "Hablante B": "paciente"},
+    "subjetivo": {
+      "motivo_de_consulta": "Dolor en la espalda baja",
+      "sintomas": ["dolor en la espalda baja"],
+      "historia_de_enfermedad_actual": "Inicia el sábado tras cargar unas cajas.",
+      "duracion_sintomas": "desde el sábado"
+    },
+    "objetivo": {
+      "examen_fisico": "Contractura paravertebral lumbar.",
+      "hallazgos": ["contractura paravertebral lumbar"]
+    },
+    "evaluacion": {
+      "diagnostico": "Lumbalgia por contractura muscular secundaria a esfuerzo físico",
+      "termino_busqueda_cie11": "Lumbalgia"
+    },
+    "plan": {
+      "medicamentos": [
+        {"nombre": "Paracetamol", "dosis": "500 mg", "frecuencia": "cada 8 horas", "duracion": "5 días"}
+      ],
+      "recomendaciones": ["Evitar cargar peso"],
+      "seguimiento": "Regresar en una semana si no mejora."
+    }
+  },
+  "diabetes_tres_hablantes": {
+    "roles_detectados": {"Hablante A": "médico", "Hablante B": "paciente", "Hablante C": "familiar"},
+    "informacion_paciente": {"edad": "58 años"},
+    "subjetivo": {
+      "motivo_de_consulta": "Control de diabetes",
+      "historia_de_enfermedad_actual": "Apego irregular a la dieta y olvidos ocasionales de la metformina."
+    },
+    "objetivo": {
+      "signos_vitales": {"presion_arterial": "130/85 mmHg"},
+      "hallazgos": ["glucosa capilar de 210 mg/dL"]
+    },
+    "evaluacion": {
+      "diagnostico": "Diabetes mellitus tipo 2 con control glucémico subóptimo",
+      "pronostico": "Reservado a evolución",
+      "termino_busqueda_cie11": "Diabetes mellitus tipo 2"
+    },
+    "plan": {
+      "medicamentos": [
+        {"nombre": "Metformina", "dosis": "850 mg", "frecuencia": "cada 12 horas", "duracion": "continuar"}
+      ],
+      "estudios_solicitados": ["Hemoglobina glucosilada"]
+    },
+    "actualizacion_antecedentes": {
+      "detectado": true,
+      "contenido": "Hermano con diagnóstico reciente de hipertensión arterial."
+    }
+  },
+  "comillas_y_llaves": {
+    "roles_detectados": {"Hablante 1": "médico", "Hablante 2": "paciente"},
+    "subjetivo": {"motivo_de_consulta": "Texto con 'comillas', llaves {como esta} y acentos ñ ü é"},
+    "metadata": {},
+    "actualizacion_antecedentes": {"detectado": "false"}
+  },
+  "plano_sin_hablantes": {
+    "subjetivo": {
+      "motivo_de_consulta": "Seguimiento",
+      "sintomas": [],
+      "historia_de_enfermedad_actual": "Refiere mejoría, sin pirexia desde ayer."
+    },
+    "evaluacion": {"impresion_clinica": "Evolución favorable"}
+  }
+}

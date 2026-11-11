@@ -4,7 +4,6 @@
 import re
 import threading
 import time
-import unicodedata
 
 import requests
 from config import Config
@@ -159,23 +158,10 @@ def _get_token() -> str | None:
             return None
 
 
-# ── Content words (0.8.7 term guard; 0.8.8 relevance check) ────────────────
-# Function words ignored when comparing texts. "tipo" etc. stay: they carry
-# meaning ("Diabetes mellitus tipo 2").
-CONTENT_STOPWORDS = frozenset({
-    'a', 'al', 'con', 'de', 'del', 'e', 'el', 'en', 'la', 'las', 'lo', 'los',
-    'o', 'para', 'por', 'que', 'se', 'sin', 'su', 'sus', 'u', 'un', 'una',
-    'unas', 'unos', 'y',
-})
-
-
-def content_words(text) -> set:
-    """Lowercased, accent-free whole words, stopwords removed. Non-str → empty."""
-    if not isinstance(text, str):
-        return set()
-    folded = unicodedata.normalize('NFKD', text.lower())
-    folded = ''.join(ch for ch in folded if not unicodedata.combining(ch))
-    return {w for w in re.findall(r'[a-z0-9]+', folded) if w not in CONTENT_STOPWORDS}
+# ── Content words ─────────────────────────────────────────────────────────
+# The normaliser shared by the term guard and the relevance check lives in
+# extraction_core (#83, pure); imported here so both use the same one.
+from extraction_core import CONTENT_STOPWORDS, content_words  # noqa: E402,F401
 
 
 def is_relevant(matched_text, searched_text) -> bool:
