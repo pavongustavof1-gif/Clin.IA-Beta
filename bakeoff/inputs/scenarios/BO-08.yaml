@@ -7,8 +7,7 @@ audio_minutes: 2
 speakers_expected: 2      # what the app sent for this recording
 consulta: "2026-11-05 09:15"
 
-checks:
-  # draft: confirm against cached transcript
+checks:                   # confirmed against the cached transcript
   must_contain:
     - text: "nitrofurantoína"
     - text: "100"
@@ -16,10 +15,11 @@ checks:
     - any_of: ["5 días", "cinco días"]
     - text: "examen general de orina"
     - text: "fiebre"
-  # draft: confirm against cached transcript
+    - any_of: ["ardor", "disuria", "arde"]
   must_not_contain:
     - text: "ceftriaxona"
     - text: "cuarto 3"
     - text: "séptimo día"
     - text: "higiénico-dietétic"
+    - text: "me hace muchísimo"
   must_have_fields: []

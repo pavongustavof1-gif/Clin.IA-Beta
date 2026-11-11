@@ -34,7 +34,8 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
    AssemblyAI afterwards, as in production. Cached in `cache/<id>.json`; never
    repeated unless you pass `--force`. Text scenarios need no transcription.
 2. **Confirm the checks.** Read each `cache/<id>.json` and fix the scenario's
-   `checks` (they are marked `# draft: confirm against cached transcript`).
+   `checks`. BO-02/06/08 are already confirmed; a new scenario's checks start as a
+   draft until compared with its cached transcript.
 3. **`estimate`**: dry run with no network: calls, tokens and cost per model.
 4. **Smoke test**: `extract --scenarios BO-08 --runs 1` (4 calls) to confirm every
    model accepts the request (schema, parameters) before the full run.

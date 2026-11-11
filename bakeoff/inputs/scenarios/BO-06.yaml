@@ -7,13 +7,13 @@ audio_minutes: 3
 speakers_expected: 2      # what the app sent for this recording
 consulta: "2026-11-04 11:30"
 
-checks:
-  # draft: confirm against cached transcript
+checks:                   # confirmed against the cached transcript
   must_contain:
     - text: "naproxeno"
     - text: "250"
     - any_of: ["3 días", "tres días"]
-  # draft: confirm against cached transcript
+    - any_of: ["5 días", "cinco días"]
+    - text: "urgencias"
   must_not_contain:
     - path: objetivo
       text: "muslo"

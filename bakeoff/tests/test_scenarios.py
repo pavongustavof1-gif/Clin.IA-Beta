@@ -20,8 +20,14 @@ def test_committed_scenarios_load():
     for s in loaded.values():
         assert s.consulta and s.speakers_expected > 0 and s.checks['must_contain']
     assert {'path': 'plan.medicamentos', 'text': 'ibuprofeno'} in loaded['BO-06'].checks['must_not_contain']
+    # Checks confirmed against the cached transcripts (no draft notes left).
+    assert {'any_of': ['3 meses', 'tres meses']} in loaded['BO-02'].checks['must_contain']
+    assert {'text': '1000 miligramos'} in loaded['BO-02'].checks['must_not_contain']
+    assert {'text': 'urgencias'} in loaded['BO-06'].checks['must_contain']
+    assert {'any_of': ['ardor', 'disuria', 'arde']} in loaded['BO-08'].checks['must_contain']
+    assert {'text': 'me hace muchísimo'} in loaded['BO-08'].checks['must_not_contain']
     for f in paths.SCENARIOS.glob('*.yaml'):
-        assert '# draft: confirm against cached transcript' in f.read_text(encoding='utf-8')
+        assert 'draft' not in f.read_text(encoding='utf-8')
 
 
 @pytest.mark.parametrize('datos', ['', 'datos: reales\n', 'datos: Inventados\n', 'datos: true\n'])
