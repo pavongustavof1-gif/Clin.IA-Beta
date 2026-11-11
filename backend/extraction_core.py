@@ -335,3 +335,117 @@ def validate_against_schema(data: Dict) -> tuple[bool, Optional[str]]:
         return False, "No meaningful medical data extracted"
     
     return True, None
+
+
+# ── Wire schema for structured output (#83 bake-off; reusable for #81) ─────
+# extraction_schema.json documents the output in full JSON Schema 2020-12.
+# Providers accept only a subset in response_format, and the #83 smoke test
+# (2026-11-11) got HTTP 400 from all four models for propertyNames:
+#   Bedrock/Claude: "For 'object' type, property 'propertyNames' is not supported"
+#   Vertex/Gemini:  'Unknown name "propertyNames" at generation_config.response_schema'
+# wire_schema() returns the copy that is SENT; the full schema stays the
+# documentation (and what tests validate against). Sources, read 2026-11-11:
+#   Vertex: docs.cloud.google.com/vertex-ai/generative-ai/docs/multimodal/control-generated-output
+#     ("supported" list: anyOf, enum, format, items, maximum, maxItems, minimum,
+#     minItems, nullable, properties, description, propertyOrdering, required;
+#     enum: "only non-empty string elements"; the request is the OpenAPI-subset
+#     Schema object, so a name that object lacks is rejected, not ignored).
+#   Bedrock: docs.aws.amazon.com/bedrock/latest/userguide/structured-output.html
+#     (no numerical or string-length constraints, minItems only 0/1,
+#     "additionalProperties set to anything other than false" unsupported).
+
+# Keywords removed wherever they appear in a schema node, and why:
+WIRE_SCHEMA_DROPPED = {
+    '$schema': 'meta key; no field in Vertex Schema',
+    '$id': 'meta key; no field in Vertex Schema',
+    '$comment': 'documentation only; no field in Vertex Schema',
+    'title': 'documentation only; not in Vertex supported list, not documented by Bedrock',
+    'propertyNames': 'rejected by both (smoke test 2026-11-11)',
+    'pattern': 'not in Vertex supported list; Bedrock restricts the regex dialect',
+    'minLength': 'unsupported by Bedrock', 'maxLength': 'unsupported by Bedrock',
+    'minimum': 'unsupported by Bedrock', 'maximum': 'unsupported by Bedrock',
+    'exclusiveMinimum': 'unsupported by Bedrock', 'exclusiveMaximum': 'unsupported by Bedrock',
+    'multipleOf': 'unsupported by Bedrock',
+    'minItems': 'Bedrock allows only 0/1', 'maxItems': 'unsupported by Bedrock',
+    'minProperties': 'not in either supported list', 'maxProperties': 'not in either supported list',
+    'default': 'not in Vertex supported list; Bedrock does not enforce it',
+    'examples': 'not in either supported list',
+}
+
+# Keywords that can't be dropped without changing what the schema means:
+# wire_schema refuses them, so a future edit to extraction_schema.json that
+# needs them fails in tests instead of at the provider.
+#   oneOf/not/const/if: absent from Vertex Schema; $ref/$defs: Vertex spells
+#   them ref/defs (root only) and lists neither as supported; allOf: absent
+#   from Vertex, limited on Bedrock; format: values differ between providers.
+WIRE_SCHEMA_REFUSED = frozenset({'oneOf', 'allOf', 'not', 'const', 'if', 'then', 'else',
+                                 '$ref', '$defs', 'definitions', 'format', 'patternProperties'})
+
+# roles_detectados is a map "Hablante X" -> role. A map needs
+# additionalProperties as a schema, which Bedrock rejects and Vertex ignores
+# (leaving an object with no properties). On the wire it becomes fixed
+# optional properties: one per speaker label of THIS transcript
+# (speaker_labels(utterances) gives the same "Hablante X" text the prompt
+# shows). Without labels (no diarized utterances, where the prompt doesn't
+# ask for roles) the map property is left out entirely: Vertex rejects an
+# OBJECT with no properties.
+
+
+def speaker_labels(utterances) -> list:
+    """["Hablante A", "Hablante B", …] in first-appearance order, exactly as
+    create_extraction_prompt labels the utterances."""
+    labels = []
+    for u in utterances or []:
+        label = f"Hablante {u['speaker']}"
+        if label not in labels:
+            labels.append(label)
+    return labels
+
+
+def wire_schema(schema: dict, map_keys=()) -> dict:
+    """The structured-output copy of `schema` to send to an LLM provider.
+    Never mutates `schema`. Drops WIRE_SCHEMA_DROPPED keywords, turns a map
+    object (additionalProperties = a schema, no properties) into fixed
+    properties named `map_keys` (usually speaker_labels(utterances)) or
+    leaves it out when there are none, and raises ValueError on anything in
+    WIRE_SCHEMA_REFUSED, type arrays or non-string enums."""
+
+    def node(sch, where):
+        """The wire copy of one schema node, or None for a map with no keys."""
+        if not isinstance(sch, dict):
+            raise ValueError(f'{where}: schema node is not an object')
+        bad = WIRE_SCHEMA_REFUSED & set(sch)
+        if bad:
+            raise ValueError(f'{where}: unsupported on the wire: {sorted(bad)}')
+        if isinstance(sch.get('type'), list):
+            raise ValueError(f'{where}: type arrays are not supported by Vertex')
+        if 'enum' in sch and not all(isinstance(v, str) and v for v in sch['enum']):
+            raise ValueError(f'{where}: Vertex enums must be non-empty strings')
+        is_map = isinstance(sch.get('additionalProperties'), dict) and 'properties' not in sch
+        if is_map and not map_keys:
+            return None
+        out = {}
+        for key, value in sch.items():
+            if key in WIRE_SCHEMA_DROPPED:
+                continue
+            if key == 'properties':
+                props = {name: node(sub, f'{where}.{name}') for name, sub in value.items()}
+                out[key] = {name: sub for name, sub in props.items() if sub is not None}
+            elif key == 'items':
+                out[key] = node(value, f'{where}[]')
+            elif key == 'anyOf':
+                out[key] = [node(sub, f'{where}|{i}') for i, sub in enumerate(value)]
+            elif key == 'additionalProperties':
+                if is_map:
+                    out['properties'] = {k: node(value, f'{where}.{k}') for k in map_keys}
+                elif value is False:
+                    out[key] = False
+                # True (the default), or a schema next to named properties: omitted
+            else:
+                out[key] = value
+        return out
+
+    result = node(schema, '$')
+    if result is None:
+        raise ValueError('$: the root schema is a map with no keys')
+    return result

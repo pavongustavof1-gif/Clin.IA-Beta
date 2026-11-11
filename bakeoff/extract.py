@@ -16,6 +16,11 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+# How much of a failed call's error body is printed on the console (the
+# full body is always in the run file's raw_error_body).
+ERROR_PREVIEW_CHARS = 300
+
+
 def run_path(scenario_id: str, model_name: str, run: int, runs_dir: Path | None = None) -> Path:
     safe = model_name.replace('@', '_at_')
     return (runs_dir or paths.RUNS) / scenario_id / f'{safe}__run{run}.json'
@@ -60,6 +65,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
         (lambda s, m, r: is_done(run_path(s.id, m.name, r, runs_dir)))
     # The budget check uses the real prompts these calls will send.
     prompts = {s.id: core.build_prompt(utterances_for(s)) for s in scenarios}
+    schemas = {s.id: core.gateway_schema(utterances_for(s)) for s in scenarios}   # roles keys = its speakers
     lines = []
     for spec in specs:
         calls = sum(1 for s in scenarios for r in range(1, runs + 1) if not planned_done(s, spec, r))
@@ -75,12 +81,11 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
     if total > budget:
         raise BudgetExceeded(f'estimated {total:.4f} USD exceeds BAKEOFF_BUDGET_USD={budget:.2f} — nothing was sent')
 
-    schema = core.gateway_schema()
     written = []
     for s in scenarios:
         prompt = prompts[s.id]
         for spec in specs:
-            body = gateway.build_request(spec, prompt, schema)
+            body = gateway.build_request(spec, prompt, schemas[s.id])
             for r in range(1, runs + 1):
                 target = run_path(s.id, spec.name, r, runs_dir)
                 if not force and is_done(target):
@@ -114,6 +119,9 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                 target.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding='utf-8')
                 written.append(target)
                 status = 'ok' if pv['parse_ok'] and pv['valid'] else (res['error'] or pv['parse_error'] or pv['validation_error'])
+                if res['http_status'] != 200 and res['raw_body']:
+                    # The provider's reason (e.g. a rejected schema keyword), one line.
+                    status += ': ' + ' '.join(res['raw_body'].split())[:ERROR_PREVIEW_CHARS]
                 log(f'{s.id} {spec.name} run {r}: {status} ({res["latency_s"]:.1f} s, {cost if cost is not None else "?"} USD)')
     return written
 

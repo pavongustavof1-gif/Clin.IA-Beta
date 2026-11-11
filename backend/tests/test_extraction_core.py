@@ -323,3 +323,70 @@ def test_importing_extraction_core_loads_no_environment(tmp_path):
                  'llm_processor', 'requests'}
     assert not {m.split('.')[0] for m in out['new_modules']} & forbidden, out['new_modules']
     assert out['prompt_ok'] is True and out['valid'] == [True, None]
+
+
+# ── wire_schema (#83 smoke test: providers rejected propertyNames) ─────────
+
+def _schema_keys(sch):
+    return {k for n in _walk(sch) for k in n}
+
+
+def test_wire_schema_drops_unsupported_keywords_and_leaves_the_file_alone():
+    before = (BACKEND / 'extraction_schema.json').read_bytes()
+    full = json.loads(before)
+    wire = extraction_core.wire_schema(full, ['Hablante A', 'Hablante B'])
+    assert full == json.loads(before)                         # not mutated
+    assert (BACKEND / 'extraction_schema.json').read_bytes() == before
+    keys = _schema_keys(wire)
+    assert not keys & set(extraction_core.WIRE_SCHEMA_DROPPED), keys
+    assert not keys & extraction_core.WIRE_SCHEMA_REFUSED
+    assert 'additionalProperties' not in keys
+    assert keys <= {'description', 'type', 'properties', 'items', 'anyOf', 'enum'}
+    roles = wire['properties']['roles_detectados']
+    assert roles['properties'] == {'Hablante A': {'type': 'string'}, 'Hablante B': {'type': 'string'}}
+    assert 'roles_detectados' not in extraction_core.wire_schema(full)['properties']   # no speakers, no map
+    assert set(wire['properties']) == set(full['properties'])
+
+
+@pytest.mark.parametrize('name', sorted(OUTPUTS))
+def test_wire_schema_accepts_what_the_full_schema_accepts(name):
+    labels = extraction_core.speaker_labels(INPUTS[name]['utterances'])
+    wire = extraction_core.wire_schema(SCHEMA, labels)
+    out = OUTPUTS[name]
+    assert _validate(out, wire) == []
+    if 'roles_detectados' in out:      # every speaker the model names has a property on the wire
+        assert set(out['roles_detectados']) <= set(wire['properties']['roles_detectados']['properties'])
+
+
+def test_speaker_labels_match_the_prompt():
+    for name, case in INPUTS.items():
+        prompt = extraction_core.create_extraction_prompt('', case['utterances'])
+        for label in extraction_core.speaker_labels(case['utterances']):
+            assert f'[{label}]:' in prompt
+    assert extraction_core.speaker_labels([{'speaker': 'B', 'text': ''}, {'speaker': 'A', 'text': ''},
+                                           {'speaker': 'B', 'text': ''}]) == ['Hablante B', 'Hablante A']
+    assert extraction_core.speaker_labels(None) == []
+
+
+@pytest.mark.parametrize('bad', [
+    {'type': 'object', 'properties': {'a': {'$ref': '#/$defs/x'}}},
+    {'type': 'object', 'properties': {'a': {'oneOf': [{'type': 'string'}]}}},
+    {'type': 'object', 'properties': {'a': {'const': 'x'}}},
+    {'type': 'object', 'properties': {'a': {'type': ['string', 'null']}}},
+    {'type': 'object', 'properties': {'a': {'type': 'string', 'format': 'email'}}},
+    {'type': 'object', 'properties': {'a': {'enum': [True, False]}}},
+    {'type': 'array', 'items': {'allOf': [{'type': 'string'}]}},
+])
+def test_wire_schema_refuses_what_it_cannot_drop(bad):
+    with pytest.raises(ValueError):
+        extraction_core.wire_schema(bad)
+
+
+def test_wire_schema_strips_constraints_but_keeps_property_names_like_title():
+    sch = {'title': 'x', 'type': 'object', 'properties': {
+        'title': {'type': 'string', 'pattern': '^a', 'maxLength': 3},
+        'n': {'type': 'array', 'minItems': 2, 'items': {'type': 'string'}},
+        'closed': {'type': 'object', 'additionalProperties': False, 'properties': {}}}}
+    assert extraction_core.wire_schema(sch) == {'type': 'object', 'properties': {
+        'title': {'type': 'string'}, 'n': {'type': 'array', 'items': {'type': 'string'}},
+        'closed': {'type': 'object', 'additionalProperties': False, 'properties': {}}}}

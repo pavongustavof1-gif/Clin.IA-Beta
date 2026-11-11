@@ -34,12 +34,12 @@ def load_schema() -> dict:
     return json.loads(paths.EXTRACTION_SCHEMA.read_text(encoding='utf-8'))
 
 
-def gateway_schema() -> dict:
-    """The schema as sent in response_format: the same document minus the
-    JSON-Schema meta keys ($schema, $id), which describe the file rather than
-    the output and which some providers reject. Fields and types unchanged."""
-    schema = load_schema()
-    return {k: v for k, v in schema.items() if k not in ('$schema', '$id')}
+def gateway_schema(utterances=None) -> dict:
+    """The schema as sent in response_format: extraction_core.wire_schema() of
+    backend/extraction_schema.json — keywords the providers reject removed,
+    the roles map turned into one property per speaker of this transcript
+    (left out when there are none). The full schema file is never modified."""
+    return extraction_core.wire_schema(load_schema(), extraction_core.speaker_labels(utterances))
 
 
 def build_prompt(utterances: list) -> str:

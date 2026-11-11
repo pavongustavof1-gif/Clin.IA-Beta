@@ -34,15 +34,54 @@ def test_prompt_matches_productions_golden_file():
 def test_the_request_carries_exactly_that_prompt(models_cfg):
     case = _case('diabetes_tres_hablantes')
     for spec in models_cfg.models.values():
-        body = gateway.build_request(spec, core.build_prompt(case['utterances']), core.gateway_schema())
+        body = gateway.build_request(spec, core.build_prompt(case['utterances']), core.gateway_schema(case['utterances']))
         assert body['messages'] == [{'role': 'user', 'content': _golden('diabetes_tres_hablantes')}]
 
 
-def test_schema_sent_is_the_backend_schema_minus_meta_keys():
+def _keys(sch):
+    """Every keyword used in schema position (never property names)."""
+    found = set(sch)
+    for sub in sch.get('properties', {}).values():
+        found |= _keys(sub)
+    for key in ('items', 'additionalProperties', 'propertyNames'):
+        if isinstance(sch.get(key), dict):
+            found |= _keys(sch[key])
+    for sub in sch.get('anyOf', []):
+        found |= _keys(sub)
+    return found
+
+
+def test_schema_sent_is_the_wire_schema():
     full = core.load_schema()
-    sent = core.gateway_schema()
-    assert {k: v for k, v in full.items() if k not in ('$schema', '$id')} == sent
-    assert sent['properties'] == full['properties']
+    utts = _case('diabetes_tres_hablantes')['utterances']
+    sent = core.gateway_schema(utts)
+    assert sent == core.extraction_core.wire_schema(full, ['Hablante A', 'Hablante C', 'Hablante B'])
+    keys = _keys(sent)
+    assert not keys & set(core.extraction_core.WIRE_SCHEMA_DROPPED), keys
+    assert not keys & core.extraction_core.WIRE_SCHEMA_REFUSED
+    assert 'propertyNames' not in json.dumps(sent) and 'additionalProperties' not in keys
+    assert set(sent['properties']) == set(full['properties'])
+    assert list(sent['properties']['roles_detectados']['properties']) == ['Hablante A', 'Hablante C', 'Hablante B']
+    assert 'roles_detectados' not in core.gateway_schema([])      # flat transcript: no roles asked for
+    assert sent['properties']['actualizacion_antecedentes']['properties']['detectado']['anyOf'] == \
+        full['properties']['actualizacion_antecedentes']['properties']['detectado']['anyOf']
+
+
+def test_full_schema_is_untouched_by_building_the_wire_schema():
+    before = paths.EXTRACTION_SCHEMA.read_bytes()
+    full = core.load_schema()
+    snapshot = json.loads(json.dumps(full))
+    core.gateway_schema()
+    core.extraction_core.wire_schema(full)
+    assert full == snapshot
+    assert paths.EXTRACTION_SCHEMA.read_bytes() == before
+    assert full['properties']['roles_detectados']['propertyNames'] == {'pattern': '^Hablante '}
+
+
+def test_request_body_carries_the_wire_schema(models_cfg):
+    spec = models_cfg.models['claude-haiku-5-5']
+    body = gateway.build_request(spec, 'x', core.gateway_schema(_case('lumbalgia_dos_hablantes')['utterances']))
+    assert 'propertyNames' not in json.dumps(body)
 
 
 def test_parser_and_validator_are_productions():

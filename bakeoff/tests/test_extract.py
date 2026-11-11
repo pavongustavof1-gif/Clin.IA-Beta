@@ -96,3 +96,29 @@ def test_http_failure_recorded_without_note(tmp_path, text_scenario, models_cfg)
     rec = json.loads((tmp_path / 'runs' / 'BO-T1' / 'claude-haiku-5-5__run1.json').read_text(encoding='utf-8'))
     assert rec['http_status'] == 400 and rec['error'] == 'http_400' and rec['parse_ok'] is False
     assert rec['raw_error_body'] and rec['cost_usd'] is None
+
+
+def test_failed_call_prints_the_error_body(tmp_path, text_scenario, models_cfg):
+    reason = 'ValidationException: output_config.format.schema: property \'propertyNames\' is not supported'
+    long_body = {'message': reason + ' ' + 'x' * 1000, 'code': 400}
+
+    def post(url, json=None, headers=None, timeout=None):
+        return FakeResponse(400, long_body)
+    lines = []
+    extract.extract([text_scenario], [models_cfg.models['claude-haiku-5-5']], 1, models_cfg, SETTINGS,
+                    lambda s: UTTERANCES, runs_dir=tmp_path / 'runs', post=post, sleep=lambda s: None,
+                    log=lines.append)
+    line = lines[-1]
+    assert 'http_400: ' in line and reason in line
+    preview = line.split('http_400: ', 1)[1].rsplit(' (', 1)[0]
+    assert len(preview) == extract.ERROR_PREVIEW_CHARS
+    rec = json.loads((tmp_path / 'runs' / 'BO-T1' / 'claude-haiku-5-5__run1.json').read_text(encoding='utf-8'))
+    assert json.loads(rec['raw_error_body']) == long_body      # the full body is still kept
+
+
+def test_successful_call_prints_no_body(tmp_path, text_scenario, models_cfg):
+    lines = []
+    extract.extract([text_scenario], [models_cfg.models['claude-haiku-5-5']], 1, models_cfg, SETTINGS,
+                    lambda s: UTTERANCES, runs_dir=tmp_path / 'runs', post=_post()[0], sleep=lambda s: None,
+                    log=lines.append)
+    assert ': ok (' in lines[-1]
