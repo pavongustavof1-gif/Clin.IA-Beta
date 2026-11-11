@@ -1,0 +1,23 @@
+# Invented consultation — never a real patient.
+id: BO-02
+title: "Diabetes mellitus tipo 2 — control y ajuste de tratamiento"
+datos: inventados
+audio: BO-02_diabetes/BO-02_diabetes_toma2_3min.m4a   # relative to BAKEOFF_AUDIO_DIR
+audio_minutes: 3          # only used by `estimate` before the audio is transcribed
+speakers_expected: 2      # what the app sent for this recording
+consulta: "2026-11-03 10:00"
+
+checks:
+  # draft: confirm against cached transcript
+  must_contain:
+    - text: "168"
+    - any_of: ["8.2", "8,2"]
+    - text: "850"
+    - text: "empagliflozina"
+    - text: "10 mg"
+    - any_of: ["por la mañana", "matutin", "en la mañana"]
+  # draft: confirm against cached transcript
+  must_not_contain:
+    - text: "1000 mg"
+    - text: "indefinid"
+  must_have_fields: []

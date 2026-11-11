@@ -1,0 +1,25 @@
+# Invented consultation — never a real patient.
+id: BO-08
+title: "Infección de vías urinarias no complicada"
+datos: inventados
+audio: BO-08_ivu/BO-08_ivu_2min.m4a                   # relative to BAKEOFF_AUDIO_DIR
+audio_minutes: 2
+speakers_expected: 2      # what the app sent for this recording
+consulta: "2026-11-05 09:15"
+
+checks:
+  # draft: confirm against cached transcript
+  must_contain:
+    - text: "nitrofurantoína"
+    - text: "100"
+    - text: "12 horas"
+    - any_of: ["5 días", "cinco días"]
+    - text: "examen general de orina"
+    - text: "fiebre"
+  # draft: confirm against cached transcript
+  must_not_contain:
+    - text: "ceftriaxona"
+    - text: "cuarto 3"
+    - text: "séptimo día"
+    - text: "higiénico-dietétic"
+  must_have_fields: []

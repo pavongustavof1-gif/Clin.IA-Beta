@@ -1,0 +1,8 @@
+# bakeoff/requirements.txt — the #83 bake-off harness's own environment
+# (Python 3.11, separate from backend/venv). Install:
+#   /opt/homebrew/bin/python3.11 -m venv bakeoff/venv
+#   bakeoff/venv/bin/pip install -r bakeoff/requirements.txt
+assemblyai==0.64.2   # same pinned SDK as production (backend/requirements.txt)
+requests==2.32.3
+PyYAML==6.0.2
+pytest==8.3.3

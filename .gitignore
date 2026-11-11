@@ -14,3 +14,21 @@ venv/
 
 # Local working copies of roadmap documents — never committed
 Claude outputs/
+
+# #83 bake-off harness: secrets, outputs and audio stay local. Only code and
+# the invented scenario YAMLs / transcripts are committed.
+bakeoff/.env
+bakeoff/venv/
+bakeoff/cache/
+bakeoff/runs/
+bakeoff/blind/
+bakeoff/key/
+bakeoff/scores/
+*.m4a
+*.mp3
+*.wav
+*.ogg
+*.webm
+*.flac
+*.aac
+*.opus

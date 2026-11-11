@@ -1,0 +1,24 @@
+# Invented consultation — never a real patient.
+id: BO-06
+title: "Lumbalgia mecánica"
+datos: inventados
+audio: BO-06_lumbalgia/BO-06_lumbalgia_3min.m4a       # relative to BAKEOFF_AUDIO_DIR
+audio_minutes: 3
+speakers_expected: 2      # what the app sent for this recording
+consulta: "2026-11-04 11:30"
+
+checks:
+  # draft: confirm against cached transcript
+  must_contain:
+    - text: "naproxeno"
+    - text: "250"
+    - any_of: ["3 días", "tres días"]
+  # draft: confirm against cached transcript
+  must_not_contain:
+    - path: objetivo
+      text: "muslo"
+    - path: objetivo
+      text: "implícit"
+    - path: plan.medicamentos     # ibuprofeno may be mentioned, but never prescribed
+      text: "ibuprofeno"
+  must_have_fields: []

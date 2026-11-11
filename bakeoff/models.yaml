@@ -1,0 +1,80 @@
+# bakeoff/models.yaml — the models compared in the #83 bake-off.
+#
+# Sources (read 2026-11-11):
+#   IDs, supported parameters, prices:
+#     https://assemblyai.com/docs/llm-gateway/available-models
+#   In-region surcharge: https://www.assemblyai.com/pricing — "In-region
+#     (US/EU) pricing is 10% higher due to provider cost increases; add
+#     "model_region": "global" to your API requests to get the rates shown."
+#     The bake-off never sends model_region (the request stays in the US
+#     region, like a future production cutover would), so every call pays the
+#     listed rate + 10%.
+#   Request/usage shape: https://assemblyai.com/docs/api-reference/llm-gateway/create-chat-completion
+#
+# price_in / price_out: USD per 1M tokens at the listed (global) rate.
+# accepts_temperature: whether the model's "Supported parameters" list on
+#   available-models includes temperature (absent for Claude Haiku/Sonnet 5.5,
+#   so it is never sent to them).
+# est_output_tokens: ESTIMATE ONLY (for `estimate` and the budget check): a
+#   full SOAP JSON note is ~1,200-1,600 tokens; Gemini 2.5 Flash also bills its
+#   default "thinking" as output tokens, hence the higher figure. Replace with
+#   observed averages after the first runs (`tally` reports them).
+# optional: true = not run unless named with --models.
+
+surcharge: 0.10          # in-region +10% (see above)
+
+models:
+  gemini-2.5-flash:
+    model: gemini-2.5-flash
+    role: "baseline — production today"
+    price_in: 0.30
+    price_out: 2.50
+    accepts_temperature: true
+    est_output_tokens: 3500
+
+  gemini-3.5-flash-lite:
+    model: gemini-3.5-flash-lite
+    role: "what production silently becomes on 1 Dec"
+    price_in: 0.30
+    price_out: 2.50
+    accepts_temperature: true
+    est_output_tokens: 2500
+
+  claude-haiku-5-5:
+    model: claude-haiku-5-5
+    role: "candidate"
+    price_in: 0.10
+    price_out: 0.50
+    accepts_temperature: false
+    est_output_tokens: 1600
+
+  claude-sonnet-5-5:
+    model: claude-sonnet-5-5
+    role: "candidate"
+    price_in: 2.00
+    price_out: 10.00
+    accepts_temperature: false
+    est_output_tokens: 1600
+
+  # Optional 5th variant. available-models lists `reasoning_effort` among
+  # gemini-3.5-flash-lite's supported parameters, but neither that page nor
+  # the API reference documents its allowed values, so "low" is an
+  # unverified guess at the lowest setting. Run it explicitly
+  # (--models gemini-3.5-flash-lite@low) after a 1-call smoke test.
+  gemini-3.5-flash-lite@low:
+    model: gemini-3.5-flash-lite
+    role: "1 Dec model, lowest reasoning"
+    price_in: 0.30
+    price_out: 2.50
+    accepts_temperature: true
+    reasoning_effort: low
+    est_output_tokens: 1800
+    optional: true
+
+# Token estimation (no tokenizer offline). Spanish prompt text averages about
+# 3.5 characters per token; 3.0 is used to over- rather than under-estimate.
+# Audio scenarios not yet transcribed are sized from their audio_minutes at
+# ~900 transcript characters per minute of conversation (≈150 words/min).
+estimation:
+  chars_per_token: 3.0
+  transcript_chars_per_audio_minute: 900
