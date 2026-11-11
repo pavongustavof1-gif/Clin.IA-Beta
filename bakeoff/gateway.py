@@ -22,7 +22,7 @@ import requests
 GATEWAY_URL = 'https://llm-gateway.assemblyai.com/v1/chat/completions'
 MAX_TOKENS = 8192
 TEMPERATURE = 0.1          # production's GenerateContentConfig(temperature=0.1)
-TIMEOUT_S = 120
+TIMEOUT_S = 120            # default read timeout; models.yaml timeout_s sets it per model
 MAX_RETRIES = 3            # retries after the first attempt, for 429 and 5xx only
 SCHEMA_NAME = 'nota_soap'
 
@@ -92,8 +92,9 @@ def _retry_wait(response, attempt: int) -> float:
     return 2 ** attempt * 2 + random.uniform(0, 1)       # 2-3 s, 4-5 s, 8-9 s
 
 
-def call_gateway(body: dict, api_key: str, post=None, sleep=time.sleep, clock=time.monotonic) -> dict:
-    """POST with retries on 429/5xx (up to MAX_RETRIES), timeout TIMEOUT_S.
+def call_gateway(body: dict, api_key: str, post=None, sleep=time.sleep, clock=time.monotonic,
+                 timeout: float = TIMEOUT_S) -> dict:
+    """POST with retries on 429/5xx (up to MAX_RETRIES), `timeout` seconds per attempt.
     Timeouts and connection errors are recorded, not retried — a stuck 120 s
     call repeated 3 times would just burn time. Never raises."""
     post = post or requests.post
@@ -103,7 +104,7 @@ def call_gateway(body: dict, api_key: str, post=None, sleep=time.sleep, clock=ti
     for attempt in range(MAX_RETRIES + 1):
         attempts += 1
         try:
-            response = post(GATEWAY_URL, json=body, headers=headers, timeout=TIMEOUT_S)
+            response = post(GATEWAY_URL, json=body, headers=headers, timeout=timeout)
         except requests.RequestException as e:
             response, error = None, f'{type(e).__name__}'
             break
@@ -136,8 +137,22 @@ def content_of(body) -> str | None:
 
 def usage_of(body) -> dict:
     """Gateway usage: input_tokens / output_tokens (OpenAI-style names accepted
-    as a fallback)."""
+    as a fallback), plus reasoning_tokens when the response reports them.
+
+    The API reference documents only input/output/total_tokens, but the
+    2026-11-11 smoke-test responses also carried the OpenAI-style
+    completion_tokens_details.reasoning_tokens (Haiku 5.5: 2,695 of 3,359
+    output tokens; Gemini 2.5 Flash: 1,738 of 2,272; Flash-Lite: 0) — i.e.
+    reasoning is INCLUDED in output_tokens, which is what is billed. None
+    when absent (not documented, so never assumed to be 0)."""
     usage = (body or {}).get('usage') or {}
     inp = usage.get('input_tokens', usage.get('prompt_tokens'))
     out = usage.get('output_tokens', usage.get('completion_tokens'))
-    return {'input_tokens': inp, 'output_tokens': out, 'total_tokens': usage.get('total_tokens'), 'raw': usage}
+    reasoning = None
+    for details in ('completion_tokens_details', 'output_tokens_details'):
+        value = (usage.get(details) or {}).get('reasoning_tokens') if isinstance(usage.get(details), dict) else None
+        if value is not None:
+            reasoning = value
+            break
+    return {'input_tokens': inp, 'output_tokens': out, 'reasoning_tokens': reasoning,
+            'total_tokens': usage.get('total_tokens'), 'raw': usage}

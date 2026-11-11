@@ -96,7 +96,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                 kwargs = {'post': post}
                 if sleep is not None:
                     kwargs['sleep'] = sleep
-                res = gateway.call_gateway(body, api_key, **kwargs)
+                res = gateway.call_gateway(body, api_key, timeout=spec.timeout_s, **kwargs)
                 text = gateway.content_of(res['body'])
                 usage = gateway.usage_of(res['body'])
                 cost = None
@@ -109,6 +109,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                     'request': gateway.request_params(body),
                     'sent_temperature': body.get('temperature'),
                     'output_mode': spec.output_mode,
+                    'timeout_s': spec.timeout_s,
                     'http_status': res['http_status'], 'attempts': res['attempts'],
                     'latency_s': res['latency_s'], 'error': res['error'],
                     'request_id': (res['body'] or {}).get('request_id') if isinstance(res['body'], dict) else None,

@@ -20,6 +20,10 @@
 #   default "thinking" as output tokens, hence the higher figure. Replace with
 #   observed averages after the first runs (`tally` reports them).
 # optional: true = not run unless named with --models.
+# timeout_s: read timeout per attempt. 120 s for Gemini; 300 s for Claude,
+#   which reasons before answering (smoke test 2026-11-11: Haiku 5.5 spent
+#   2,695 of 3,359 output tokens on reasoning; Sonnet 5.5 hit ReadTimeout at
+#   120 s). The Gateway docs give no timeout guidance.
 # output_mode: how JSON is requested (bakeoff/gateway.py OUTPUT_MODES):
 #   none | json_object | json_schema. Decision 2026-11-11: no schema for any
 #   model, to match production (Gemini gets response_mime_type JSON, no
@@ -40,6 +44,7 @@ models:
     accepts_temperature: true
     est_output_tokens: 3500
     output_mode: none
+    timeout_s: 120
 
   gemini-3.5-flash-lite:
     model: gemini-3.5-flash-lite
@@ -49,6 +54,7 @@ models:
     accepts_temperature: true
     est_output_tokens: 2500
     output_mode: none
+    timeout_s: 120
 
   claude-haiku-5-5:
     model: claude-haiku-5-5
@@ -58,6 +64,7 @@ models:
     accepts_temperature: false
     est_output_tokens: 1600
     output_mode: none
+    timeout_s: 300
 
   claude-sonnet-5-5:
     model: claude-sonnet-5-5
@@ -67,11 +74,13 @@ models:
     accepts_temperature: false
     est_output_tokens: 1600
     output_mode: none
+    timeout_s: 300
 
-  # Optional 5th variant. available-models lists `reasoning_effort` among
-  # gemini-3.5-flash-lite's supported parameters, but neither that page nor
-  # the API reference documents its allowed values, so "low" is an
-  # unverified guess at the lowest setting. Run it explicitly
+  # Optional variant. available-models lists `reasoning_effort` among
+  # gemini-3.5-flash-lite's supported parameters; choose-a-model gives example
+  # values "such as `none`, `low`, or `high`" but no page documents the enum
+  # or default. (In the smoke test the default already used 0 reasoning
+  # tokens.) Run it explicitly
   # (--models gemini-3.5-flash-lite@low) after a 1-call smoke test.
   gemini-3.5-flash-lite@low:
     model: gemini-3.5-flash-lite
@@ -82,6 +91,38 @@ models:
     reasoning_effort: low
     est_output_tokens: 1800
     output_mode: none
+    timeout_s: 120
+    optional: true
+
+  # Optional Claude variants with less reasoning. available-models lists
+  # reasoning_effort for both Claude 5.5 models; llm-gateway/choose-a-model
+  # names example values "such as `none`, `low`, or `high`" and says "Only
+  # models that list `reasoning_effort` in `supported_parameters` accept it".
+  # No page documents the enum, the default, or how it maps to Claude's
+  # thinking budget — run a 1-call smoke test first. Run only when named:
+  #   --models claude-haiku-5-5@low,claude-sonnet-5-5@low
+  claude-haiku-5-5@low:
+    model: claude-haiku-5-5
+    role: "candidate, low reasoning"
+    price_in: 0.10
+    price_out: 0.50
+    accepts_temperature: false
+    reasoning_effort: low
+    est_output_tokens: 2000
+    output_mode: none
+    timeout_s: 300
+    optional: true
+
+  claude-sonnet-5-5@low:
+    model: claude-sonnet-5-5
+    role: "candidate, low reasoning"
+    price_in: 2.00
+    price_out: 10.00
+    accepts_temperature: false
+    reasoning_effort: low
+    est_output_tokens: 2000
+    output_mode: none
+    timeout_s: 300
     optional: true
 
 # Token estimation (no tokenizer offline). Spanish prompt text averages about

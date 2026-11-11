@@ -15,7 +15,7 @@ def _dataset(text_scenario):
             recs.append({'scenario': 'BO-T1', 'model': m, 'run': r, 'http_status': 200 if ok else 500,
                          'parse_ok': ok, 'valid': ok, 'note': note() if ok else None,
                          'raw_response_text': '{}' if ok else None, 'latency_s': 2.0 + r, 'cost_usd': 0.001 * (r + 1),
-                         'usage': {'input_tokens': 3500, 'output_tokens': 1000 + r},
+                         'usage': {'input_tokens': 3500, 'output_tokens': 1000 + r, 'reasoning_tokens': 600 + r},
                          'output_mode': 'json_object' if m == 'm-bonito' else 'none'})
     key = {'seed': 1, 'scenarios': {'BO-T1': {'A': {'model': 'm-seguro', 'run': 1},
                                               'B': {'model': 'm-bonito', 'run': 2},
@@ -57,6 +57,7 @@ def test_tally_on_a_fake_dataset(tmp_path, text_scenario):
     assert '**B**: dosis equivocada' in md
     assert '| Output mode |' in ranking and '| m-seguro | none |' in ranking
     assert '| m-bonito | json_object |' in ranking
+    assert 'of which reasoning |' in ranking and '| 1002 | 602 |' in ranking
 
 
 def test_tally_without_scores_still_reports(tmp_path, text_scenario):

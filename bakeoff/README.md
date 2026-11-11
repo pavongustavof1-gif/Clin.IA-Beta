@@ -59,7 +59,10 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
    overall ranking (fewest safety errors, then blind score, checks, cost).
 
 Common options: `--scenarios BO-02,BO-08`, `--models claude-haiku-5-5,...`, `--runs N`.
-The optional `gemini-3.5-flash-lite@low` variant only runs when named in `--models`.
+The optional `@low` variants (`gemini-3.5-flash-lite@low`, `claude-haiku-5-5@low`,
+`claude-sonnet-5-5@low`; `reasoning_effort: low`) only run when named in `--models`.
+Each model has its own read timeout (`timeout_s`: 120 s Gemini, 300 s Claude), recorded
+in every run file with `usage.reasoning_tokens` when the response reports it.
 
 ## Scenarios
 

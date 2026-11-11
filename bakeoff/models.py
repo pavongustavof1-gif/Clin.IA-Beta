@@ -17,6 +17,7 @@ class ModelSpec:
     accepts_temperature: bool
     est_output_tokens: int
     output_mode: str = 'none'     # gateway.OUTPUT_MODES
+    timeout_s: float = 120.0      # read timeout per attempt
     reasoning_effort: str | None = None
     optional: bool = False
     role: str = ''
@@ -51,11 +52,15 @@ def load_models(path: Path | None = None) -> ModelsConfig:
     for name, m in data['models'].items():
         if m.get('output_mode') not in OUTPUT_MODES:
             raise ValueError(f'models.yaml: {name}: output_mode must be one of {", ".join(OUTPUT_MODES)}')
+        timeout = m.get('timeout_s')
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
+            raise ValueError(f'models.yaml: {name}: timeout_s must be a positive number of seconds')
         models[name] = ModelSpec(
             name=name, model=m['model'], price_in=float(m['price_in']), price_out=float(m['price_out']),
             accepts_temperature=bool(m['accepts_temperature']), est_output_tokens=int(m['est_output_tokens']),
             reasoning_effort=m.get('reasoning_effort'), optional=bool(m.get('optional', False)),
             role=m.get('role', ''), output_mode=m['output_mode'],
+            timeout_s=float(timeout),
         )
     est = data.get('estimation', {})
     return ModelsConfig(models=models, surcharge=float(data.get('surcharge', 0)),

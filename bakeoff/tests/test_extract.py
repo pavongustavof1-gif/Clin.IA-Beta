@@ -140,3 +140,30 @@ def test_json_schema_mode_sends_the_scenario_wire_schema(tmp_path, text_scenario
     spec = replace(models_cfg.models['claude-haiku-5-5'], output_mode='json_schema')
     _run(tmp_path, text_scenario, models_cfg, specs=[spec], runs=1, post=post)
     assert sent[0]['response_format']['json_schema']['schema'] == core.gateway_schema(UTTERANCES)
+
+
+def test_each_call_uses_and_records_its_model_timeout(tmp_path, text_scenario, models_cfg):
+    timeouts = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        timeouts.append((json['model'], timeout))
+        return FakeResponse(200, gateway_ok(__import__('json').dumps(note())))
+    _run(tmp_path, text_scenario, models_cfg, runs=1, post=post)
+    assert dict(timeouts) == {'gemini-2.5-flash': 120, 'gemini-3.5-flash-lite': 120,
+                              'claude-haiku-5-5': 300, 'claude-sonnet-5-5': 300}
+    for spec in models_cfg.default_models():
+        rec = json.loads((tmp_path / 'runs' / 'BO-T1' / f'{spec.name}__run1.json').read_text(encoding='utf-8'))
+        assert rec['timeout_s'] == spec.timeout_s
+        assert 'reasoning_tokens' in rec['usage']
+
+
+def test_low_variants_run_only_when_named(tmp_path, text_scenario, models_cfg):
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, runs=1, post=post)
+    assert all('reasoning_effort' not in b for b in sent)
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, runs=1, post=post,
+         specs=models_cfg.select(['claude-haiku-5-5@low', 'claude-sonnet-5-5@low']))
+    assert [(b['model'], b['reasoning_effort']) for b in sent] == [('claude-haiku-5-5', 'low'),
+                                                                   ('claude-sonnet-5-5', 'low')]
+    assert (tmp_path / 'runs' / 'BO-T1' / 'claude-haiku-5-5_at_low__run1.json').exists()

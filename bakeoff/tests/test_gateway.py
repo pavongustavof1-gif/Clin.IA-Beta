@@ -152,3 +152,59 @@ def test_usage_and_content_parsing():
 def test_real_network_is_blocked_in_tests():
     with pytest.raises(Exception):
         requests.get('https://llm-gateway.assemblyai.com', timeout=2)
+
+
+def test_timeout_per_model(models_cfg):
+    timeouts = {name: spec.timeout_s for name, spec in models_cfg.models.items()}
+    assert timeouts == {'gemini-2.5-flash': 120, 'gemini-3.5-flash-lite': 120, 'gemini-3.5-flash-lite@low': 120,
+                        'claude-haiku-5-5': 300, 'claude-sonnet-5-5': 300,
+                        'claude-haiku-5-5@low': 300, 'claude-sonnet-5-5@low': 300}
+
+
+def test_call_gateway_uses_the_given_timeout():
+    seen = []
+
+    def post(url, json=None, headers=None, timeout=None):
+        seen.append(timeout)
+        return FakeResponse(200, gateway_ok('{}'))
+    gateway.call_gateway({'model': 'x'}, 'clave-ficticia', post=post, sleep=lambda s: None, timeout=300)
+    assert seen == [300]
+
+
+@pytest.mark.parametrize('timeout', ['', '0', '-5', '"lento"', 'true'])
+def test_models_yaml_requires_a_positive_timeout(tmp_path, timeout):
+    from bakeoff.models import load_models
+    line = '' if timeout == '' else f'    timeout_s: {timeout}\n'
+    (tmp_path / 'm.yaml').write_text('models:\n  x:\n    model: x\n    price_in: 1\n    price_out: 1\n'
+                                     '    accepts_temperature: true\n    est_output_tokens: 1\n'
+                                     '    output_mode: none\n' + line)
+    with pytest.raises(ValueError):
+        load_models(tmp_path / 'm.yaml')
+
+
+@pytest.mark.parametrize('name,base', [('claude-haiku-5-5@low', 'claude-haiku-5-5'),
+                                       ('claude-sonnet-5-5@low', 'claude-sonnet-5-5')])
+def test_claude_low_reasoning_variants(models_cfg, name, base):
+    spec = models_cfg.models[name]
+    assert spec.optional and spec not in models_cfg.default_models()
+    assert spec.model == base and spec.reasoning_effort == 'low' and spec.output_mode == 'none'
+    assert spec.price_in == models_cfg.models[base].price_in and spec.price_out == models_cfg.models[base].price_out
+    body = gateway.build_request(spec, 'prompt ficticio')
+    assert body['model'] == base and body['reasoning_effort'] == 'low'
+    assert 'temperature' not in body and 'response_format' not in body
+    assert 'reasoning_effort' not in gateway.build_request(models_cfg.models[base], 'prompt ficticio')
+    assert models_cfg.select([name]) == [spec]
+
+
+def test_usage_records_reasoning_tokens_when_reported():
+    # Shape seen in the 2026-11-11 smoke test (OpenAI-style details block).
+    body = {'usage': {'input_tokens': 4099, 'output_tokens': 3359, 'total_tokens': 7458,
+                      'completion_tokens_details': {'reasoning_tokens': 2695, 'audio_tokens': 0}}}
+    u = gateway.usage_of(body)
+    assert (u['input_tokens'], u['output_tokens'], u['reasoning_tokens']) == (4099, 3359, 2695)
+    assert gateway.usage_of({'usage': {'output_tokens': 10, 'output_tokens_details': {'reasoning_tokens': 4}}}
+                            )['reasoning_tokens'] == 4
+    assert gateway.usage_of({'usage': {'output_tokens': 10, 'completion_tokens_details': {'reasoning_tokens': 0}}}
+                            )['reasoning_tokens'] == 0
+    assert gateway.usage_of({'usage': {'input_tokens': 1, 'output_tokens': 2}})['reasoning_tokens'] is None
+    assert gateway.usage_of(None)['reasoning_tokens'] is None
