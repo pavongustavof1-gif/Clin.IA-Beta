@@ -22,7 +22,7 @@ def test_claude_gets_no_temperature_gemini_gets_0_1(models_cfg):
 def test_request_shape(models_cfg):
     body = gateway.build_request(models_cfg.models['gemini-2.5-flash'], 'prompt ficticio', SCHEMA)
     assert body['model'] == 'gemini-2.5-flash'
-    assert body['max_tokens'] == 8192
+    assert body['max_tokens'] == 16384          # per-model cap (models.yaml)
     assert 'response_format' not in body          # output_mode none
     assert 'model_region' not in body
     assert 'reasoning_effort' not in body
@@ -208,3 +208,42 @@ def test_usage_records_reasoning_tokens_when_reported():
                             )['reasoning_tokens'] == 0
     assert gateway.usage_of({'usage': {'input_tokens': 1, 'output_tokens': 2}})['reasoning_tokens'] is None
     assert gateway.usage_of(None)['reasoning_tokens'] is None
+
+
+def test_max_tokens_per_model(models_cfg):
+    caps = {name: spec.max_tokens for name, spec in models_cfg.models.items()}
+    assert caps == {'gemini-2.5-flash': 16384, 'gemini-3.5-flash-lite': 8192, 'gemini-3.5-flash-lite@low': 8192,
+                    'claude-haiku-5-5': 8192, 'claude-sonnet-5-5': 8192,
+                    'claude-haiku-5-5@low': 8192, 'claude-sonnet-5-5@low': 8192}
+    for spec in models_cfg.models.values():
+        body = gateway.build_request(spec, 'prompt ficticio')
+        assert body['max_tokens'] == spec.max_tokens == gateway.request_params(body)['max_tokens']
+
+
+def _model_yaml(tmp_path, extra=''):
+    (tmp_path / 'm.yaml').write_text('models:\n  x:\n    model: x\n    price_in: 1\n    price_out: 1\n'
+                                     '    accepts_temperature: true\n    est_output_tokens: 1\n'
+                                     '    output_mode: none\n    timeout_s: 60\n' + extra)
+    return tmp_path / 'm.yaml'
+
+
+def test_max_tokens_defaults_to_8192(tmp_path):
+    from bakeoff.models import load_models
+    assert load_models(_model_yaml(tmp_path)).models['x'].max_tokens == gateway.MAX_TOKENS == 8192
+    assert load_models(_model_yaml(tmp_path, '    max_tokens: 4096\n')).models['x'].max_tokens == 4096
+
+
+@pytest.mark.parametrize('value', ['0', '-1', '1.5', '"mucho"', 'true', 'null'])
+def test_models_yaml_rejects_a_bad_max_tokens(tmp_path, value):
+    from bakeoff.models import load_models
+    with pytest.raises(ValueError, match='max_tokens'):
+        load_models(_model_yaml(tmp_path, f'    max_tokens: {value}\n'))
+
+
+def test_worst_case_estimate_uses_each_models_cap(models_cfg, text_scenario):
+    from bakeoff.estimate import estimate
+    specs = models_cfg.select(['gemini-2.5-flash', 'gemini-3.5-flash-lite'])
+    _, lines = estimate([text_scenario], specs, 1, models_cfg)
+    flash, lite = lines                       # same prices, so the gap is the output cap alone
+    gap = models_cfg.cost(specs[0], 0, 16384 - 8192)
+    assert flash.worst_cost - lite.worst_cost == pytest.approx(gap)

@@ -2,7 +2,6 @@
 from dataclasses import dataclass
 
 from bakeoff import core
-from bakeoff.gateway import MAX_TOKENS
 from bakeoff.scenarios import ScenarioError, load_utterances
 
 
@@ -41,7 +40,7 @@ def estimate(scenarios, specs, runs, models_cfg, cache_dir=None, done=lambda s, 
                 tin += chars / models_cfg.chars_per_token
                 tout += spec.est_output_tokens
         lines.append(Line(spec.name, calls, tin, tout, models_cfg.cost(spec, tin, tout),
-                          models_cfg.cost(spec, tin, calls * MAX_TOKENS)))
+                          models_cfg.cost(spec, tin, calls * spec.max_tokens)))
     return sizes, lines
 
 
@@ -59,7 +58,7 @@ def format_estimate(sizes, lines, models_cfg, budget=None) -> str:
     out.append(f'{"TOTAL":28} {sum(l.calls for l in lines):5d} {"":9} {"":9} {total:9.4f} {worst:10.4f}')
     out.append(f'Prices: bakeoff/models.yaml (listed rate +{models_cfg.surcharge:.0%} in-region surcharge). '
                f'Tokens ≈ chars / {models_cfg.chars_per_token:g}; output = est_output_tokens; '
-               f'worst = every call at max_tokens {MAX_TOKENS}.')
+               'worst = every call at its model\'s max_tokens.')
     if budget is not None:
         out.append(f'Budget (BAKEOFF_BUDGET_USD): {budget:.2f} USD — estimate is '
                    f'{"WITHIN" if total <= budget else "OVER"} budget.')

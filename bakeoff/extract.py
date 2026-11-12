@@ -26,15 +26,23 @@ def run_path(scenario_id: str, model_name: str, run: int, runs_dir: Path | None 
     return (runs_dir or paths.RUNS) / scenario_id / f'{safe}__run{run}.json'
 
 
+# finish_reason values meaning the output hit max_tokens (Gemini via the
+# Gateway reported "max_tokens"; OpenAI-style APIs say "length").
+TRUNCATED = frozenset({'max_tokens', 'length'})
+
+
 def is_done(path: Path) -> bool:
-    """A finished call (HTTP 200 with content) is never repeated; failures are."""
+    """A finished call (HTTP 200 with content) is never repeated; failures are,
+    and so is output cut off at max_tokens (a harness limit, not the model's
+    answer), so raising max_tokens re-runs only the truncated calls."""
     if not path.exists():
         return False
     try:
         rec = json.loads(path.read_text(encoding='utf-8'))
     except ValueError:
         return False
-    return rec.get('http_status') == 200 and rec.get('raw_response_text') is not None
+    return (rec.get('http_status') == 200 and rec.get('raw_response_text') is not None
+            and rec.get('finish_reason') not in TRUNCATED)
 
 
 def parse_and_validate(text: str | None) -> dict:
@@ -75,7 +83,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                   for s in scenarios for r in range(1, runs + 1) if not planned_done(s, spec, r))
         tout = calls * spec.est_output_tokens
         lines.append(Line(spec.name, calls, tin, tout, models_cfg.cost(spec, tin, tout),
-                          models_cfg.cost(spec, tin, calls * gateway.MAX_TOKENS)))
+                          models_cfg.cost(spec, tin, calls * spec.max_tokens)))
     budget = budget_usd(settings)
     sizes = {s.id: (len(prompts[s.id]), 'transcript') for s in scenarios}
     log(format_estimate(sizes, lines, models_cfg, budget))
@@ -110,6 +118,7 @@ def extract(scenarios, specs, runs, models_cfg, settings, utterances_for, force=
                     'sent_temperature': body.get('temperature'),
                     'output_mode': spec.output_mode,
                     'timeout_s': spec.timeout_s,
+                    'max_tokens': body['max_tokens'],
                     'http_status': res['http_status'], 'attempts': res['attempts'],
                     'latency_s': res['latency_s'], 'error': res['error'],
                     'request_id': (res['body'] or {}).get('request_id') if isinstance(res['body'], dict) else None,

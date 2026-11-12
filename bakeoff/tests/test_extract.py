@@ -167,3 +167,36 @@ def test_low_variants_run_only_when_named(tmp_path, text_scenario, models_cfg):
     assert [(b['model'], b['reasoning_effort']) for b in sent] == [('claude-haiku-5-5', 'low'),
                                                                    ('claude-sonnet-5-5', 'low')]
     assert (tmp_path / 'runs' / 'BO-T1' / 'claude-haiku-5-5_at_low__run1.json').exists()
+
+
+def test_each_call_sends_and_records_its_model_max_tokens(tmp_path, text_scenario, models_cfg):
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, runs=1, post=post)
+    assert {b['model']: b['max_tokens'] for b in sent} == {'gemini-2.5-flash': 16384, 'gemini-3.5-flash-lite': 8192,
+                                                           'claude-haiku-5-5': 8192, 'claude-sonnet-5-5': 8192}
+    for spec in models_cfg.default_models():
+        rec = json.loads((tmp_path / 'runs' / 'BO-T1' / f'{spec.name}__run1.json').read_text(encoding='utf-8'))
+        assert rec['max_tokens'] == rec['request']['max_tokens'] == spec.max_tokens
+
+
+@pytest.mark.parametrize('reason,done', [('max_tokens', False), ('length', False), ('stop', True),
+                                         ('end_turn', True), (None, True)])
+def test_output_cut_at_max_tokens_is_not_done(tmp_path, reason, done):
+    p = tmp_path / 'r.json'
+    p.write_text(json.dumps({'http_status': 200, 'raw_response_text': '{"subjetivo": {', 'finish_reason': reason}))
+    assert extract.is_done(p) is done
+
+
+def test_truncated_run_is_repeated_with_the_new_cap(tmp_path, text_scenario, models_cfg):
+    spec = models_cfg.models['gemini-2.5-flash']
+    target = tmp_path / 'runs' / 'BO-T1' / 'gemini-2.5-flash__run1.json'
+    target.parent.mkdir(parents=True)
+    target.write_text(json.dumps({'http_status': 200, 'raw_response_text': '{"subjetivo": {',
+                                  'finish_reason': 'max_tokens', 'max_tokens': 8192}))
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, specs=[spec], runs=2, post=post)
+    assert len(sent) == 2 and all(b['max_tokens'] == 16384 for b in sent)
+    assert json.loads(target.read_text(encoding='utf-8'))['max_tokens'] == 16384
+    post, sent = _post()
+    _run(tmp_path, text_scenario, models_cfg, specs=[spec], runs=2, post=post)
+    assert sent == []                         # both now done

@@ -24,6 +24,12 @@
 #   which reasons before answering (smoke test 2026-11-11: Haiku 5.5 spent
 #   2,695 of 3,359 output tokens on reasoning; Sonnet 5.5 hit ReadTimeout at
 #   120 s). The Gateway docs give no timeout guidance.
+# max_tokens: output cap sent to the Gateway (reasoning tokens count toward
+#   it). Default 8192 when absent. gemini-2.5-flash: 16384 — in the full run
+#   2026-11-12 it failed 2 of 9 (BO-02 run 2, BO-06 run 1) with finish_reason
+#   max_tokens at 8,188 output tokens: its thinking used most of the budget and
+#   the JSON was cut off. Production sets no output cap. Truncated runs are
+#   repeated by `extract` (not counted as done).
 # output_mode: how JSON is requested (bakeoff/gateway.py OUTPUT_MODES):
 #   none | json_object | json_schema. Decision 2026-11-11: no schema for any
 #   model, to match production (Gemini gets response_mime_type JSON, no
@@ -45,6 +51,7 @@ models:
     est_output_tokens: 3500
     output_mode: none
     timeout_s: 120
+    max_tokens: 16384
 
   gemini-3.5-flash-lite:
     model: gemini-3.5-flash-lite

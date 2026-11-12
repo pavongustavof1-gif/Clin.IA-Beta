@@ -5,7 +5,7 @@ from pathlib import Path
 import yaml
 
 from bakeoff import paths
-from bakeoff.gateway import OUTPUT_MODES
+from bakeoff.gateway import MAX_TOKENS, OUTPUT_MODES
 
 
 @dataclass
@@ -18,6 +18,7 @@ class ModelSpec:
     est_output_tokens: int
     output_mode: str = 'none'     # gateway.OUTPUT_MODES
     timeout_s: float = 120.0      # read timeout per attempt
+    max_tokens: int = MAX_TOKENS  # output cap sent to the Gateway (reasoning counts toward it)
     reasoning_effort: str | None = None
     optional: bool = False
     role: str = ''
@@ -55,12 +56,15 @@ def load_models(path: Path | None = None) -> ModelsConfig:
         timeout = m.get('timeout_s')
         if isinstance(timeout, bool) or not isinstance(timeout, (int, float)) or timeout <= 0:
             raise ValueError(f'models.yaml: {name}: timeout_s must be a positive number of seconds')
+        max_tokens = m.get('max_tokens', MAX_TOKENS)
+        if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or max_tokens <= 0:
+            raise ValueError(f'models.yaml: {name}: max_tokens must be a positive whole number of tokens')
         models[name] = ModelSpec(
             name=name, model=m['model'], price_in=float(m['price_in']), price_out=float(m['price_out']),
             accepts_temperature=bool(m['accepts_temperature']), est_output_tokens=int(m['est_output_tokens']),
             reasoning_effort=m.get('reasoning_effort'), optional=bool(m.get('optional', False)),
             role=m.get('role', ''), output_mode=m['output_mode'],
-            timeout_s=float(timeout),
+            timeout_s=float(timeout), max_tokens=max_tokens,
         )
     est = data.get('estimation', {})
     return ModelsConfig(models=models, surcharge=float(data.get('surcharge', 0)),

@@ -3,8 +3,9 @@
 Docs (read 2026-11-11): https://assemblyai.com/docs/api-reference/llm-gateway/create-chat-completion
   - POST https://llm-gateway.assemblyai.com/v1/chat/completions
   - "Authorization: <key>" — the key itself, "not prefixed with Bearer"
-  - max_tokens "Default is 1000", so 8192 is always sent (a full note with
-    reasoning can exceed 1000 and would be cut off)
+  - max_tokens "Default is 1000", so it is always sent: MAX_TOKENS (8192)
+    unless models.yaml sets max_tokens for the model (reasoning tokens count
+    toward it; a full note with reasoning can exceed 1000 and be cut off)
   - response_format: the only documented type is json_schema ("Use
     `json_schema` for structured outputs"); json_object is not documented
     for any model. See OUTPUT_MODES.
@@ -20,7 +21,7 @@ import time
 import requests
 
 GATEWAY_URL = 'https://llm-gateway.assemblyai.com/v1/chat/completions'
-MAX_TOKENS = 8192
+MAX_TOKENS = 8192          # default output cap; models.yaml max_tokens sets it per model
 TEMPERATURE = 0.1          # production's GenerateContentConfig(temperature=0.1)
 TIMEOUT_S = 120            # default read timeout; models.yaml timeout_s sets it per model
 MAX_RETRIES = 3            # retries after the first attempt, for 429 and 5xx only
@@ -45,7 +46,7 @@ def build_request(spec, prompt: str, schema: dict | None = None) -> dict:
     body = {
         'model': spec.model,
         'messages': [{'role': 'user', 'content': prompt}],
-        'max_tokens': MAX_TOKENS,
+        'max_tokens': spec.max_tokens,
     }
     if spec.output_mode == 'json_object':
         body['response_format'] = {'type': 'json_object'}

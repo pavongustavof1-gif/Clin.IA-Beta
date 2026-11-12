@@ -41,7 +41,8 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
    model accepts the request (schema, parameters) before the full run.
 5. **`extract`**: scenario × model × `--runs` (default 3). One file per call in
    `runs/`. Successful calls are never repeated (failed ones are), unless you pass
-   `--force`. No CIE-11/WHO lookup: `termino_busqueda_cie11` stays as the model wrote it.
+   `--force`; output cut off at `max_tokens` (`finish_reason` `max_tokens`/`length`)
+   also counts as failed. No CIE-11/WHO lookup: `termino_busqueda_cie11` stays as the model wrote it.
    How JSON is requested is each model's `output_mode` in `models.yaml` (`none`: no
    `response_format`, the prompt's JSON template only, as production sends no schema;
    `json_object`; `json_schema`: `extraction_core.wire_schema`). All four models use
@@ -61,8 +62,10 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
 Common options: `--scenarios BO-02,BO-08`, `--models claude-haiku-5-5,...`, `--runs N`.
 The optional `@low` variants (`gemini-3.5-flash-lite@low`, `claude-haiku-5-5@low`,
 `claude-sonnet-5-5@low`; `reasoning_effort: low`) only run when named in `--models`.
-Each model has its own read timeout (`timeout_s`: 120 s Gemini, 300 s Claude), recorded
-in every run file with `usage.reasoning_tokens` when the response reports it.
+Each model has its own read timeout (`timeout_s`: 120 s Gemini, 300 s Claude) and output
+cap (`max_tokens`: default 8192, 16384 for `gemini-2.5-flash`, whose thinking counts toward
+it). Both are recorded in every run file, with `usage.reasoning_tokens` when the response
+reports it.
 
 ## Scenarios
 
