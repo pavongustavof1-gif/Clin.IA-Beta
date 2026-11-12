@@ -132,10 +132,40 @@ models:
     timeout_s: 300
     optional: true
 
+# Automated judges (`python -m bakeoff judge`): each scores every blind note,
+# one note per call, with bakeoff/inputs/judge_rubric.md. Same fields as
+# above. They only ever see blind/ pages (masked), the transcript and the
+# scenario's reference — never the key, other notes or model names.
+# est_output_tokens: ESTIMATE ONLY — the JSON verdict is ~400 tokens, plus
+# reasoning (Claude 5.5 and Gemini 2.5 Flash both reason by default; Haiku
+# spent 2,695 reasoning tokens on a note in the smoke test).
+judges:
+  claude-sonnet-5-5:
+    model: claude-sonnet-5-5
+    price_in: 2.00
+    price_out: 10.00
+    accepts_temperature: false
+    est_output_tokens: 4000
+    output_mode: none
+    timeout_s: 300
+    max_tokens: 16384
+
+  gemini-2.5-flash:
+    model: gemini-2.5-flash
+    price_in: 0.30
+    price_out: 2.50
+    accepts_temperature: true
+    est_output_tokens: 4000
+    output_mode: none
+    timeout_s: 300
+    max_tokens: 16384
+
 # Token estimation (no tokenizer offline). Spanish prompt text averages about
 # 3.5 characters per token; 3.0 is used to over- rather than under-estimate.
 # Audio scenarios not yet transcribed are sized from their audio_minutes at
 # ~900 transcript characters per minute of conversation (≈150 words/min).
+# note_chars sizes judge prompts when blind/ doesn't exist yet.
 estimation:
   chars_per_token: 3.0
   transcript_chars_per_audio_minute: 900
+  note_chars: 5000          # a note as the judge sees it, used before blind/ exists

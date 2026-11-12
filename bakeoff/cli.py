@@ -29,7 +29,17 @@ def cmd_estimate(args):
     scenarios = load_scenarios(_csv(args.scenarios))
     specs = models_cfg.select(_csv(args.models))
     sizes, lines = estimate(scenarios, specs, args.runs, models_cfg)
-    print(format_estimate(sizes, lines, models_cfg, budget_usd(load_settings())))
+    budget = budget_usd(load_settings())
+    print(format_estimate(sizes, lines, models_cfg, budget))
+    judges = models_cfg.select_judges(_csv(args.judges))
+    if judges:
+        from bakeoff.judge import estimate_judges, format_judge_estimate
+        # One blind note per model per scenario (the real blind/ notes when they exist).
+        jlines, basis = estimate_judges(scenarios, judges, models_cfg, len(specs), load_utterances)
+        print()
+        print(format_judge_estimate(jlines, basis, models_cfg, budget))
+        print(f'Extraction + judges: {sum(l.cost for l in lines) + sum(l.cost for l in jlines):.4f} USD '
+              '(each command checks its own estimate against the budget).')
 
 
 def cmd_extract(args):
@@ -66,6 +76,14 @@ def cmd_tally(args):
     run_tally(scenarios, load_runs(scenarios={s.id for s in scenarios}, models=_csv(args.models)))
 
 
+def cmd_judge(args):
+    from bakeoff.judge import run_judge
+    models_cfg = load_models()
+    scenarios = load_scenarios(_csv(args.scenarios))
+    run_judge(scenarios, models_cfg.select_judges(_csv(args.judges)), models_cfg, load_settings(),
+              load_utterances, seed=args.seed, force=args.force)
+
+
 def build_parser():
     p = argparse.ArgumentParser(prog='python -m bakeoff', description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -83,8 +101,9 @@ def build_parser():
     sp.add_argument('--force', action='store_true', help='transcribe again even if cached')
     sp.set_defaults(func=cmd_transcribe)
 
-    sp = sub.add_parser('estimate', help='dry run: calls, tokens, cost per model (no network)')
+    sp = sub.add_parser('estimate', help='dry run: calls, tokens, cost per model and judge (no network)')
     common(sp, runs=True)
+    sp.add_argument('--judges', help='comma-separated judges from models.yaml (default: all)')
     sp.set_defaults(func=cmd_estimate)
 
     sp = sub.add_parser('extract', help='call the LLM Gateway; one file per call in runs/')
@@ -101,6 +120,13 @@ def build_parser():
     sp.add_argument('--seed', type=int, help='seed for the pick and labels (default: random, saved in key)')
     sp.add_argument('--force', action='store_true', help='replace an existing key/blind_scores.csv')
     sp.set_defaults(func=cmd_blind)
+
+    sp = sub.add_parser('judge', help='automated blind judge: one blind note per call → scores/judge_scores.csv')
+    sp.add_argument('--scenarios', help='comma-separated ids (default: all in inputs/scenarios)')
+    sp.add_argument('--judges', help='comma-separated judges from models.yaml (default: all)')
+    sp.add_argument('--seed', type=int, help='seed for each judge\'s note order (default: the saved one, else random)')
+    sp.add_argument('--force', action='store_true', help='judge again notes that already have a valid verdict')
+    sp.set_defaults(func=cmd_judge)
 
     sp = sub.add_parser('tally', help='everything → scores/summary.md')
     common(sp)

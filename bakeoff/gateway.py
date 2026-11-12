@@ -67,7 +67,7 @@ def build_request(spec, prompt: str, schema: dict | None = None) -> dict:
     return body
 
 
-def request_params(body: dict) -> dict:
+def request_params(body: dict, what: str = 'production prompt') -> dict:
     """What was sent, minus the prompt text itself (stored as a hash + size):
     the run files record parameters, not 9 KB of repeated prompt."""
     prompt = body['messages'][0]['content']
@@ -79,7 +79,7 @@ def request_params(body: dict) -> dict:
                                                      'strict': rf['json_schema']['strict']}}
     params['prompt_sha256'] = hashlib.sha256(prompt.encode('utf-8')).hexdigest()
     params['prompt_chars'] = len(prompt)
-    params['messages'] = [{'role': 'user', 'content': '<production prompt; see prompt_sha256>'}]
+    params['messages'] = [{'role': 'user', 'content': f'<{what}; see prompt_sha256>'}]
     return params
 
 

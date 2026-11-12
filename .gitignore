@@ -24,6 +24,7 @@ bakeoff/runs/
 bakeoff/blind/
 bakeoff/key/
 bakeoff/scores/
+bakeoff/judge/
 *.m4a
 *.mp3
 *.wav

@@ -36,7 +36,8 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
 2. **Confirm the checks.** Read each `cache/<id>.json` and fix the scenario's
    `checks`. BO-02/06/08 are already confirmed; a new scenario's checks start as a
    draft until compared with its cached transcript.
-3. **`estimate`**: dry run with no network: calls, tokens and cost per model.
+3. **`estimate`**: dry run with no network: calls, tokens and cost per model, then per judge
+   (`--judges`; the real blind notes once `blind/` exists, else one note per model per scenario).
 4. **Smoke test**: `extract --scenarios BO-08 --runs 1` (4 calls) to confirm every
    model accepts the request (schema, parameters) before the full run.
 5. **`extract`**: scenario × model × `--runs` (default 3). One file per call in
@@ -54,10 +55,25 @@ Run every command from the repo root: `bakeoff/venv/bin/python -m bakeoff <comma
    and an empty `scores/blind_scores.csv` is created. Open the HTML, score, and **don't
    look at the key**. It refuses to overwrite an existing key or scores file unless you
    pass `--force`.
-8. **Score** in `scores/blind_scores.csv`: completeness, accuracy/no inventions and
-   clinical usefulness from 1 to 5; `safety_error` is y/n; plus a comment.
-9. **`tally`**: everything → `scores/summary.md`, with one table per scenario and the
-   overall ranking (fewest safety errors, then blind score, checks, cost).
+8. **Score** in `scores/blind_scores.csv` with the rubric in `inputs/judge_rubric.md`:
+   completeness, accuracy/no inventions and clinical usefulness from 1 to 5;
+   `safety_error` is y/n; plus a comment.
+9. **`judge`** (optional, `--judges`, `--scenarios`, `--seed`, `--force`): each judge in
+   `models.yaml` `judges` scores every blind note, **one note per call**, with the same
+   rubric. A judge sees only the rubric, the scenario's `reference`, the cached transcript
+   and that one note as shown in `blind/` (masked). Never `key/`, `runs/`, other notes or
+   model names; a prompt containing a model/vendor name or the API key stops the command
+   before anything is sent. Each judge goes through the notes in its own seeded random
+   order (seed in `judge/order.json`, reused unless `--seed`). Same budget guard as
+   `extract`. Raw responses → `judge/<judge>/<scenario>__<label>.json`; valid verdicts →
+   `scores/judge_scores.csv`. A note is judged again only if its blind page changed or
+   the last answer wasn't a valid verdict (including one cut off at `max_tokens`).
+10. **`tally`**: everything → `scores/summary.md`, with one table per scenario and the
+   overall ranking (fewest safety errors, then blind score, checks, cost). Human scores
+   stay primary; a note without them uses the judges' mean, and counts as a safety error
+   if any judge flagged one. With judge scores it adds each judge per model, the notes
+   where the judges differ by ≥2 points on a criterion or on safety, and a calibration
+   table against the human scores (mean absolute difference, safety agreement).
 
 Common options: `--scenarios BO-02,BO-08`, `--models claude-haiku-5-5,...`, `--runs N`.
 The optional `@low` variants (`gemini-3.5-flash-lite@low`, `claude-haiku-5-5@low`,
@@ -74,6 +90,8 @@ reports it.
 - `audio:` (relative to `BAKEOFF_AUDIO_DIR`) **or** `transcript:` (relative to `inputs/`);
 - `audio_minutes` (only used by `estimate` before transcription), `speakers_expected`,
   `consulta`;
+- `reference`: what the doctor meant, including known mis-hearings in the transcript
+  (for the judge; the ideal note doesn't turn them into facts);
 - `checks`:
 
 ```yaml
@@ -92,8 +110,9 @@ Text scenarios: `inputs/transcripts/<id>.txt`, one `[Hablante A]: …` line per 
 
 ## What gets committed
 
-Code, `models.yaml`, the scenario YAMLs and invented transcripts. **Never** `.env`,
-`cache/`, `runs/`, `blind/`, `key/`, `scores/` or audio (all in `.gitignore`).
+Code, `models.yaml`, the scenario YAMLs, the judge rubric and invented transcripts.
+**Never** `.env`, `cache/`, `runs/`, `blind/`, `key/`, `judge/`, `scores/` or audio (all in
+`.gitignore`).
 
 ## Tests
 

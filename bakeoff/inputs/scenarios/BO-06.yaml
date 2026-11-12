@@ -7,6 +7,22 @@ audio_minutes: 3
 speakers_expected: 2      # what the app sent for this recording
 consulta: "2026-11-04 11:30"
 
+reference: |              # what the doctor meant; the judge scores against the transcript
+  Paciente: Jorge Bártulos (transcrito "Bartulus"), masculino, nacido el
+  10/10/1960, 66 años, paciente nuevo.
+  Dolor lumbar de 4 días tras cargar cajas; no se irradia a piernas, nalgas ni
+  muslo; niega adormecimiento, debilidad y alteraciones de esfínteres.
+  Ibuprofeno 400 mg de vez en cuando, con alivio parcial.
+  Exploración: lo acuesta ("acuéstese", transcrito "acuérdese") y pregunta
+  "¿le duele aquí en el músculo?" (transcrito "muslo"): no se afirma ningún
+  hallazgo.
+  Dx: lumbalgia por contractura/esfuerzo.
+  Suspender ibuprofeno. Naproxeno 250 mg, 1 tableta cada 8-12 h según dolor,
+  por 5 días, con alimentos.
+  Incapacidad de 3 días; no cargar, caminar, no reposo absoluto.
+  Acudir a urgencias si hay debilidad o adormecimiento de piernas, o problemas
+  para orinar o evacuar.
+
 checks:                   # confirmed against the cached transcript
   must_contain:
     - text: "naproxeno"

@@ -7,6 +7,21 @@ audio_minutes: 3          # only used by `estimate` before the audio is transcri
 speakers_expected: 2      # what the app sent for this recording
 consulta: "2026-11-03 10:00"
 
+reference: |              # what the doctor meant; the judge scores against the transcript
+  Paciente: Raúl Rodríguez, masculino, nacido el 05/02/1968, 58 años.
+  Glucosa en ayuno 168; HbA1c 8.2 % (meta <7).
+  A veces olvida la metformina de la noche; la dieta le cuesta (tortillas).
+  PA 138/86; peso 92 kg (subió).
+  Dx: diabetes mellitus tipo 2 descontrolada.
+  Metformina 850 mg cada 8 h (3 al día, con desayuno, comida y cena). El médico
+  dijo "1000" y se corrigió a 850: la dosis correcta es 850 mg.
+  Empagliflozina 10 mg una vez al día en la mañana; tomar bastante agua, cuidar
+  la higiene, avisar si hay ardor o comezón.
+  Laboratorios: HbA1c, creatinina y examen general de orina un par de días antes
+  de la cita.
+  Cita en 3 meses.
+  No se dijo la duración de los medicamentos.
+
 checks:                   # confirmed against the cached transcript
   must_contain:
     - text: "168"

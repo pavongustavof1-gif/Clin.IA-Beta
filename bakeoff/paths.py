@@ -9,12 +9,14 @@ ENV_FILE = BAKEOFF / '.env'                  # the ONLY settings file the harnes
 MODELS_FILE = BAKEOFF / 'models.yaml'
 INPUTS = BAKEOFF / 'inputs'
 SCENARIOS = INPUTS / 'scenarios'
+JUDGE_RUBRIC = INPUTS / 'judge_rubric.md'    # same rubric as the human sheet
 
 CACHE = BAKEOFF / 'cache'                    # transcripts, one <id>.json per scenario
 RUNS = BAKEOFF / 'runs'                      # one file per Gateway call
 BLIND = BAKEOFF / 'blind'                    # HTML for blind scoring (no model names)
 KEY = BAKEOFF / 'key'                        # which blind label is which model
-SCORES = BAKEOFF / 'scores'                  # checks, consistency, blind scores, summary
+SCORES = BAKEOFF / 'scores'                  # checks, consistency, blind and judge scores, summary
+JUDGE = BAKEOFF / 'judge'                    # raw judge responses, one file per judge × note
 
 EXTRACTION_CORE = BACKEND / 'extraction_core.py'
 EXTRACTION_SCHEMA = BACKEND / 'extraction_schema.json'

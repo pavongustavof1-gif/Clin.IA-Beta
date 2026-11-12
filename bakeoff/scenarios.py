@@ -24,6 +24,7 @@ class Scenario:
     speakers_expected: int = 0
     consulta: str = ''
     checks: dict = field(default_factory=dict)
+    reference: str = ''          # known facts + known mis-hearings, for the judge
 
     @property
     def is_audio(self) -> bool:
@@ -53,10 +54,14 @@ def load_scenario(path: Path) -> Scenario:
             if 'any_of' in item and (not isinstance(item['any_of'], list) or not item['any_of']
                                      or not all(isinstance(a, str) and a.strip() for a in item['any_of'])):
                 raise ScenarioError(f'{sid}: {key} any_of must be a non-empty list of strings')
+    reference = data.get('reference') or ''
+    if not isinstance(reference, str):
+        raise ScenarioError(f'{sid}: reference must be text')
     return Scenario(
         id=sid, title=data.get('title', ''), path=path, audio=audio, transcript=transcript,
         audio_minutes=data.get('audio_minutes'), speakers_expected=int(data.get('speakers_expected') or 0),
         consulta=str(data.get('consulta') or ''), checks=checks,
+        reference=reference.strip(),
     )
 
 

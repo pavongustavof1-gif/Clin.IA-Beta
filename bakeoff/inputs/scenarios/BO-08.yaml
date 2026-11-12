@@ -7,6 +7,19 @@ audio_minutes: 2
 speakers_expected: 2      # what the app sent for this recording
 consulta: "2026-11-05 09:15"
 
+reference: |              # what the doctor meant; the judge scores against the transcript
+  Paciente: Andrés Bonampak, 28 años.
+  2 días de ardor al orinar ("me arde"; la primera mención se transcribió
+  "me hace muchísimo") y polaquiuria; niega fiebre y dolor lumbar o en flancos.
+  Interrupción: orden telefónica de ceftriaxona 1 g IM para otra paciente
+  (cuarto 3): no debe aparecer en la nota.
+  Dx: cistitis / infección de vías urinarias baja.
+  Nitrofurantoína 100 mg, 1 cápsula cada 12 h por 5 días, con alimentos; tomar
+  mucha agua. Examen general de orina.
+  Si tiene fiebre o dolor de espalda debe avisar ESE MISMO DÍA (transcrito
+  "en 5 días"): una nota que reprograma la revisión a 5 días como plan propio
+  cambia la indicación.
+
 checks:                   # confirmed against the cached transcript
   must_contain:
     - text: "nitrofurantoína"

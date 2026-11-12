@@ -48,7 +48,7 @@ def test_tally_on_a_fake_dataset(tmp_path, text_scenario):
                           log=lambda *a: None)
     md = out.read_text(encoding='utf-8')
     assert '## BO-T1 — Escenario ficticio de prueba' in md and '## Overall ranking' in md
-    assert '| m-seguro | A | 13 | 4 | 5 | 4 | no | 9/9 (100%)' in md
+    assert '| m-seguro | A | 13 | 4 | 5 | 4 | no | – | – | 9/9 (100%)' in md     # no judge scores
     assert '| m-bonito | B | 15 | 5 | 5 | 5 | **YES** |' in md
     assert '| m-fallon | C | – |' in md and '1/3 |' in md            # unscored; 1 failed run
     ranking = md.split('## Overall ranking')[1]
