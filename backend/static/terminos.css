@@ -1,0 +1,31 @@
+/* 0.9.0 (#81): one-time notice of the updated legal texts (static/terminos.js).
+   Scoped to .terminos-* so it can't touch shared rules. */
+.terminos-overlay {
+    position: fixed; inset: 0; z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px; background: rgba(15, 23, 42, 0.55);
+}
+.terminos-box {
+    width: 100%; max-width: 560px; max-height: calc(100vh - 32px); overflow-y: auto;
+    background: #fff; color: #1f2933; border-radius: 12px; padding: 24px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25); font-family: 'Outfit', system-ui, sans-serif;
+}
+.terminos-title { margin: 0 0 8px; font-size: 1.25rem; color: #0f6e56; }
+.terminos-text { margin: 0 0 12px; line-height: 1.5; color: #52606d; }
+.terminos-list { margin: 0 0 12px; padding: 0; list-style: none; }
+.terminos-list li { padding: 10px 0; border-top: 1px solid #e4e7eb; }
+.terminos-list li:first-child { border-top: 0; }
+.terminos-list a { color: #0f6e56; font-weight: 600; }
+.terminos-change { margin: 4px 0 0; line-height: 1.5; font-size: 0.95rem; }
+.terminos-note { font-size: 0.85rem; color: #52606d; margin: 8px 0 0; line-height: 1.5; }
+.terminos-actions { display: flex; justify-content: flex-end; margin-top: 16px; }
+.terminos-btn {
+    border: 1px solid #0f6e56; border-radius: 8px; padding: 10px 24px;
+    font: inherit; font-weight: 600; cursor: pointer;
+}
+.terminos-btn-primary { background: #0f6e56; color: #fff; }
+.terminos-btn-primary:disabled { opacity: 0.6; cursor: wait; }
+@media (max-width: 480px) {
+    .terminos-box { padding: 18px; }
+    .terminos-btn { width: 100%; }
+}

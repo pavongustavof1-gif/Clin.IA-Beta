@@ -30,17 +30,28 @@ class Config:
     # the score (a number, not PHI) so this can be calibrated from real runs.
     CIE11_AUTOCODE_MIN_SCORE = 0.80
 
+    # #81: which backend extracts the SOAP note. 'gemini' (default) is the
+    # Google Gemini path, unchanged; 'gateway' sends the same prompt to
+    # claude-haiku-5-5 through the AssemblyAI LLM Gateway with
+    # ASSEMBLYAI_API_KEY (llm_gateway.py). Any other value logs an error at
+    # startup and falls back to 'gemini'. The Gemini path stays as the
+    # fallback until it's removed after 1 Dec 2026.
+    LLM_BACKEND = (os.environ.get('LLM_BACKEND') or 'gemini').strip().lower()
+
     # Resend email delivery
     RESEND_API_KEY = os.environ.get('RESEND_API_KEY', '')
     RESEND_SENDER  = 'admin@clinianotes.com'
 
-    # Public access requests (#53/#54). TERMINOS_VERSION is stored with
-    # every solicitudes_registro row so we know which Términos de Servicio
-    # / Aviso de Privacidad text the applicant accepted — bump it whenever
-    # either text changes. Format: Términos version + Aviso para Usuarios
-    # version, matching the documents published at clinianotes.com/legal
-    # (sources: legal/source/*.md).
-    TERMINOS_VERSION = 'ToS-1.2-Beta+AU-1.2-Beta'
+    # TERMINOS_VERSION names the legal texts a user accepts: Términos de
+    # Servicio + Aviso para Usuarios + Aviso para Pacientes (AP since 0.9.0:
+    # its §4 lists the subencargados). It is stored with every
+    # solicitudes_registro row (#53/#54) and, per user, in
+    # aceptaciones_terminos: a user with no row for the CURRENT value sees a
+    # one-time notice at login (static/terminos.js) until they click
+    # "Acepto". It never blocks anything. Bumping it shows the notice to
+    # every user again. It must equal legal/build_legal.py's version_code()
+    # (tests/test_legal.py).
+    TERMINOS_VERSION = 'ToS-1.3-Beta+AU-1.2-Beta+AP-1.3-Beta'
     # Both optional; unset = feature off, never an error. SUPERADMIN_EMAIL
     # gets a notice per new request; SUPERADMIN_USER_IDS (comma-separated
     # usuarios/auth UUIDs) gates the superadmin review page (Review C).

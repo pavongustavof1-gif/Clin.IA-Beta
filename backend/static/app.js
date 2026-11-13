@@ -53,6 +53,9 @@ window.addEventListener('pageshow', async function(event) {
             }
             showSuperadminLink(data);
             showPendientesBanner(data);
+            // 0.9.0: one-time notice of the updated legal texts
+            // (terminos.js). Never blocks anything.
+            Terminos.fromSession(data);
             if (isAdminRole(data.rol)) {
                 const adminBtn = document.getElementById('adminBtn');
                 const adminSep = document.getElementById('adminSep');

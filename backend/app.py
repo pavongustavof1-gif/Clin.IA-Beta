@@ -560,6 +560,72 @@ def _sb_insert_solicitud(body: dict) -> str:
         return 'error'
 
 
+# ── Acceptance of the legal texts (0.9.0, #81) ──────────────────────────────
+# A one-time notice at login: when the legal texts change (ToS 1.3 and Aviso
+# para Pacientes 1.3 in 0.9.0), each user sees a modal with what changed and
+# one "Acepto" button, and that acceptance is recorded here. It never blocks
+# anything: no route checks it (ToS 1.3 clause 12 — continued use after the
+# entry-into-force date counts as acceptance; the modal is the in-platform
+# record of it). Until 0.9.0 nothing recorded acceptance per user — only the
+# access-request form stored Config.TERMINOS_VERSION on its
+# solicitudes_registro row. Each acceptance is a row in aceptaciones_terminos
+# (usuario_id, clinica_id, version, aceptado_at; unique per usuario + version,
+# insert-only — the history is the record). session-check's "terminos" tells
+# the page whether to show the modal. Needs SELECT and INSERT on
+# aceptaciones_terminos for service_role.
+#
+# Positive cache only (usuario_id → accepted version): once accepted it
+# can't be un-accepted, so caching it is safe; "not accepted" is never
+# cached. Per-process, like the other caches here (single-instance assumption).
+_terminos_lock = threading.Lock()
+_terminos_aceptados: dict = {}
+
+
+def _sb_insert_aceptacion(body: dict) -> str:
+    """Insert an aceptaciones_terminos row: 'created', 'duplicate' (this
+    usuario already accepted this version — the unique index, 409/23505) or
+    'error'. Logs the table and status only."""
+    url = Config.SUPABASE_URL.rstrip('/') + '/rest/v1/aceptaciones_terminos'
+    payload = json.dumps(body, ensure_ascii=False, default=str).encode()
+    req = urllib.request.Request(url, data=payload,
+                                 headers=_sb_headers(extra={'Prefer': 'return=minimal'}), method='POST')
+    try:
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            resp.read()
+        return 'created'
+    except urllib.error.HTTPError as e:
+        code = None
+        try:
+            code = json.loads(e.read()).get('code')
+        except Exception:
+            pass
+        if e.code == 409 and code == '23505':
+            return 'duplicate'
+        logger.error(f"DB: aceptaciones_terminos insert failed {e.code} {code or ''}".rstrip())
+        return 'error'
+    except Exception as e:
+        logger.error(f"DB: aceptaciones_terminos insert error ({type(e).__name__})")
+        return 'error'
+
+
+def terminos_aceptados(usuario_id: str) -> bool | None:
+    """Has this usuario accepted Config.TERMINOS_VERSION? None = the lookup
+    failed (the page then shows no modal; nothing is blocked either way)."""
+    version = Config.TERMINOS_VERSION
+    with _terminos_lock:
+        if _terminos_aceptados.get(usuario_id) == version:
+            return True
+    rows = _sb_get(f'/rest/v1/aceptaciones_terminos?usuario_id=eq.{pg_val(usuario_id)}'
+                   f'&version=eq.{pg_val(version)}&select=aceptado_at&limit=1')
+    if rows is None:
+        return None
+    if rows:
+        with _terminos_lock:
+            _terminos_aceptados[usuario_id] = version
+        return True
+    return False
+
+
 # ── Superadmin review (#53, Review C) — quiet helpers ───────────────────────
 # Every path and Auth response below can carry an applicant's email or
 # phone, so like _sb_get_quiet these log the table (or Auth endpoint) and
@@ -1721,7 +1787,7 @@ def health_check():
     return jsonify({
         'status': 'healthy',
         'service': 'ClinIA Beta',
-        'version': '0.8.11-beta',
+        'version': '0.9.0-beta',
         'timestamp': datetime.now().isoformat()
     })
 
@@ -2534,6 +2600,11 @@ def session_check():
         'valid':      True,
         'rol':        g.usuario['rol'],
         'clinica_id': g.usuario['clinica_id'],
+        # 0.9.0: drives the one-time notice of the new legal texts.
+        # aceptada False → the page shows it; True or None (the lookup
+        # failed) → nothing. Never blocks anything.
+        'terminos':   {'version': Config.TERMINOS_VERSION,
+                       'aceptada': terminos_aceptados(g.usuario['usuario_id'])},
     }
     # Key present only for the superadmin, absent for everyone else, so
     # the response doesn't even hint that the role exists.
@@ -2549,6 +2620,33 @@ def session_check():
         if pendientes is not None:
             body['solicitudes_pendientes'] = pendientes
     return jsonify(body), 200
+
+
+@app.route('/api/terminos/aceptar', methods=['POST'])
+@require_auth
+@limiter.limit("10 per minute")
+def aceptar_terminos():
+    """Record the caller's acceptance of the current legal texts (0.9.0,
+    the login notice's "Acepto"). Any role: the texts bind every user. The body
+    must name the version the page showed — if the texts changed in between
+    it's 409 and the page reloads, so nobody accepts a version they didn't
+    see. Accepting twice is not an error (the unique index answers 409 →
+    'duplicate', same outcome)."""
+    data = request.get_json(silent=True) or {}
+    version = data.get('version')
+    if version != Config.TERMINOS_VERSION:
+        return jsonify({'error': 'Los documentos se actualizaron. Recargue la página para ver la versión vigente.',
+                        'error_code': 'TERMINOS_VERSION_CAMBIO', 'version': Config.TERMINOS_VERSION}), 409
+    usuario_id = g.usuario['usuario_id']
+    aceptado_at = datetime.now(timezone.utc).isoformat()
+    outcome = _sb_insert_aceptacion({'usuario_id': usuario_id, 'clinica_id': g.usuario['clinica_id'],
+                                     'version': version, 'aceptado_at': aceptado_at})
+    if outcome == 'error':
+        return jsonify({'error': 'No se pudo registrar la aceptación. Intente de nuevo.'}), 503
+    with _terminos_lock:
+        _terminos_aceptados[usuario_id] = version
+    logger.info(f"Terminos: usuario_id={usuario_id} version={version} outcome={outcome}")
+    return jsonify({'version': version, 'aceptada': True}), 200
 
 
 @app.route('/api/aviso-responsable', methods=['GET'])

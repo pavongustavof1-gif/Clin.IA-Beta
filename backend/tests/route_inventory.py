@@ -67,7 +67,12 @@ ROUTE_INVENTORY = [
 
     # ── Authenticated, no cross-caller resource ─────────────────────────
     {'path': '/api/session-check', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
-     'resource': "caller's own rol/clinica_id", 'rule': 'auth only', 'scope': 'none', 'miss_status': None},
+     'resource': "caller's own rol/clinica_id + whether they accepted the current legal texts",
+     'rule': 'auth only', 'scope': 'none', 'miss_status': None},
+    {'path': '/api/terminos/aceptar', 'methods': ['POST'], 'auth_required': True, 'admin_required': False, 'medico_required': False,
+     'resource': 'new aceptaciones_terminos row for the caller (insert-only)',
+     'rule': 'any role — always the caller; body must name the current version (409 otherwise)',
+     'scope': 'self_scoped_query', 'miss_status': None},
     {'path': '/api/aviso-responsable', 'methods': ['GET'], 'auth_required': True, 'admin_required': False, 'medico_required': True,
      'resource': "caller's own nombre/cédula + own clinic's direccion (patient aviso modal)",
      'rule': 'medico/admin only — always the caller, nothing client-chosen; never the email', 'scope': 'self_scoped_query', 'miss_status': None},

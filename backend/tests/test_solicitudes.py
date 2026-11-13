@@ -94,6 +94,7 @@ def test_solicitud_page_is_noindex_and_has_no_supabase(client):
     assert 'solicitud.js' in page
     assert 'href="https://clinianotes.com/legal/terminos/"' in page
     assert 'href="https://clinianotes.com/legal/aviso-usuarios/"' in page
+    assert 'href="https://clinianotes.com/legal/aviso-pacientes/"' in page     # 0.9.0: AP is in the version
     assert '#terminos' not in page and '/aviso-privacidad-usuarios' not in page
     # input types / modes for phone keyboards
     assert 'type="email"' in page and 'type="tel"' in page and 'inputmode="numeric"' in page
@@ -121,9 +122,10 @@ def test_aviso_privacidad_usuarios_redirects_to_legal_page(client):
     assert resp.headers['Location'] == 'https://clinianotes.com/legal/aviso-usuarios/'
 
 
-def test_terminos_version_names_both_documents():
-    # Términos + Aviso para Usuarios, both v1.2 Beta (legal/source/).
-    assert Config.TERMINOS_VERSION == 'ToS-1.2-Beta+AU-1.2-Beta'
+def test_terminos_version_names_the_three_documents():
+    # Términos (v1.3 Beta) + Aviso para Usuarios (v1.2 Beta) + Aviso para
+    # Pacientes (v1.3 Beta), 0.9.0 — legal/source/; the form links all three.
+    assert Config.TERMINOS_VERSION == 'ToS-1.3-Beta+AU-1.2-Beta+AP-1.3-Beta'
 
 
 # ── happy paths ──────────────────────────────────────────────────────────
@@ -137,7 +139,7 @@ def test_medico_request_is_stored(client, rows, notices):
     assert row['rol_solicitado'] == 'medico'
     assert row['cedula'] == CEDULA and row['especialidad'] == 'Pediatría'
     assert row['universidad'] == 'Universidad Inventada'
-    assert row['terminos_version'] == Config.TERMINOS_VERSION == 'ToS-1.2-Beta+AU-1.2-Beta'
+    assert row['terminos_version'] == Config.TERMINOS_VERSION == 'ToS-1.3-Beta+AU-1.2-Beta+AP-1.3-Beta'
     assert row['terminos_aceptados_at'].endswith('+00:00')
     assert row['estado'] == 'pendiente'  # DB default (FakeDB insert mirrors it)
     # nothing the client sent beyond the known columns reaches the row

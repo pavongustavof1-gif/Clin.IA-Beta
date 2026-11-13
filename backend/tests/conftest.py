@@ -117,6 +117,14 @@ def db():
             'paciente_curp': 'FAKE000101HDFXXX01',
         },
     ])
+    # 0.9.0: every fixture user has accepted the current legal texts (no
+    # login notice); test_terminos.py removes rows to see it.
+    d.seed('aceptaciones_terminos', [
+        {'usuario_id': uid, 'clinica_id': cid, 'version': app_module.Config.TERMINOS_VERSION,
+         'aceptado_at': '2026-11-13T00:00:00+00:00'}
+        for uid, cid in [(DOCTOR_A1, CLINIC_A), (DOCTOR_A2, CLINIC_A), (ADMIN_A, CLINIC_A), (DOCTOR_B1, CLINIC_B),
+                         (ADMIN_B, CLINIC_B), (INACTIVE_DOCTOR, CLINIC_A), (AUXILIAR_A, CLINIC_A)]
+    ])
     d.seed('trabajos', [
         {'job_id': JOB_A1, 'usuario_id': DOCTOR_A1, 'clinica_id': CLINIC_A,
          'status': 'done', 'error_message': None, 'updated_at': '2026-01-01T00:00:00',
@@ -209,6 +217,15 @@ def _patch_data_layer(db, monkeypatch):
         rows.append({'estado': 'pendiente', **body})
         return 'created'
     monkeypatch.setattr(app_module, '_sb_insert_solicitud', _fake_insert_solicitud)
+
+    def _fake_insert_aceptacion(body):
+        # Mirrors the unique (usuario_id, version) index.
+        rows = db.tables.setdefault('aceptaciones_terminos', [])
+        if any(r['usuario_id'] == body['usuario_id'] and r['version'] == body['version'] for r in rows):
+            return 'duplicate'
+        rows.append(dict(body))
+        return 'created'
+    monkeypatch.setattr(app_module, '_sb_insert_aceptacion', _fake_insert_aceptacion)
     # Run the "background" job synchronously-as-a-noop instead of via a
     # real thread pool — process_audio's own response (202 + job_id) is
     # what auth tests care about; nothing here should touch a real
@@ -232,6 +249,7 @@ def _reset_process_caches():
         auth_module._jwks_fetched_at = 0.0
         auth_module._jwks_last_attempt_at = 0.0
         app_module._logo_cache.clear()
+        app_module._terminos_aceptados.clear()
     _clear()
     yield
     _clear()

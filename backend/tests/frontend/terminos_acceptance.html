@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<!--
+  backend/tests/frontend/terminos_acceptance.html
+
+  0.9.0 (#81): the one-time notice of the updated legal texts. Loads the
+  REAL static/terminos.js and static/terminos.css with stand-ins for
+  auth-common.js (getAuthHeaders, handleSessionExpired) and a stubbed
+  fetch for POST /api/terminos/aceptar, then checks:
+    - session-check aceptada true / null / no key → no modal; false → modal
+    - it lists what changed, linking ToS v1.3 and the patient aviso v1.3
+    - one button, "Acepto"; no other way to dismiss it, nothing else blocked
+    - Acepto posts exactly the shown version with the token, then closes
+    - a failed or refused POST still closes it (never blocks); 401 → session expired
+    - a version with no summary still lists every document
+    - no markup is injected (textContent only)
+
+  How to run (same as the other harnesses):
+    1. Serve backend/ over HTTP, e.g. `cd backend && python3 -m http.server 8765`.
+    2. Open http://localhost:8765/tests/frontend/terminos_acceptance.html
+    3. Read the on-page summary (or window.__RESULT__). The modal is left
+       open at the end so its look can be checked at phone width.
+
+  No PHI.
+-->
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>terminos notice</title>
+    <link rel="stylesheet" href="../../static/style.css">
+    <link rel="stylesheet" href="../../static/terminos.css">
+</head>
+<body>
+    <pre id="out" style="padding: 1rem; white-space: pre-wrap;">running…</pre>
+<script>
+    // Stand-ins for auth-common.js.
+    window.__expired = 0;
+    async function getAuthHeaders() { return { 'Authorization': 'Bearer fake-token' }; }
+    function handleSessionExpired() { window.__expired++; }
+    // Stubbed fetch: the next reply for /api/terminos/aceptar (null = network error).
+    window.__posts = [];
+    window.__reply = null;
+    window.fetch = async (url, opts) => {
+        window.__posts.push({ url, body: JSON.parse(opts.body), headers: opts.headers });
+        const r = window.__reply;
+        if (!r) throw new TypeError('network');
+        return new Response(JSON.stringify(r.body), { status: r.status, headers: { 'Content-Type': 'application/json' } });
+    };
+</script>
+<script src="../../static/terminos.js"></script>
+<script>
+(async function () {
+    const V = 'ToS-1.3-Beta+AU-1.2-Beta+AP-1.3-Beta';
+    const results = [];
+    const check = (name, ok) => results.push(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
+    const overlay = () => document.querySelector('.terminos-overlay');
+    const open = () => document.querySelectorAll('.terminos-overlay').length === 1;
+    const q = sel => overlay().querySelector(sel);
+    const settle = async () => { for (let i = 0; i < 5; i++) await new Promise(r => setTimeout(r, 0)); };
+    const clickAcepto = async () => { q('.terminos-btn-primary').click(); await settle(); };
+
+    Terminos.fromSession({ terminos: { version: V, aceptada: true } });
+    check('accepted: no modal', !open());
+    Terminos.fromSession({ terminos: { version: V, aceptada: null } });
+    check('lookup failed (null): no modal', !open());
+    Terminos.fromSession({ valid: true });
+    check('no terminos key: no modal', !open());
+
+    Terminos.fromSession({ terminos: { version: V, aceptada: false } });
+    check('not accepted: modal at login', open());
+    Terminos.fromSession({ terminos: { version: V, aceptada: false } });
+    check('a second session-check does not stack a second modal', open());
+    const links = [...q('.terminos-list').querySelectorAll('a')];
+    check('links ToS v1.3 and patient aviso v1.3 (only what changed)',
+        JSON.stringify(links.map(a => a.textContent)) === JSON.stringify([
+            'Términos de Servicio (versión 1.3 Beta)', 'Aviso de Privacidad para Pacientes (versión 1.3 Beta)'])
+        && links.map(a => a.href).join(' ') === 'https://clinianotes.com/legal/terminos/ https://clinianotes.com/legal/aviso-pacientes/'
+        && links.every(a => a.target === '_blank' && a.rel === 'noopener'));
+    const changes = [...q('.terminos-list').querySelectorAll('.terminos-change')].map(p => p.textContent);
+    check('says what changed in each', changes.length === 2 && changes[0].startsWith('Cláusula 12')
+        && changes[1].startsWith('Sección 4') && changes[1].includes('Amazon Web Services'));
+    check('effective date shown', overlay().textContent.includes('Vigentes a partir del 28 de noviembre de 2026.'));
+    const buttons = [...overlay().querySelectorAll('button')];
+    check('one button, "Acepto", focused and enabled',
+        buttons.length === 1 && buttons[0].textContent === 'Acepto' && !buttons[0].disabled
+        && document.activeElement === buttons[0]);
+    check('no checkbox, no "Ahora no"', !overlay().querySelector('input') && !overlay().textContent.includes('Ahora no'));
+    check('dialog is labelled and modal', q('[role="dialog"]').getAttribute('aria-modal') === 'true'
+        && document.getElementById(q('[role="dialog"]').getAttribute('aria-labelledby')) !== null);
+    overlay().click();
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    check('clicking outside or Escape does not close it', open());
+    check('no API exposed to gate processing', Object.keys(Terminos).join() === 'fromSession');
+
+    window.__reply = { status: 200, body: { version: V, aceptada: true } };
+    await clickAcepto();
+    const last = window.__posts[window.__posts.length - 1];
+    check('Acepto posts the shown version to /api/terminos/aceptar with the token',
+        window.__posts.length === 1 && last.url.endsWith('/api/terminos/aceptar')
+        && JSON.stringify(last.body) === JSON.stringify({ version: V })
+        && last.headers.Authorization === 'Bearer fake-token' && last.headers['Content-Type'] === 'application/json');
+    check('accepted: modal closes', !open());
+
+    for (const [name, reply] of [['409', { status: 409, body: { error: 'x' } }],
+                                 ['503', { status: 503, body: { error: 'x' } }],
+                                 ['network error', null]]) {
+        window.__reply = reply;
+        Terminos.fromSession({ terminos: { version: V, aceptada: false } });
+        await clickAcepto();
+        check(`${name}: modal still closes (never blocks)`, !open());
+    }
+    check('none of those expired the session', window.__expired === 0);
+
+    window.__reply = { status: 401, body: {} };
+    Terminos.fromSession({ terminos: { version: V, aceptada: false } });
+    await clickAcepto();
+    check('401 → session expired', window.__expired === 1 && !open());
+
+    // A version with no summary of changes: every document is listed.
+    window.__reply = { status: 200, body: {} };
+    Terminos.fromSession({ terminos: { version: 'ToS-9.9-Beta+AU-9.9-Beta+AP-9.9-Beta', aceptada: false } });
+    check('unknown version: all three documents, no summaries',
+        q('.terminos-list').children.length === 3 && !q('.terminos-change'));
+    check('no markup injected anywhere', !overlay().querySelector('script, b, strong, img'));
+    await clickAcepto();
+
+    // Leave it open for a visual check.
+    Terminos.fromSession({ terminos: { version: V, aceptada: false } });
+    const failed = results.filter(r => r.startsWith('FAIL')).length;
+    window.__RESULT__ = { passed: results.length - failed, failed };
+    document.getElementById('out').textContent =
+        `${results.length - failed}/${results.length} passed\n\n` + results.join('\n');
+})();
+</script>
+</body>
+</html>

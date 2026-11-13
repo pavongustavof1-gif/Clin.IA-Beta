@@ -621,6 +621,7 @@ window.addEventListener('pageshow', async function(event) {
 
         showSuperadminLink(data);
         showPendientesBanner(data);
+        Terminos.fromSession(data);   // 0.9.0: one-time notice of the updated legal texts
         document.body.classList.remove('auth-pending');
         loadUsuarios();
 

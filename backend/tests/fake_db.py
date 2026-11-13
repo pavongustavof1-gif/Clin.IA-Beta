@@ -25,6 +25,7 @@ class FakeDB:
             'trabajos': [],
             'lecturas_sesion': [],
             'solicitudes_registro': [],
+            'aceptaciones_terminos': [],
         }
 
     def seed(self, table: str, rows: list[dict]) -> None:

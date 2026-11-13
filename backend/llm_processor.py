@@ -16,9 +16,16 @@ from extraction_core import (  # noqa: F401
     normalize_evaluacion,
     validate_against_schema,
 )
+import llm_gateway
 import json
 import time
 from typing import Dict, Optional
+
+# #81: LLM_BACKEND values. 'gemini' = the Gemini path below, unchanged;
+# 'gateway' = llm_gateway (claude-haiku-5-5 via the AssemblyAI LLM Gateway).
+BACKEND_GEMINI = 'gemini'
+BACKEND_GATEWAY = 'gateway'
+BACKENDS = (BACKEND_GEMINI, BACKEND_GATEWAY)
 
 
 class LLMProcessingError(Exception):
@@ -83,11 +90,23 @@ def apply_cie11_lookup(data) -> None:
 
 class LLMProcessor:
     """Processes transcripts using Google Gemini for structured extraction"""
+
+    # Class default, so an instance built without __init__ (several tests
+    # do) is the Gemini path exactly as before #81.
+    backend = BACKEND_GEMINI
     
     def __init__(self):
-        """Initialize Gemini API"""
+        """Initialize Gemini API (always — it's the fallback backend), and
+        pick the backend from Config.LLM_BACKEND (#81)."""
         self.client = genai.Client(api_key=Config.GEMINI_API_KEY)
         self.model_id = 'gemini-2.5-flash'
+        self.backend = Config.LLM_BACKEND
+        if self.backend not in BACKENDS:
+            # A typo must not take extraction down: Gemini, loudly.
+            logger.error(f"LLM: unknown LLM_BACKEND={self.backend!r} — using {BACKEND_GEMINI}")
+            self.backend = BACKEND_GEMINI
+        if self.backend == BACKEND_GATEWAY:
+            logger.info(f"LLM: backend=gateway model={llm_gateway.MODEL} reasoning_effort={llm_gateway.REASONING_EFFORT}")
 
     def create_extraction_prompt(self, transcript: str, utterances: list = None) -> str:
         """The extraction prompt — lives in extraction_core (#83), shared
@@ -96,8 +115,11 @@ class LLMProcessor:
     
     def extract_structured_data(self, transcript: str, utterances: list = None, max_retries: int = 3) -> Dict:
         """
-        Extract structured medical data from transcript using Gemini
+        Extract structured medical data from transcript using Gemini, or
+        the AssemblyAI LLM Gateway when LLM_BACKEND=gateway (#81).
         """
+        if self.backend == BACKEND_GATEWAY:
+            return self._extract_via_gateway(transcript, utterances)
         logger.info(f"LLM: Processing with {self.model_id}...")
         if utterances:
             logger.info(f"LLM: Using {len(utterances)} speaker-labeled utterances")
@@ -168,6 +190,31 @@ class LLMProcessor:
         raise LLMProcessingError(
             f"Extraction failed after {max_retries} attempts: {last_error}"
         )
+
+    def _extract_via_gateway(self, transcript: str, utterances: list = None) -> Dict:
+        """#81: the same prompt, one Gateway call (llm_gateway: retries on
+        429/5xx only, truncation is a failure), then the same steps as the
+        Gemini path: extraction_core parse + validation, diagnosis key
+        normalisation and the CIE-11 lookup, unchanged. Every failure is an
+        LLMProcessingError, so _run_job shows the doctor the same message as
+        a Gemini failure. Error messages carry reason codes only, no text."""
+        if utterances:
+            logger.info(f"LLM: Using {len(utterances)} speaker-labeled utterances")
+        prompt = self.create_extraction_prompt(transcript, utterances)
+        try:
+            structured_data = llm_gateway.call(prompt, Config.ASSEMBLYAI_API_KEY)
+        except llm_gateway.GatewayError as e:
+            logger.error(f"LLM: Gateway extraction failed: {e}")
+            raise LLMProcessingError(f"Gateway extraction failed: {e}") from None
+        is_valid, error = validate_against_schema(structured_data)
+        if not is_valid:
+            # The validator's message names fields, never their values.
+            logger.error(f"LLM: Gateway extraction failed schema validation: {error}")
+            raise LLMProcessingError(f"Gateway extraction failed validation: {error}")
+        logger.info("LLM: Extraction successful.")
+        normalize_evaluacion(structured_data)
+        apply_cie11_lookup(structured_data)
+        return structured_data
 
     def _clean_json_response(self, response: str) -> str:
         """Clean LLM response to extract pure JSON (extraction_core, #83)."""

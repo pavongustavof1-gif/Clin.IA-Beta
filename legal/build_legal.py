@@ -7,6 +7,7 @@ static site has no build step, and the app has no markdown dependency):
 
   landing/legal/index.html                      list of documents
   landing/legal/<slug>/index.html               one page per document
+  landing/legal/<slug>/v<N>/index.html          each previous version (PREVIOUS)
   landing/index.html  (between legal:begin/end markers)
                                                 the Términos and Aviso
                                                 (usuarios) modals
@@ -35,20 +36,43 @@ SOURCE = ROOT / 'legal' / 'source'
 LANDING = ROOT / 'landing'
 APP_PARTIAL = ROOT / 'backend' / 'templates' / 'legal' / 'aviso_pacientes.html'
 
-VERSION = '1.2 Beta'
-FECHA = 'Octubre 2026'
-# Every source must state this, so a new .md can't ship under the old
-# version label by accident.
-VERSION_STAMP = 'Versión 1.2 (Beta), Octubre 2026'
-
+# Each document has its own version (0.9.0: the ToS and the patient aviso
+# moved to 1.3; the user aviso stays at 1.2). 'stamp' must appear in the source, so a new .md can't ship under
+# the old version label by accident; 'code' is the document's part of
+# Config.TERMINOS_VERSION (backend/config.py), which a test keeps equal.
 DOCS = [
-    {'slug': 'terminos', 'src': 'Terminos_de_Servicio_v1.2.md',
-     'titulo': 'Términos de Servicio'},
+    {'slug': 'terminos', 'src': 'Terminos_de_Servicio_v1.3.md',
+     'titulo': 'Términos de Servicio', 'code': 'ToS',
+     'version': '1.3 Beta', 'fecha': 'Noviembre 2026', 'stamp': 'Versión 1.3 (Beta), Noviembre 2026',
+     'vigencia': 'Vigente a partir del 28 de noviembre de 2026'},
     {'slug': 'aviso-usuarios', 'src': 'Aviso_de_privacidad_usuarios_v1.2.md',
-     'titulo': 'Aviso de Privacidad para Usuarios'},
-    {'slug': 'aviso-pacientes', 'src': 'Aviso_de_privacidad_pacientes_v1.2.md',
-     'titulo': 'Aviso de Privacidad para Pacientes'},
+     'titulo': 'Aviso de Privacidad para Usuarios', 'code': 'AU',
+     'version': '1.2 Beta', 'fecha': 'Octubre 2026', 'stamp': 'Versión 1.2 (Beta), Octubre 2026'},
+    {'slug': 'aviso-pacientes', 'src': 'Aviso_de_privacidad_pacientes_v1.3.md',
+     'titulo': 'Aviso de Privacidad para Pacientes', 'code': 'AP',
+     'version': '1.3 Beta', 'fecha': 'Noviembre 2026', 'stamp': 'Versión 1.3 (Beta), Noviembre 2026',
+     'vigencia': 'Vigente a partir del 28 de noviembre de 2026'},
 ]
+
+# Previous versions stay published (the avisos promise it), newest first.
+# Each gets its own page at /legal/<slug>/<dir>/ and a line under
+# "Versiones anteriores" on the index. Never edit an old source.
+PREVIOUS = [
+    {'slug': 'terminos', 'dir': 'v1.2', 'src': 'Terminos_de_Servicio_v1.2.md',
+     'titulo': 'Términos de Servicio',
+     'version': '1.2 Beta', 'fecha': 'Octubre 2026', 'stamp': 'Versión 1.2 (Beta), Octubre 2026',
+     'hasta': 'Vigente hasta el 27 de noviembre de 2026'},
+    {'slug': 'aviso-pacientes', 'dir': 'v1.2', 'src': 'Aviso_de_privacidad_pacientes_v1.2.md',
+     'titulo': 'Aviso de Privacidad para Pacientes',
+     'version': '1.2 Beta', 'fecha': 'Octubre 2026', 'stamp': 'Versión 1.2 (Beta), Octubre 2026',
+     'hasta': 'Vigente hasta el 27 de noviembre de 2026'},
+]
+
+
+def version_code() -> str:
+    """'ToS-1.3-Beta+AU-1.2-Beta+AP-1.3-Beta' — what Config.TERMINOS_VERSION
+    must equal, so the accepted version always names the published texts."""
+    return '+'.join(f"{d['code']}-{d['version'].replace(' ', '-')}" for d in DOCS)
 
 # Landing modal id → document slug.
 LANDING_MODALS = {'terminos': 'terminos', 'aviso-usuarios': 'aviso-usuarios'}
@@ -139,9 +163,15 @@ def render(md: str, h_tag: str = 'h2', h_class: str | None = None,
 
 def _load(doc: dict) -> str:
     md = (SOURCE / doc['src']).read_text(encoding='utf-8')
-    if VERSION_STAMP not in md:
-        raise ValueError(f'{doc["src"]} does not state "{VERSION_STAMP}"')
+    if doc['stamp'] not in md:
+        raise ValueError(f'{doc["src"]} does not state "{doc["stamp"]}"')
     return md
+
+
+def _meta(doc: dict) -> str:
+    """'Versión 1.3 Beta · Noviembre 2026' (+ ' · Vigente a partir …')."""
+    extra = doc.get('vigencia') or doc.get('hasta')
+    return f"Versión {doc['version']} · {doc['fecha']}" + (f' · {extra}' if extra else '')
 
 
 def _generated_note(src: str) -> str:
@@ -183,17 +213,20 @@ _FOOT = '''
 '''
 
 
-def _doc_page(doc: dict) -> str:
+def _doc_page(doc: dict, previous: bool = False) -> str:
     title, body = render(_load(doc), h_tag='h2')
+    notice = (f'''
+        <p class="legal-lead">Versión anterior, publicada como referencia. La versión vigente está en
+            <a href="/legal/{doc['slug']}/">{html.escape(doc['titulo'])}</a>.</p>''' if previous else '')
     return (
         f'<!-- {_generated_note(doc["src"])} -->\n'
-        + _HEAD.format(title=html.escape(doc['titulo']))
+        + _HEAD.format(title=html.escape(doc['titulo']) + (f" (versión {html.escape(doc['version'])})" if previous else ''))
         + f'''
     <main class="legal-main">
         <p class="legal-crumb"><a href="/legal/">Documentos legales</a></p>
         <h1>{title}</h1>
-        <p class="legal-meta">Versión {VERSION} · {FECHA}
-            <button type="button" class="legal-print" onclick="window.print()">Imprimir</button></p>
+        <p class="legal-meta">{html.escape(_meta(doc))}
+            <button type="button" class="legal-print" onclick="window.print()">Imprimir</button></p>{notice}
         <article class="legal-doc">
 {body}
         </article>
@@ -205,8 +238,15 @@ def _index_page() -> str:
     items = '\n'.join(
         f'''            <li>
                 <a href="/legal/{d['slug']}/">{html.escape(d['titulo'])}</a>
-                <span class="legal-item-meta">Versión {VERSION} · {FECHA}</span>
+                <span class="legal-item-meta">{html.escape(_meta(d))}</span>
             </li>''' for d in DOCS)
+    previous = '\n'.join(
+        f'''            <li>
+                <a href="/legal/{p['slug']}/{p['dir']}/">{html.escape(p['titulo'])}</a>
+                <span class="legal-item-meta">{html.escape(_meta(p))}</span>
+            </li>''' for p in PREVIOUS)
+    previous_html = (f'<ul class="legal-list">\n{previous}\n        </ul>' if PREVIOUS
+                     else '<p>Aún no se han publicado versiones anteriores.</p>')
     return (
         '<!-- Generated by legal/build_legal.py. Do not edit here: edit the script and re-run it. -->\n'
         + _HEAD.format(title='Documentos legales')
@@ -218,7 +258,7 @@ def _index_page() -> str:
 {items}
         </ul>
         <h2>Versiones anteriores</h2>
-        <p>Aún no se han publicado versiones anteriores.</p>
+        {previous_html}
     </main>
 ''' + _FOOT)
 
@@ -228,7 +268,7 @@ def _modal_body(doc: dict) -> str:
     return (
         f'<!-- {_generated_note(doc["src"])} -->\n'
         + body
-        + f'\n<p class="modal-legal-link">Versión {VERSION} · {FECHA} · '
+        + f'\n<p class="modal-legal-link">{html.escape(_meta(doc))} · '
           f'<a href="/legal/{doc["slug"]}/">Ver en Documentos legales (versión para imprimir)</a></p>'
     )
 
@@ -280,6 +320,8 @@ def outputs() -> dict[Path, str]:
     files = {LANDING / 'legal' / 'index.html': _index_page()}
     for d in DOCS:
         files[LANDING / 'legal' / d['slug'] / 'index.html'] = _doc_page(d)
+    for p in PREVIOUS:
+        files[LANDING / 'legal' / p['slug'] / p['dir'] / 'index.html'] = _doc_page(p, previous=True)
     landing_index = LANDING / 'index.html'
     files[landing_index] = _landing_with_modals(landing_index.read_text(encoding='utf-8'))
     files[APP_PARTIAL] = _app_partial()

@@ -67,6 +67,7 @@
 
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='pendientes-banner.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='terminos.css') }}">
 
     <!-- SVG Icon Sprite — defined once, used via <use href="#id"> -->
     <svg xmlns="http://www.w3.org/2000/svg" style="display:none;position:absolute" aria-hidden="true" focusable="false">
@@ -233,7 +234,7 @@
             </div>
             <h1>Clin.IA™</h1>
             <p class="subtitle">Asistente Inteligente de Notas Médicas</p>
-            <div class="version-badge">Beta v0.8.11</div>
+            <div class="version-badge">Beta v0.9.0</div>
         </header>
 
         <!-- Main Content -->
@@ -811,7 +812,7 @@
         
         <!-- Footer -->
         <footer class="footer">
-            <p>ClinIA™ Beta v0.8.11 - Solo para usuarios de prueba</p>
+            <p>ClinIA™ Beta v0.9.0 - Solo para usuarios de prueba</p>
             <p class="footer-links">
                 <a href="#" id="avisoFooterLink" class="footer-link">Aviso de Privacidad</a>
                 <span class="footer-sep"> · </span>
@@ -827,7 +828,7 @@
             <div class="aviso-header">
                 <div>
                     <h2 id="avisoModalTitle" class="aviso-title">Aviso de Privacidad para Pacientes</h2>
-                    <p class="aviso-subtitle">Versión 1.2 Beta · Octubre 2026</p>
+                    <p class="aviso-subtitle">Versión 1.3 Beta · Noviembre 2026</p>
                 </div>
             </div>
 
@@ -851,6 +852,7 @@
     </script>
     <script src="{{ url_for('static', filename='auth-common.js') }}"></script>
     <script src="{{ url_for('static', filename='utils.js') }}"></script>
+    <script src="{{ url_for('static', filename='terminos.js') }}"></script>
     <script src="{{ url_for('static', filename='session-detail-render.js') }}"></script>
     <script src="{{ url_for('static', filename='app.js') }}"></script>
     <script src="{{ url_for('static', filename='aviso-beta2.js') }}"></script>
